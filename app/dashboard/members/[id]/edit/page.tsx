@@ -33,7 +33,7 @@ export default async function EditMemberPage({ params }: PageProps) {
 
   // Fetch Public Data
   const { data: person, error } = await supabase
-    .from("persons")
+    .from("persons_active")
     .select("*")
     .eq("id", id)
     .single();

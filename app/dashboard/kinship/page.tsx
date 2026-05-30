@@ -9,14 +9,14 @@ export default async function KinshipPage() {
   const supabase = await getSupabase();
 
   const { data: persons } = await supabase
-    .from("persons")
+    .from("persons_active")
     .select(
       "id, full_name, gender, birth_year, birth_order, generation, is_in_law, avatar_url",
     )
     .order("birth_year", { ascending: true, nullsFirst: false });
 
   const { data: relationships } = await supabase
-    .from("relationships")
+    .from("relationships_active")
     .select("type, person_a, person_b");
 
   return (

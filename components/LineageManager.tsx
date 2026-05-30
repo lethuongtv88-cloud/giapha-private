@@ -350,7 +350,8 @@ export default function LineageManager({
                 birth_order: u.new_birth_order,
                 is_in_law: u.new_is_in_law,
               })
-              .eq("id", u.id),
+              .eq("id", u.id)
+              .is("deleted_at", null),
           ),
         );
       }

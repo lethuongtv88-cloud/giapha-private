@@ -25,10 +25,10 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
 
   const [personsRes, relsRes] = await Promise.all([
     supabase
-      .from("persons")
+      .from("persons_active")
       .select("*")
       .order("birth_year", { ascending: true, nullsFirst: false }),
-    supabase.from("relationships").select("*"),
+    supabase.from("relationships_active").select("*"),
   ]);
 
   const persons = personsRes.data || [];

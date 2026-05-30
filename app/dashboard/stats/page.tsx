@@ -8,9 +8,9 @@ export const metadata = {
 export default async function StatsPage() {
   const supabase = await getSupabase();
 
-  const { data: persons } = await supabase.from("persons").select("*");
+  const { data: persons } = await supabase.from("persons_active").select("*");
   const { data: relationships } = await supabase
-    .from("relationships")
+    .from("relationships_active")
     .select("*");
 
   return (

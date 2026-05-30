@@ -28,7 +28,7 @@ export default function DataImportExport() {
         const { createClient } = await import("@/utils/supabase/client");
         const supabase = createClient();
         const { data } = await supabase
-          .from("persons")
+          .from("persons_active")
           .select("id, full_name, birth_year, gender, avatar_url, generation")
           .order("birth_year", { ascending: true, nullsFirst: false });
         if (data) setPersons(data as Person[]);

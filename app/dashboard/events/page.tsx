@@ -12,7 +12,7 @@ export default async function EventsPage() {
 
   const [personsRes, customEventsRes] = await Promise.all([
     supabase
-      .from("persons")
+      .from("persons_active")
       .select(
         "id, full_name, birth_year, birth_month, birth_day, death_year, death_month, death_day, death_lunar_year, death_lunar_month, death_lunar_day, is_deceased, avatar_url",
       ),

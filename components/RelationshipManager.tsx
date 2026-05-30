@@ -111,12 +111,14 @@ export default function RelationshipManager({
       const { data: relsA, error: errA } = await supabase
         .from("relationships")
         .select(`*, target:persons!person_b(*)`) // if I am A, target is B
-        .eq("person_a", personId);
+        .eq("person_a", personId)
+        .is("deleted_at", null);
 
       const { data: relsB, error: errB } = await supabase
-        .from("relationships")
-        .select(`*, target:persons!person_a(*)`) // if I am B, target is A
-        .eq("person_b", personId);
+       .from("relationships")
+       .select(`*, target:persons!person_a(*)`) // if I am B, target is A
+       .eq("person_b", personId)
+       .is("deleted_at", null);
 
       if (errA || errB) throw errA || errB;
 
@@ -161,14 +163,15 @@ export default function RelationshipManager({
 
       if (childrenIds.length > 0) {
         const { data: childrenMarriages } = await supabase
-          .from("relationships")
-          .select(
-            `*, person_a_data:persons!person_a(*), person_b_data:persons!person_b(*)`,
-          )
-          .eq("type", "marriage")
-          .or(
-            `person_a.in.(${childrenIds.join(",")}),person_b.in.(${childrenIds.join(",")})`,
-          );
+         .from("relationships")
+         .select(
+           `*, person_a_data:persons!person_a(*), person_b_data:persons!person_b(*)`,
+         )
+         .eq("type", "marriage")
+         .is("deleted_at", null)
+         .or(
+           `person_a.in.(${childrenIds.join(",")}),person_b.in.(${childrenIds.join(",")})`,
+         );
 
         if (childrenMarriages) {
           childrenMarriages.forEach((m) => {
@@ -229,7 +232,8 @@ export default function RelationshipManager({
             .from("relationships")
             .select("id, person_a")
             .in("type", ["biological_child", "adopted_child"])
-            .in("person_a", childrenIds);
+            .in("person_a", childrenIds)
+            .is("deleted_at", null);
 
           if (grandchildrenData) {
             const maleChildrenIds = formattedRels
@@ -286,7 +290,7 @@ export default function RelationshipManager({
       }
 
       const { data } = await supabase
-        .from("persons")
+        .from("persons_active")
         .select("*")
         .ilike("full_name", `%${searchTerm}%`)
         .neq("id", personId) // Exclude self
@@ -304,7 +308,7 @@ export default function RelationshipManager({
     if (isAdding && recentMembers.length === 0) {
       const fetchRecent = async () => {
         const { data } = await supabase
-          .from("persons")
+          .from("persons_active")
           .select("*")
           .neq("id", personId)
           .order("created_at", { ascending: false })
@@ -599,9 +603,12 @@ export default function RelationshipManager({
     if (!confirm("Bạn có chắc chắn muốn xóa mối quan hệ này?")) return;
     try {
       const { error } = await supabase
-        .from("relationships")
-        .delete()
-        .eq("id", relId);
+       .from("relationships")
+       .update({
+         deleted_at: new Date().toISOString(),
+       })
+       .eq("id", relId)
+       .is("deleted_at", null);
       if (error) throw error;
       fetchRelationships();
       router.refresh();

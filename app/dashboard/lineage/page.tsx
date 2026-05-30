@@ -12,11 +12,11 @@ export default async function LineagePage() {
   const supabase = await getSupabase();
 
   const { data: personsData } = await supabase
-    .from("persons")
+    .from("persons_active")
     .select("*")
     .order("birth_year", { ascending: true, nullsFirst: false });
 
-  const { data: relsData } = await supabase.from("relationships").select("*");
+  const { data: relsData } = await supabase.from("relationships_active").select("*");
 
   // Identify "roots" - people with no parents
   const persons = personsData || [];

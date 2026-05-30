@@ -45,7 +45,7 @@ export default function MemberDetailModal() {
       try {
         // 1. Fetch Person Public Data
         const { data: personData, error: personError } = await supabase
-          .from("persons")
+          .from("persons_active")
           .select("*")
           .eq("id", id)
           .single();
