@@ -49,3 +49,4 @@ backups/
 *.dump
 *.jsonl
 package-lock.json
+*.ged
