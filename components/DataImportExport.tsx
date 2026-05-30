@@ -81,7 +81,12 @@ export default function DataImportExport() {
         extension = "ged";
       }
 
-      const blob = new Blob([content], { type });
+      const blobType =
+       format === 'gedcom'
+        ? 'text/plain;charset=utf-8'
+        : 'application/json;charset=utf-8';
+
+      const blob = new Blob([content], { type: blobType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
