@@ -84,6 +84,8 @@ export default function VietnameseFamilyTree({
 }: VietnameseFamilyTreeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+
   const [manualExpandedIds, setManualExpandedIds] = useState<Set<string>>(
     new Set(),
   );
@@ -102,7 +104,7 @@ export default function VietnameseFamilyTree({
     DEFAULT_AUTO_COLLAPSE_LEVEL,
   );
 
-  const { showAvatar } = useMemberListView();
+  const { showAvatar, setMemberModalId } = useMemberListView();
 
   const {
     scale,
@@ -268,10 +270,10 @@ export default function VietnameseFamilyTree({
               <defs>
                 <filter
                   id="viet-node-shadow"
-                  x="-20%"
-                  y="-20%"
-                  width="140%"
-                  height="140%"
+                  x="-25%"
+                  y="-25%"
+                  width="150%"
+                  height="150%"
                 >
                   <feDropShadow
                     dx="0"
@@ -279,6 +281,22 @@ export default function VietnameseFamilyTree({
                     stdDeviation="3"
                     floodColor="#000000"
                     floodOpacity="0.10"
+                  />
+                </filter>
+
+                <filter
+                  id="viet-node-hover-shadow"
+                  x="-35%"
+                  y="-35%"
+                  width="170%"
+                  height="170%"
+                >
+                  <feDropShadow
+                    dx="0"
+                    dy="8"
+                    stdDeviation="6"
+                    floodColor="#000000"
+                    floodOpacity="0.22"
                   />
                 </filter>
               </defs>
@@ -290,7 +308,10 @@ export default function VietnameseFamilyTree({
                   y={0}
                   showAvatar={showAvatar}
                   hideExpandButtons={hideExpandButtons}
+                  hoveredNodeId={hoveredNodeId}
+                  setHoveredNodeId={setHoveredNodeId}
                   onToggleExpanded={toggleExpanded}
+                  onOpenPerson={setMemberModalId}
                 />
               </g>
             </svg>
@@ -307,14 +328,20 @@ function RenderTreeBlock({
   y,
   showAvatar,
   hideExpandButtons,
+  hoveredNodeId,
+  setHoveredNodeId,
   onToggleExpanded,
+  onOpenPerson,
 }: {
   block: TreeBlock;
   x: number;
   y: number;
   showAvatar: boolean;
   hideExpandButtons: boolean;
+  hoveredNodeId: string | null;
+  setHoveredNodeId: (id: string | null) => void;
   onToggleExpanded: (personId: string, currentlyExpanded: boolean) => void;
+  onOpenPerson: (personId: string | null) => void;
 }) {
   const absoluteUnitCenterX = x + block.unitCenterX;
   const unitCenterY = y + NODE_HEIGHT / 2;
@@ -350,6 +377,9 @@ function RenderTreeBlock({
             x={x + node.x}
             y={y + node.y}
             showAvatar={showAvatar}
+            isHovered={hoveredNodeId === node.id}
+            setHoveredNodeId={setHoveredNodeId}
+            onOpenPerson={onOpenPerson}
           />
         ))}
 
@@ -423,7 +453,10 @@ function RenderTreeBlock({
               y={childTopY}
               showAvatar={showAvatar}
               hideExpandButtons={hideExpandButtons}
+              hoveredNodeId={hoveredNodeId}
+              setHoveredNodeId={setHoveredNodeId}
               onToggleExpanded={onToggleExpanded}
+              onOpenPerson={onOpenPerson}
             />
           ))}
         </g>
@@ -437,89 +470,120 @@ function PersonNode({
   x,
   y,
   showAvatar,
+  isHovered,
+  setHoveredNodeId,
+  onOpenPerson,
 }: {
   node: LayoutNode;
   x: number;
   y: number;
   showAvatar: boolean;
+  isHovered: boolean;
+  setHoveredNodeId: (id: string | null) => void;
+  onOpenPerson: (personId: string | null) => void;
 }) {
   const palette = getGenderPalette(node.person.gender);
   const dateParts = getPersonDateParts(node.person);
-  const nameLines = splitNameIntoLines(node.person.full_name ?? "", showAvatar ? 13 : 18);
+  const nameLines = splitNameIntoLines(node.person.full_name ?? "", 11);
   const avatarHref = getAvatarHref(node.person);
 
+  const scale = isHovered ? 1.055 : 1;
+  const translateX = isHovered ? -(NODE_WIDTH * (scale - 1)) / 2 : 0;
+  const translateY = isHovered ? -(NODE_HEIGHT * (scale - 1)) / 2 - 5 : 0;
+
   return (
-    <g transform={`translate(${x}, ${y})`}>
-      <rect
-        width={NODE_WIDTH}
-        height={NODE_HEIGHT}
-        rx={18}
-        fill="white"
-        stroke={palette.stroke}
-        strokeWidth={1.8}
-        filter="url(#viet-node-shadow)"
-      />
-
-      <rect
-        x={1}
-        y={1}
-        width={NODE_WIDTH - 2}
-        height={NODE_HEIGHT - 2}
-        rx={17}
-        fill={palette.softFill}
-        opacity={0.72}
-      />
-
-      {showAvatar ? (
-        <Avatar person={node.person} palette={palette} href={avatarHref} />
-      ) : null}
-
-      <text
-        x={NODE_WIDTH / 2}
-        y={showAvatar ? 70 : nameLines.length > 1 ? 34 : 42}
-        textAnchor="middle"
-        fontSize={12.5}
-        fontWeight={800}
-        fill="#1c1917"
+    <g
+      transform={`translate(${x}, ${y})`}
+      onMouseEnter={() => setHoveredNodeId(node.id)}
+      onMouseLeave={() => setHoveredNodeId(null)}
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpenPerson(node.person.id);
+      }}
+      style={{ cursor: "pointer" }}
+    >
+      <g
+        transform={`translate(${translateX}, ${translateY}) scale(${scale})`}
+        style={{
+          transition:
+            "transform 160ms ease-out, filter 160ms ease-out, opacity 160ms ease-out",
+        }}
       >
-        {nameLines.map((line, index) => (
-          <tspan
-            key={`${line}-${index}`}
-            x={NODE_WIDTH / 2}
-            dy={index === 0 ? 0 : 14}
-          >
-            {line}
-          </tspan>
-        ))}
-      </text>
+        <rect
+          width={NODE_WIDTH}
+          height={NODE_HEIGHT}
+          rx={16}
+          fill="white"
+          stroke={isHovered ? palette.hoverStroke : palette.stroke}
+          strokeWidth={isHovered ? 2.4 : 1.8}
+          filter={
+            isHovered
+              ? "url(#viet-node-hover-shadow)"
+              : "url(#viet-node-shadow)"
+          }
+        />
 
-      {dateParts ? (
-        <>
-          <text
-            x={NODE_WIDTH / 2}
-            y={showAvatar ? 100 : 82}
-            textAnchor="middle"
-            fontSize={10.5}
-            fill="#57534e"
-          >
-            {dateParts.prefix}
-          </text>
+        <rect
+          x={1}
+          y={1}
+          width={NODE_WIDTH - 2}
+          height={NODE_HEIGHT - 2}
+          rx={15}
+          fill={palette.softFill}
+          opacity={isHovered ? 0.95 : 0.72}
+        />
 
-          {dateParts.age ? (
+        {showAvatar ? (
+          <Avatar person={node.person} palette={palette} href={avatarHref} />
+        ) : null}
+
+        <text
+          x={NODE_WIDTH / 2}
+          y={showAvatar ? (nameLines.length > 1 ? 82 : 90) : nameLines.length > 1 ? 40 : 49}
+          textAnchor="middle"
+          fontSize={11.2}
+          fontWeight={800}
+          fill="#1c1917"
+        >
+          {nameLines.map((line, index) => (
+            <tspan
+              key={`${line}-${index}`}
+              x={NODE_WIDTH / 2}
+              dy={index === 0 ? 0 : 13}
+            >
+              {line}
+            </tspan>
+          ))}
+        </text>
+
+        {dateParts ? (
+          <>
             <text
               x={NODE_WIDTH / 2}
-              y={showAvatar ? 116 : 98}
+              y={showAvatar ? 112 : 74}
               textAnchor="middle"
-              fontSize={10.5}
+              fontSize={9.8}
               fill="#57534e"
             >
-              <tspan>(</tspan>
-              <tspan fontWeight={900}>{dateParts.age}</tspan>
-              <tspan> tuổi)</tspan>
+              {dateParts.prefix}
             </text>
-          ) : null}
-        </>
-      ) : null}
+
+            {dateParts.age ? (
+              <text
+                x={NODE_WIDTH / 2}
+                y={showAvatar ? 128 : 92}
+                textAnchor="middle"
+                fontSize={9.8}
+                fill="#57534e"
+              >
+                <tspan>(</tspan>
+                <tspan fontWeight={900}>{dateParts.age}</tspan>
+                <tspan> tuổi)</tspan>
+              </text>
+            ) : null}
+          </>
+        ) : null}
+      </g>
     </g>
   );
 }
@@ -534,7 +598,7 @@ function Avatar({
   href: string;
 }) {
   const avatarX = (NODE_WIDTH - AVATAR_SIZE) / 2;
-  const avatarY = 10;
+  const avatarY = 12;
   const clipId = `avatar-clip-${person.id}`;
 
   return (
@@ -761,6 +825,7 @@ function getGenderPalette(gender?: string | null) {
     return {
       softFill: "#eff6ff",
       stroke: "#0ea5e9",
+      hoverStroke: "#0284c7",
     };
   }
 
@@ -768,12 +833,14 @@ function getGenderPalette(gender?: string | null) {
     return {
       softFill: "#fff1f2",
       stroke: "#fb3f6c",
+      hoverStroke: "#e11d48",
     };
   }
 
   return {
     softFill: "#fafaf9",
     stroke: "#a8a29e",
+    hoverStroke: "#78716c",
   };
 }
 

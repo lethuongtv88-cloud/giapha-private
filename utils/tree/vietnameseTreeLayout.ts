@@ -58,16 +58,18 @@ export type VietnameseTreeLayoutFamily = {
 };
 
 /**
- * Compact node giống tree cũ:
- * avatar trên giữa, tên 1-2 dòng, ngày sinh/ngày mất, tuổi riêng.
+ * Compact node:
+ * - block: 112 x 141
+ * - avatar: 56 x 56
+ * - text area visually fits 104px width
  */
-export const VIET_NODE_WIDTH = 138;
-export const VIET_NODE_HEIGHT = 128;
-export const VIET_AVATAR_SIZE = 42;
-export const VIET_SPOUSE_GAP = 26;
-export const VIET_SIBLING_GAP = 30;
-export const VIET_GENERATION_GAP = 122;
-export const VIET_CHILD_BAR_OFFSET = 38;
+export const VIET_NODE_WIDTH = 112;
+export const VIET_NODE_HEIGHT = 141;
+export const VIET_AVATAR_SIZE = 56;
+export const VIET_SPOUSE_GAP = 28;
+export const VIET_SIBLING_GAP = 34;
+export const VIET_GENERATION_GAP = 86;
+export const VIET_CHILD_BAR_OFFSET = 34;
 
 const NODE_WIDTH = VIET_NODE_WIDTH;
 const NODE_HEIGHT = VIET_NODE_HEIGHT;
