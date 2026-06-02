@@ -4,10 +4,13 @@ import { Person, Relationship } from "@/types";
 import { useMemo, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import {
-  buildVietnameseFamilyLayout,
-  type VietnameseTreeFamily,
-  type VietnameseTreeLayoutFamily,
-  type VietnameseTreeLayoutNode,
+  VIET_CHILD_BAR_OFFSET,
+  VIET_GENERATION_GAP,
+  VIET_NODE_HEIGHT,
+  VIET_NODE_WIDTH,
+  VIET_SIBLING_GAP,
+  VIET_SPOUSE_GAP,
+  sortVietnamesePeople,
 } from "@/utils/tree/vietnameseTreeLayout";
 
 type VietnameseFamilyTreeProps = {
@@ -17,55 +20,82 @@ type VietnameseFamilyTreeProps = {
   canEdit?: boolean;
 };
 
-type FamilyBlock = {
-  family: VietnameseTreeFamily;
-  layout: VietnameseTreeLayoutFamily;
-  rootId: string;
-  omittedRootId?: string | null;
-  children: Array<{
-    childId: string;
-    block: FamilyBlock | null;
-  }>;
+type LayoutNode = {
+  id: string;
+  person: Person;
+  x: number;
+  y: number;
+  role: "main" | "spouse";
 };
 
-const BLOCK_GAP_Y = 90;
-const CHILD_SUBTREE_GAP_X = 48;
-const NODE_WIDTH = 180;
-const NODE_HEIGHT = 72;
+type ChildSlot = {
+  childId: string;
+  block: TreeBlock;
+  x: number;
+  childTopCenterX: number;
+};
+
+type TreeBlock = {
+  person: Person;
+  spouses: Person[];
+  children: TreeBlock[];
+  visibleChildren: ChildSlot[];
+  hasChildren: boolean;
+  expanded: boolean;
+  width: number;
+  height: number;
+  unitWidth: number;
+  unitX: number;
+  unitCenterX: number;
+  nodeTopCenterX: number;
+  nodes: LayoutNode[];
+};
+
+const NODE_WIDTH = VIET_NODE_WIDTH;
+const NODE_HEIGHT = VIET_NODE_HEIGHT;
+const SPOUSE_GAP = VIET_SPOUSE_GAP;
+const SIBLING_GAP = VIET_SIBLING_GAP;
+const GENERATION_GAP = VIET_GENERATION_GAP;
+const CHILD_BAR_OFFSET = VIET_CHILD_BAR_OFFSET;
 
 export default function VietnameseFamilyTree({
   personsMap,
   relationships,
   roots,
 }: VietnameseFamilyTreeProps) {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
   const relIndex = useMemo(
     () => buildRelationshipIndex(relationships),
     [relationships],
   );
-const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-const toggleExpanded = (personId: string) => {
-  setExpandedIds((prev) => {
-    const next = new Set(prev);
-    if (next.has(personId)) {
-      next.delete(personId);
-    } else {
-      next.add(personId);
-    }
-    return next;
-  });
-};
   const rootBlock = useMemo(() => {
     const root = roots[0];
     if (!root) return null;
 
-    return buildFamilyBlock({
-      root,
+    return buildTreeBlock({
+      person: root,
       personsMap,
       relIndex,
+      expandedIds,
       visited: new Set(),
     });
-  }, [personsMap, relIndex, roots]);
+  }, [roots, personsMap, relIndex, expandedIds]);
+
+  const toggleExpanded = (personId: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+
+      if (next.has(personId)) {
+        next.delete(personId);
+      } else {
+        next.add(personId);
+      }
+
+      return next;
+    });
+  };
 
   if (!rootBlock) {
     return (
@@ -75,24 +105,21 @@ const toggleExpanded = (personId: string) => {
     );
   }
 
-  const measured = measureBlock(rootBlock, 0, expandedIds);
   return (
     <div className="w-full h-full overflow-auto bg-stone-50 p-8">
       <div className="inline-block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
         <svg
-          width={measured.width + 80}
-          height={measured.height + 80}
+          width={rootBlock.width + 80}
+          height={rootBlock.height + 80}
           className="bg-stone-50"
         >
           <g transform="translate(40, 40)">
-            <RenderFamilyBlock
-             block={rootBlock}
-             x={0}
-             y={0}
-             measuredWidth={measured.width}
-             level={0}
-             expandedIds={expandedIds}
-             onToggleExpanded={toggleExpanded}
+            <RenderTreeBlock
+              block={rootBlock}
+              x={0}
+              y={0}
+              expandedIds={expandedIds}
+              onToggleExpanded={toggleExpanded}
             />
           </g>
         </svg>
@@ -101,96 +128,54 @@ const toggleExpanded = (personId: string) => {
   );
 }
 
-function RenderFamilyBlock({
+function RenderTreeBlock({
   block,
   x,
   y,
-  measuredWidth,
-  level,
   expandedIds,
   onToggleExpanded,
 }: {
-  block: FamilyBlock;
+  block: TreeBlock;
   x: number;
   y: number;
-  measuredWidth: number;
-  level: number;
   expandedIds: Set<string>;
   onToggleExpanded: (personId: string) => void;
 }) {
-  const layoutX = x + (measuredWidth - block.layout.width) / 2;
+  const absoluteUnitCenterX = x + block.unitCenterX;
+  const unitCenterY = y + NODE_HEIGHT / 2;
 
-  const childSubtrees = block.children
-  .map((item) => {
-    if (!item.block) return null;
+  const childTopY = y + NODE_HEIGHT + GENERATION_GAP;
+  const childBarY = childTopY - CHILD_BAR_OFFSET;
 
-    const shouldShowSubtree = expandedIds.has(item.childId);
-    if (!shouldShowSubtree) return null;
-      const childNode = block.layout.nodes.find(
-        (node) => node.role === "child" && node.person.id === item.childId,
-      );
-      if (!childNode) return null;
+  const childCenters = block.visibleChildren.map(
+    (slot) => x + slot.x + slot.childTopCenterX,
+  );
 
-      const measured = measureBlock(item.block, level + 1, expandedIds);
-
-      return {
-        childId: item.childId,
-        childNode,
-        block: item.block,
-        measured,
-      };
-    })
-    .filter(Boolean) as Array<{
-    childId: string;
-    childNode: VietnameseTreeLayoutNode;
-    block: FamilyBlock;
-    measured: { width: number; height: number };
-  }>;
-
-  let cursorX = x;
-  const subtreePositions = new Map<
-    string,
-    { x: number; y: number; width: number; height: number }
-  >();
-
-  for (const item of childSubtrees) {
-    const childCenterX = layoutX + item.childNode.x + NODE_WIDTH / 2;
-    const proposedX = childCenterX - item.measured.width / 2;
-    const finalX = Math.max(cursorX, proposedX);
-
-    subtreePositions.set(item.childId, {
-      x: finalX,
-      y: y + block.layout.height + BLOCK_GAP_Y,
-      width: item.measured.width,
-      height: item.measured.height,
-    });
-
-    cursorX = finalX + item.measured.width + CHILD_SUBTREE_GAP_X;
-  }
+  const firstChildCenter = childCenters[0];
+  const lastChildCenter = childCenters[childCenters.length - 1];
 
   return (
     <>
-      <g transform={`translate(${layoutX}, ${y})`}>
-        {block.layout.lines.map((line) => (
+      <g>
+        {block.nodes.length > 1 ? (
           <line
-            key={line.id}
-            x1={line.x1}
-            y1={line.y1}
-            x2={line.x2}
-            y2={line.y2}
+            x1={x + block.nodes[0].x + NODE_WIDTH / 2}
+            y1={unitCenterY}
+            x2={x + block.nodes[block.nodes.length - 1].x + NODE_WIDTH / 2}
+            y2={unitCenterY}
             stroke="#a8a29e"
             strokeWidth={2}
           />
-        ))}
+        ) : null}
 
-        {block.layout.nodes.map((node) => (
-          <g key={node.id} transform={`translate(${node.x}, ${node.y})`}>
+        {block.nodes.map((node) => (
+          <g key={node.id} transform={`translate(${x + node.x}, ${y + node.y})`}>
             <rect
               width={NODE_WIDTH}
               height={NODE_HEIGHT}
               rx={14}
               fill="white"
-              stroke={node.role === "parent" ? "#d97706" : "#78716c"}
+              stroke={node.role === "spouse" ? "#d97706" : "#78716c"}
             />
 
             <text
@@ -201,7 +186,7 @@ function RenderFamilyBlock({
               fontWeight={600}
               fill="#292524"
             >
-              {node.person.full_name}
+              {node.person.full_name ?? ""}
             </text>
 
             <text
@@ -211,192 +196,210 @@ function RenderFamilyBlock({
               fontSize={11}
               fill="#78716c"
             >
-              {node.role === "parent" ? "Cha/Mẹ" : "Con"}
+              {getNodeLabel(node)}
               {node.person.birth_year ? ` · ${node.person.birth_year}` : ""}
             </text>
-{node.role === "child" &&
-  block.children.some((item) => item.childId === node.person.id && item.block) && (
-    <g
-      transform={`translate(${NODE_WIDTH / 2 - 11}, ${NODE_HEIGHT - 10})`}
-      onClick={(event) => {
-        event.stopPropagation();
-        onToggleExpanded(node.person.id);
-      }}
-      style={{ cursor: "pointer" }}
-    >
-      <circle
-        cx={11}
-        cy={11}
-        r={11}
-        fill="white"
-        stroke="#d6d3d1"
-      />
-      {expandedIds.has(node.person.id) ? (
-        <Minus x={5} y={5} width={12} height={12} color="#78716c" />
-      ) : (
-        <Plus x={5} y={5} width={12} height={12} color="#78716c" />
-      )}
-    </g>
-  )}
           </g>
         ))}
+
+        {block.hasChildren ? (
+          <g
+            transform={`translate(${absoluteUnitCenterX - 11}, ${unitCenterY - 11})`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleExpanded(block.person.id);
+            }}
+            style={{ cursor: "pointer" }}
+          >
+            <circle
+              cx={11}
+              cy={11}
+              r={11}
+              fill="white"
+              stroke="#d6d3d1"
+            />
+            {expandedIds.has(block.person.id) ? (
+              <Minus x={5} y={5} width={12} height={12} color="#78716c" />
+            ) : (
+              <Plus x={5} y={5} width={12} height={12} color="#78716c" />
+            )}
+          </g>
+        ) : null}
       </g>
 
-      {childSubtrees.map((item) => {
-        const pos = subtreePositions.get(item.childId);
-        if (!pos) return null;
+      {block.expanded && block.visibleChildren.length > 0 ? (
+        <g>
+          <line
+            x1={absoluteUnitCenterX}
+            y1={unitCenterY}
+            x2={absoluteUnitCenterX}
+            y2={childBarY}
+            stroke="#a8a29e"
+            strokeWidth={2}
+          />
 
-        const childBottomX = layoutX + item.childNode.x + NODE_WIDTH / 2;
-        const childBottomY = y + item.childNode.y + NODE_HEIGHT;
-        const subtreeTopX = pos.x + pos.width / 2;
-        const subtreeTopY = pos.y;
-
-        return (
-          <g key={`subtree-${item.childId}`}>
+          {block.visibleChildren.length > 1 ? (
             <line
-              x1={childBottomX}
-              y1={childBottomY}
-              x2={childBottomX}
-              y2={childBottomY + 34}
+              x1={Math.min(firstChildCenter, absoluteUnitCenterX)}
+              y1={childBarY}
+              x2={Math.max(lastChildCenter, absoluteUnitCenterX)}
+              y2={childBarY}
               stroke="#a8a29e"
               strokeWidth={2}
             />
+          ) : (
             <line
-              x1={childBottomX}
-              y1={childBottomY + 34}
-              x2={subtreeTopX}
-              y2={childBottomY + 34}
+              x1={Math.min(firstChildCenter, absoluteUnitCenterX)}
+              y1={childBarY}
+              x2={Math.max(firstChildCenter, absoluteUnitCenterX)}
+              y2={childBarY}
               stroke="#a8a29e"
               strokeWidth={2}
             />
-            <line
-              x1={subtreeTopX}
-              y1={childBottomY + 34}
-              x2={subtreeTopX}
-              y2={subtreeTopY}
-              stroke="#a8a29e"
-              strokeWidth={2}
-            />
+          )}
 
-            <RenderFamilyBlock
-             block={item.block}
-             x={pos.x}
-             y={pos.y}
-             measuredWidth={pos.width}
-             level={level + 1}
-             expandedIds={expandedIds}
-             onToggleExpanded={onToggleExpanded}
+          {block.visibleChildren.map((slot) => {
+            const childCenterX = x + slot.x + slot.childTopCenterX;
+
+            return (
+              <g key={`child-line-${slot.childId}`}>
+                <line
+                  x1={childCenterX}
+                  y1={childBarY}
+                  x2={childCenterX}
+                  y2={childTopY}
+                  stroke="#a8a29e"
+                  strokeWidth={2}
+                />
+              </g>
+            );
+          })}
+
+          {block.visibleChildren.map((slot) => (
+            <RenderTreeBlock
+              key={slot.childId}
+              block={slot.block}
+              x={x + slot.x}
+              y={childTopY}
+              expandedIds={expandedIds}
+              onToggleExpanded={onToggleExpanded}
             />
-          </g>
-        );
-      })}
+          ))}
+        </g>
+      ) : null}
     </>
   );
 }
 
-function buildFamilyBlock({
-  root,
+function buildTreeBlock({
+  person,
   personsMap,
   relIndex,
+  expandedIds,
   visited,
-  omitRootInLayout = false,
 }: {
-  root: Person;
+  person: Person;
   personsMap: Map<string, Person>;
   relIndex: ReturnType<typeof buildRelationshipIndex>;
+  expandedIds: Set<string>;
   visited: Set<string>;
-  omitRootInLayout?: boolean;
-}): FamilyBlock | null {
-  if (visited.has(root.id)) return null;
-
+}): TreeBlock {
   const nextVisited = new Set(visited);
-  nextVisited.add(root.id);
+  nextVisited.add(person.id);
 
-  const spouseIds = relIndex.spousesByPerson.get(root.id) ?? [];
-  const childIds = relIndex.childrenByParent.get(root.id) ?? [];
-
+  const spouseIds = relIndex.spousesByPerson.get(person.id) ?? [];
   const spouses = spouseIds
+    .filter((id) => !nextVisited.has(id))
     .map((id) => personsMap.get(id))
     .filter(Boolean) as Person[];
 
-  const children = childIds
-    .map((id) => personsMap.get(id))
-    .filter(Boolean) as Person[];
+  const childIds = relIndex.childrenByParent.get(person.id) ?? [];
+  const childPeople = sortVietnamesePeople(
+    childIds
+      .map((id) => personsMap.get(id))
+      .filter(Boolean) as Person[],
+  );
 
-  const parents = [
-  ...(!omitRootInLayout
-    ? [
-        {
-          role: root.gender === "female" ? "wife" : "husband",
-          person: root,
-        },
-      ]
-    : []),
-  ...spouses.map((spouse) => ({
-    role: spouse.gender === "female" ? "wife" : "husband",
-    person: spouse,
-  })),
-];
+  const childBlocks = childPeople
+    .filter((child) => !nextVisited.has(child.id))
+    .map((child) =>
+      buildTreeBlock({
+        person: child,
+        personsMap,
+        relIndex,
+        expandedIds,
+        visited: nextVisited,
+      }),
+    );
 
-const family: VietnameseTreeFamily = {
-  familyId: root.id,
-  parents,
-  children,
-};
+  const expanded = expandedIds.has(person.id);
+  const hasChildren = childBlocks.length > 0;
 
-  const layout = buildVietnameseFamilyLayout(family);
-
-  return {
-  family,
-  layout,
-  rootId: root.id,
-  omittedRootId: omitRootInLayout ? root.id : null,
-  children: children.map((child) => ({
-      childId: child.id,
-      block: buildFamilyBlock({
-  root: child,
-  personsMap,
-  relIndex,
-  visited: nextVisited,
-  omitRootInLayout: true,
-}),
-    })),
-  };
-}
-
-function measureBlock(
-  block: FamilyBlock,
-  level: number,
-  expandedIds: Set<string>,
-): { width: number; height: number } {
-  const visibleChildren = block.children.filter((item) => {
-   if (!item.block) return false;
-   return expandedIds.has(item.childId);
- });
-
-  const childMeasurements = visibleChildren
-    .map((item) =>
-      item.block ? measureBlock(item.block, level + 1, expandedIds) : null,
-    )
-    .filter(Boolean) as Array<{ width: number; height: number }>;
-
-  if (childMeasurements.length === 0) {
-    return {
-      width: block.layout.width,
-      height: block.layout.height,
-    };
-  }
+  const unitPeople = [person, ...spouses];
+  const unitWidth =
+    unitPeople.length * NODE_WIDTH +
+    Math.max(0, unitPeople.length - 1) * SPOUSE_GAP;
 
   const childrenWidth =
-    childMeasurements.reduce((sum, item) => sum + item.width, 0) +
-    Math.max(0, childMeasurements.length - 1) * CHILD_SUBTREE_GAP_X;
+    expanded && childBlocks.length > 0
+      ? childBlocks.reduce((sum, child) => sum + child.width, 0) +
+        Math.max(0, childBlocks.length - 1) * SIBLING_GAP
+      : 0;
+
+  const width = Math.max(unitWidth, childrenWidth, NODE_WIDTH);
+  const unitX = (width - unitWidth) / 2;
+  const unitCenterX = unitX + unitWidth / 2;
+  const nodeTopCenterX = unitX + NODE_WIDTH / 2;
+
+  const nodes: LayoutNode[] = unitPeople.map((item, index) => ({
+    id: `${person.id}:${index === 0 ? "main" : "spouse"}:${item.id}`,
+    person: item,
+    role: index === 0 ? "main" : "spouse",
+    x: unitX + index * (NODE_WIDTH + SPOUSE_GAP),
+    y: 0,
+  }));
+
+  const visibleChildren: ChildSlot[] = [];
+
+  if (expanded && childBlocks.length > 0) {
+    const childStartX = (width - childrenWidth) / 2;
+    let cursorX = childStartX;
+
+    for (const childBlock of childBlocks) {
+      visibleChildren.push({
+        childId: childBlock.person.id,
+        block: childBlock,
+        x: cursorX,
+        childTopCenterX: childBlock.nodeTopCenterX,
+      });
+
+      cursorX += childBlock.width + SIBLING_GAP;
+    }
+  }
+
+  const childHeight =
+    visibleChildren.length > 0
+      ? Math.max(...visibleChildren.map((slot) => slot.block.height))
+      : 0;
+
+  const height =
+    NODE_HEIGHT +
+    (visibleChildren.length > 0 ? GENERATION_GAP + childHeight : 0);
 
   return {
-    width: Math.max(block.layout.width, childrenWidth),
-    height:
-      block.layout.height +
-      BLOCK_GAP_Y +
-      Math.max(...childMeasurements.map((item) => item.height)),
+    person,
+    spouses,
+    children: childBlocks,
+    visibleChildren,
+    hasChildren,
+    expanded,
+    width,
+    height,
+    unitWidth,
+    unitX,
+    unitCenterX,
+    nodeTopCenterX,
+    nodes,
   };
 }
 
@@ -406,8 +409,13 @@ function buildRelationshipIndex(relationships: Relationship[]) {
 
   for (const rel of relationships) {
     if (rel.type === "marriage") {
-      if (!spousesByPerson.has(rel.person_a)) spousesByPerson.set(rel.person_a, []);
-      if (!spousesByPerson.has(rel.person_b)) spousesByPerson.set(rel.person_b, []);
+      if (!spousesByPerson.has(rel.person_a)) {
+        spousesByPerson.set(rel.person_a, []);
+      }
+
+      if (!spousesByPerson.has(rel.person_b)) {
+        spousesByPerson.set(rel.person_b, []);
+      }
 
       spousesByPerson.get(rel.person_a)!.push(rel.person_b);
       spousesByPerson.get(rel.person_b)!.push(rel.person_a);
@@ -426,4 +434,12 @@ function buildRelationshipIndex(relationships: Relationship[]) {
     spousesByPerson,
     childrenByParent,
   };
+}
+
+function getNodeLabel(node: LayoutNode) {
+  if (node.role === "main") {
+    return node.person.gender === "female" ? "Con/Vợ" : "Cha/Chồng";
+  }
+
+  return node.person.gender === "male" ? "Chồng" : "Vợ";
 }
