@@ -3,6 +3,12 @@ export type VietnameseTreePerson = {
   full_name: string;
   gender?: string | null;
   birth_year?: number | null;
+  birth_month?: number | null;
+  birth_day?: number | null;
+  death_year?: number | null;
+  death_month?: number | null;
+  death_day?: number | null;
+  is_deceased?: boolean | null;
   birth_order?: number | null;
   generation?: number | null;
   is_in_law?: boolean | null;
@@ -50,12 +56,12 @@ export type VietnameseTreeLayoutFamily = {
   height: number;
 };
 
-export const VIET_NODE_WIDTH = 180;
-export const VIET_NODE_HEIGHT = 72;
-export const VIET_SPOUSE_GAP = 40;
-export const VIET_SIBLING_GAP = 32;
-export const VIET_GENERATION_GAP = 120;
-export const VIET_CHILD_BAR_OFFSET = 40;
+export const VIET_NODE_WIDTH = 190;
+export const VIET_NODE_HEIGHT = 78;
+export const VIET_SPOUSE_GAP = 42;
+export const VIET_SIBLING_GAP = 38;
+export const VIET_GENERATION_GAP = 128;
+export const VIET_CHILD_BAR_OFFSET = 42;
 
 const NODE_WIDTH = VIET_NODE_WIDTH;
 const NODE_HEIGHT = VIET_NODE_HEIGHT;
@@ -83,9 +89,11 @@ export function buildVietnameseFamilyLayout(
 
   const childUnits = sortedChildren.map((child) => {
     const spouses = family.expandedSpousesByChildId?.get(child.id) ?? [];
+
     const naturalWidth =
       (1 + spouses.length) * NODE_WIDTH +
       Math.max(0, spouses.length) * SPOUSE_GAP;
+
     const requestedWidth = family.childUnitWidthByChildId?.get(child.id) ?? 0;
 
     return {
@@ -218,16 +226,14 @@ export function buildVietnameseFamilyLayout(
       });
     }
 
-    if (childCenters.length > 1) {
-      lines.push({
-        id: `${family.familyId}:sibling-bar`,
-        type: 'sibling-bar',
-        x1: Math.min(first, centerX),
-        y1: childBarY,
-        x2: Math.max(last, centerX),
-        y2: childBarY,
-      });
-    }
+    lines.push({
+      id: `${family.familyId}:sibling-bar`,
+      type: 'sibling-bar',
+      x1: Math.min(first, centerX),
+      y1: childBarY,
+      x2: Math.max(last, centerX),
+      y2: childBarY,
+    });
 
     for (const childCenterX of childCenters) {
       lines.push({

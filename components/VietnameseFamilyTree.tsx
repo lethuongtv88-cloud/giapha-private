@@ -58,6 +58,8 @@ const SIBLING_GAP = VIET_SIBLING_GAP;
 const GENERATION_GAP = VIET_GENERATION_GAP;
 const CHILD_BAR_OFFSET = VIET_CHILD_BAR_OFFSET;
 
+const LINE_COLOR = "#a8a29e";
+
 export default function VietnameseFamilyTree({
   personsMap,
   relationships,
@@ -107,13 +109,13 @@ export default function VietnameseFamilyTree({
 
   return (
     <div className="w-full h-full overflow-auto bg-stone-50 p-8">
-      <div className="inline-block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+      <div className="inline-block rounded-3xl border border-stone-200 bg-white p-8 shadow-sm">
         <svg
-          width={rootBlock.width + 80}
-          height={rootBlock.height + 80}
-          className="bg-stone-50"
+          width={rootBlock.width + 96}
+          height={rootBlock.height + 96}
+          className="bg-linear-to-br from-stone-50 to-white rounded-2xl"
         >
-          <g transform="translate(40, 40)">
+          <g transform="translate(48, 48)">
             <RenderTreeBlock
               block={rootBlock}
               x={0}
@@ -163,48 +165,23 @@ function RenderTreeBlock({
             y1={unitCenterY}
             x2={x + block.nodes[block.nodes.length - 1].x + NODE_WIDTH / 2}
             y2={unitCenterY}
-            stroke="#a8a29e"
+            stroke={LINE_COLOR}
             strokeWidth={2}
           />
         ) : null}
 
         {block.nodes.map((node) => (
-          <g key={node.id} transform={`translate(${x + node.x}, ${y + node.y})`}>
-            <rect
-              width={NODE_WIDTH}
-              height={NODE_HEIGHT}
-              rx={14}
-              fill="white"
-              stroke={node.role === "spouse" ? "#d97706" : "#78716c"}
-            />
-
-            <text
-              x={NODE_WIDTH / 2}
-              y={32}
-              textAnchor="middle"
-              fontSize={13}
-              fontWeight={600}
-              fill="#292524"
-            >
-              {node.person.full_name ?? ""}
-            </text>
-
-            <text
-              x={NODE_WIDTH / 2}
-              y={52}
-              textAnchor="middle"
-              fontSize={11}
-              fill="#78716c"
-            >
-              {getNodeLabel(node)}
-              {node.person.birth_year ? ` · ${node.person.birth_year}` : ""}
-            </text>
-          </g>
+          <PersonNode
+            key={node.id}
+            node={node}
+            x={x + node.x}
+            y={y + node.y}
+          />
         ))}
 
         {block.hasChildren ? (
           <g
-            transform={`translate(${absoluteUnitCenterX - 11}, ${unitCenterY - 11})`}
+            transform={`translate(${absoluteUnitCenterX - 12}, ${unitCenterY - 12})`}
             onClick={(event) => {
               event.stopPropagation();
               onToggleExpanded(block.person.id);
@@ -212,16 +189,17 @@ function RenderTreeBlock({
             style={{ cursor: "pointer" }}
           >
             <circle
-              cx={11}
-              cy={11}
-              r={11}
+              cx={12}
+              cy={12}
+              r={12}
               fill="white"
               stroke="#d6d3d1"
+              strokeWidth={1.5}
             />
             {expandedIds.has(block.person.id) ? (
-              <Minus x={5} y={5} width={12} height={12} color="#78716c" />
+              <Minus x={6} y={6} width={12} height={12} color="#57534e" />
             ) : (
-              <Plus x={5} y={5} width={12} height={12} color="#78716c" />
+              <Plus x={6} y={6} width={12} height={12} color="#57534e" />
             )}
           </g>
         ) : null}
@@ -234,44 +212,32 @@ function RenderTreeBlock({
             y1={unitCenterY}
             x2={absoluteUnitCenterX}
             y2={childBarY}
-            stroke="#a8a29e"
+            stroke={LINE_COLOR}
             strokeWidth={2}
           />
 
-          {block.visibleChildren.length > 1 ? (
-            <line
-              x1={Math.min(firstChildCenter, absoluteUnitCenterX)}
-              y1={childBarY}
-              x2={Math.max(lastChildCenter, absoluteUnitCenterX)}
-              y2={childBarY}
-              stroke="#a8a29e"
-              strokeWidth={2}
-            />
-          ) : (
-            <line
-              x1={Math.min(firstChildCenter, absoluteUnitCenterX)}
-              y1={childBarY}
-              x2={Math.max(firstChildCenter, absoluteUnitCenterX)}
-              y2={childBarY}
-              stroke="#a8a29e"
-              strokeWidth={2}
-            />
-          )}
+          <line
+            x1={Math.min(firstChildCenter, absoluteUnitCenterX)}
+            y1={childBarY}
+            x2={Math.max(lastChildCenter, absoluteUnitCenterX)}
+            y2={childBarY}
+            stroke={LINE_COLOR}
+            strokeWidth={2}
+          />
 
           {block.visibleChildren.map((slot) => {
             const childCenterX = x + slot.x + slot.childTopCenterX;
 
             return (
-              <g key={`child-line-${slot.childId}`}>
-                <line
-                  x1={childCenterX}
-                  y1={childBarY}
-                  x2={childCenterX}
-                  y2={childTopY}
-                  stroke="#a8a29e"
-                  strokeWidth={2}
-                />
-              </g>
+              <line
+                key={`child-line-${slot.childId}`}
+                x1={childCenterX}
+                y1={childBarY}
+                x2={childCenterX}
+                y2={childTopY}
+                stroke={LINE_COLOR}
+                strokeWidth={2}
+              />
             );
           })}
 
@@ -288,6 +254,63 @@ function RenderTreeBlock({
         </g>
       ) : null}
     </>
+  );
+}
+
+function PersonNode({
+  node,
+  x,
+  y,
+}: {
+  node: LayoutNode;
+  x: number;
+  y: number;
+}) {
+  const palette = getGenderPalette(node.person.gender);
+  const dateParts = getPersonDateParts(node.person);
+
+  return (
+    <g transform={`translate(${x}, ${y})`}>
+      <rect
+        width={NODE_WIDTH}
+        height={NODE_HEIGHT}
+        rx={16}
+        fill={palette.fill}
+        stroke={palette.stroke}
+        strokeWidth={1.8}
+        filter="url(#none)"
+      />
+
+      <text
+        x={NODE_WIDTH / 2}
+        y={31}
+        textAnchor="middle"
+        fontSize={13}
+        fontWeight={700}
+        fill="#1c1917"
+      >
+        {truncateText(node.person.full_name ?? "", 22)}
+      </text>
+
+      {dateParts ? (
+        <text
+          x={NODE_WIDTH / 2}
+          y={53}
+          textAnchor="middle"
+          fontSize={11}
+          fill="#57534e"
+        >
+          <tspan>{dateParts.prefix}</tspan>
+          {dateParts.age ? (
+            <>
+              <tspan> (</tspan>
+              <tspan fontWeight={800}>{dateParts.age}</tspan>
+              <tspan> tuổi)</tspan>
+            </>
+          ) : null}
+        </text>
+      ) : null}
+    </g>
   );
 }
 
@@ -436,10 +459,112 @@ function buildRelationshipIndex(relationships: Relationship[]) {
   };
 }
 
-function getNodeLabel(node: LayoutNode) {
-  if (node.role === "main") {
-    return node.person.gender === "female" ? "Con/Vợ" : "Cha/Chồng";
+function getGenderPalette(gender?: string | null) {
+  if (gender === "male") {
+    return {
+      fill: "#eff6ff",
+      stroke: "#60a5fa",
+    };
   }
 
-  return node.person.gender === "male" ? "Chồng" : "Vợ";
+  if (gender === "female") {
+    return {
+      fill: "#fff1f2",
+      stroke: "#fb7185",
+    };
+  }
+
+  return {
+    fill: "#fafaf9",
+    stroke: "#a8a29e",
+  };
+}
+
+function getPersonDateParts(person: Person): { prefix: string; age: number | null } | null {
+  const birthYear = person.birth_year ?? null;
+  const birthMonth = person.birth_month ?? null;
+  const birthDay = person.birth_day ?? null;
+
+  if (!birthYear) return null;
+
+  if (person.is_deceased && person.death_year) {
+    const age = calculateDeathAge(person);
+    return {
+      prefix: `${birthYear} - ${person.death_year}`,
+      age,
+    };
+  }
+
+  const age = calculateLivingAge(person);
+  return {
+    prefix: formatBirthDate(birthYear, birthMonth, birthDay),
+    age,
+  };
+}
+
+function formatBirthDate(
+  year: number,
+  month?: number | null,
+  day?: number | null,
+) {
+  if (day && month) {
+    return `${pad2(day)}-${pad2(month)}-${year}`;
+  }
+
+  if (month) {
+    return `${pad2(month)}-${year}`;
+  }
+
+  return String(year);
+}
+
+function calculateLivingAge(person: Person) {
+  if (!person.birth_year) return null;
+
+  const now = new Date();
+  let age = now.getFullYear() - person.birth_year;
+
+  if (person.birth_month) {
+    const currentMonth = now.getMonth() + 1;
+
+    if (
+      currentMonth < person.birth_month ||
+      (currentMonth === person.birth_month &&
+        person.birth_day &&
+        now.getDate() < person.birth_day)
+    ) {
+      age -= 1;
+    }
+  }
+
+  return Math.max(age, 0);
+}
+
+function calculateDeathAge(person: Person) {
+  if (!person.birth_year || !person.death_year) return null;
+
+  let age = person.death_year - person.birth_year;
+
+  if (person.birth_month && person.death_month) {
+    if (
+      person.death_month < person.birth_month ||
+      (person.death_month === person.birth_month &&
+        person.birth_day &&
+        person.death_day &&
+        person.death_day < person.birth_day)
+    ) {
+      age -= 1;
+    }
+  }
+
+  return Math.max(age, 0);
+}
+
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function truncateText(text: string, max: number) {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1)}…`;
 }
