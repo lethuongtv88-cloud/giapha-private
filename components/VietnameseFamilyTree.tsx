@@ -1,7 +1,8 @@
 "use client";
 
 import { Person, Relationship } from "@/types";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Minus, Plus } from "lucide-react";
 import {
   buildVietnameseFamilyLayout,
   type VietnameseTreeFamily,
@@ -19,6 +20,8 @@ type VietnameseFamilyTreeProps = {
 type FamilyBlock = {
   family: VietnameseTreeFamily;
   layout: VietnameseTreeLayoutFamily;
+  rootId: string;
+  omittedRootId?: string | null;
   children: Array<{
     childId: string;
     block: FamilyBlock | null;
@@ -39,7 +42,19 @@ export default function VietnameseFamilyTree({
     () => buildRelationshipIndex(relationships),
     [relationships],
   );
+const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
+const toggleExpanded = (personId: string) => {
+  setExpandedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(personId)) {
+      next.delete(personId);
+    } else {
+      next.add(personId);
+    }
+    return next;
+  });
+};
   const rootBlock = useMemo(() => {
     const root = roots[0];
     if (!root) return null;
@@ -60,8 +75,7 @@ export default function VietnameseFamilyTree({
     );
   }
 
-  const measured = measureBlock(rootBlock);
-
+  const measured = measureBlock(rootBlock, 0, expandedIds);
   return (
     <div className="w-full h-full overflow-auto bg-stone-50 p-8">
       <div className="inline-block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
@@ -72,10 +86,13 @@ export default function VietnameseFamilyTree({
         >
           <g transform="translate(40, 40)">
             <RenderFamilyBlock
-              block={rootBlock}
-              x={0}
-              y={0}
-              measuredWidth={measured.width}
+             block={rootBlock}
+             x={0}
+             y={0}
+             measuredWidth={measured.width}
+             level={0}
+             expandedIds={expandedIds}
+             onToggleExpanded={toggleExpanded}
             />
           </g>
         </svg>
@@ -89,23 +106,32 @@ function RenderFamilyBlock({
   x,
   y,
   measuredWidth,
+  level,
+  expandedIds,
+  onToggleExpanded,
 }: {
   block: FamilyBlock;
   x: number;
   y: number;
   measuredWidth: number;
+  level: number;
+  expandedIds: Set<string>;
+  onToggleExpanded: (personId: string) => void;
 }) {
   const layoutX = x + (measuredWidth - block.layout.width) / 2;
 
   const childSubtrees = block.children
-    .map((item) => {
-      if (!item.block) return null;
+  .map((item) => {
+    if (!item.block) return null;
+
+    const shouldShowSubtree = expandedIds.has(item.childId);
+    if (!shouldShowSubtree) return null;
       const childNode = block.layout.nodes.find(
         (node) => node.role === "child" && node.person.id === item.childId,
       );
       if (!childNode) return null;
 
-      const measured = measureBlock(item.block);
+      const measured = measureBlock(item.block, level + 1, expandedIds);
 
       return {
         childId: item.childId,
@@ -188,6 +214,30 @@ function RenderFamilyBlock({
               {node.role === "parent" ? "Cha/Mẹ" : "Con"}
               {node.person.birth_year ? ` · ${node.person.birth_year}` : ""}
             </text>
+{node.role === "child" &&
+  block.children.some((item) => item.childId === node.person.id && item.block) && (
+    <g
+      transform={`translate(${NODE_WIDTH / 2 - 11}, ${NODE_HEIGHT - 10})`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggleExpanded(node.person.id);
+      }}
+      style={{ cursor: "pointer" }}
+    >
+      <circle
+        cx={11}
+        cy={11}
+        r={11}
+        fill="white"
+        stroke="#d6d3d1"
+      />
+      {expandedIds.has(node.person.id) ? (
+        <Minus x={5} y={5} width={12} height={12} color="#78716c" />
+      ) : (
+        <Plus x={5} y={5} width={12} height={12} color="#78716c" />
+      )}
+    </g>
+  )}
           </g>
         ))}
       </g>
@@ -229,10 +279,13 @@ function RenderFamilyBlock({
             />
 
             <RenderFamilyBlock
-              block={item.block}
-              x={pos.x}
-              y={pos.y}
-              measuredWidth={pos.width}
+             block={item.block}
+             x={pos.x}
+             y={pos.y}
+             measuredWidth={pos.width}
+             level={level + 1}
+             expandedIds={expandedIds}
+             onToggleExpanded={onToggleExpanded}
             />
           </g>
         );
@@ -246,11 +299,13 @@ function buildFamilyBlock({
   personsMap,
   relIndex,
   visited,
+  omitRootInLayout = false,
 }: {
   root: Person;
   personsMap: Map<string, Person>;
   relIndex: ReturnType<typeof buildRelationshipIndex>;
   visited: Set<string>;
+  omitRootInLayout?: boolean;
 }): FamilyBlock | null {
   if (visited.has(root.id)) return null;
 
@@ -268,41 +323,61 @@ function buildFamilyBlock({
     .map((id) => personsMap.get(id))
     .filter(Boolean) as Person[];
 
-  const family: VietnameseTreeFamily = {
-    familyId: root.id,
-    parents: [
-      {
-        role: root.gender === "female" ? "wife" : "husband",
-        person: root,
-      },
-      ...spouses.map((spouse) => ({
-        role: spouse.gender === "female" ? "wife" : "husband",
-        person: spouse,
-      })),
-    ],
-    children,
-  };
+  const parents = [
+  ...(!omitRootInLayout
+    ? [
+        {
+          role: root.gender === "female" ? "wife" : "husband",
+          person: root,
+        },
+      ]
+    : []),
+  ...spouses.map((spouse) => ({
+    role: spouse.gender === "female" ? "wife" : "husband",
+    person: spouse,
+  })),
+];
+
+const family: VietnameseTreeFamily = {
+  familyId: root.id,
+  parents,
+  children,
+};
 
   const layout = buildVietnameseFamilyLayout(family);
 
   return {
-    family,
-    layout,
-    children: children.map((child) => ({
+  family,
+  layout,
+  rootId: root.id,
+  omittedRootId: omitRootInLayout ? root.id : null,
+  children: children.map((child) => ({
       childId: child.id,
       block: buildFamilyBlock({
-        root: child,
-        personsMap,
-        relIndex,
-        visited: nextVisited,
-      }),
+  root: child,
+  personsMap,
+  relIndex,
+  visited: nextVisited,
+  omitRootInLayout: true,
+}),
     })),
   };
 }
 
-function measureBlock(block: FamilyBlock): { width: number; height: number } {
-  const childMeasurements = block.children
-    .map((item) => (item.block ? measureBlock(item.block) : null))
+function measureBlock(
+  block: FamilyBlock,
+  level: number,
+  expandedIds: Set<string>,
+): { width: number; height: number } {
+  const visibleChildren = block.children.filter((item) => {
+   if (!item.block) return false;
+   return expandedIds.has(item.childId);
+ });
+
+  const childMeasurements = visibleChildren
+    .map((item) =>
+      item.block ? measureBlock(item.block, level + 1, expandedIds) : null,
+    )
     .filter(Boolean) as Array<{ width: number; height: number }>;
 
   if (childMeasurements.length === 0) {
