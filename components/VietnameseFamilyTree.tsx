@@ -129,6 +129,7 @@ const GENERATION_GAP = VIET_GENERATION_GAP;
 const CHILD_BAR_OFFSET = VIET_CHILD_BAR_OFFSET;
 
 const LINE_COLOR = "#a8a29e";
+const CONNECTOR_BUTTON_OFFSET_Y = 8;
 
 export default function VietnameseFamilyTree({
   personsMap,
@@ -403,7 +404,8 @@ function RenderTreeBlock({
   onToggleGroupExpanded: (groupId: string, currentlyExpanded: boolean) => void;
   onOpenPerson: (personId: string | null) => void;
 }) {
-  const unitCenterY = y + NODE_HEIGHT / 2;
+  const spouseLineY = y + NODE_HEIGHT / 2;
+  const connectorStartY = y + NODE_HEIGHT + CONNECTOR_BUTTON_OFFSET_Y;
   const childTopY = y + NODE_HEIGHT + GENERATION_GAP;
   const childBarY = childTopY - CHILD_BAR_OFFSET;
 
@@ -413,9 +415,9 @@ function RenderTreeBlock({
         {block.nodes.length > 1 ? (
           <line
             x1={x + block.nodes[0].x + NODE_WIDTH / 2}
-            y1={unitCenterY}
+            y1={spouseLineY}
             x2={x + block.nodes[block.nodes.length - 1].x + NODE_WIDTH / 2}
-            y2={unitCenterY}
+            y2={spouseLineY}
             stroke={LINE_COLOR}
             strokeWidth={2}
           />
@@ -434,6 +436,16 @@ function RenderTreeBlock({
           />
         ))}
 
+        {block.groups
+          .filter((group) => group.spouses.length > 0)
+          .map((group) => (
+            <MarriageRing
+              key={`ring-${group.groupId}`}
+              x={x + group.anchorX}
+              y={spouseLineY}
+            />
+          ))}
+
         {!hideExpandButtons
           ? block.groups
               .filter((group) => group.hasChildren)
@@ -441,7 +453,7 @@ function RenderTreeBlock({
                 <g
                   key={`toggle-${group.groupId}`}
                   transform={`translate(${x + group.anchorX - 12}, ${
-                    unitCenterY - 12
+                    connectorStartY - 12
                   })`}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -449,6 +461,14 @@ function RenderTreeBlock({
                   }}
                   style={{ cursor: "pointer" }}
                 >
+                  <line
+                    x1={12}
+                    y1={-CONNECTOR_BUTTON_OFFSET_Y}
+                    x2={12}
+                    y2={0}
+                    stroke={LINE_COLOR}
+                    strokeWidth={2}
+                  />
                   <circle
                     cx={12}
                     cy={12}
@@ -482,7 +502,7 @@ function RenderTreeBlock({
             <g key={`group-children-${group.groupId}`}>
               <line
                 x1={anchorX}
-                y1={unitCenterY}
+                y1={connectorStartY}
                 x2={anchorX}
                 y2={childBarY}
                 stroke={LINE_COLOR}
@@ -532,6 +552,30 @@ function RenderTreeBlock({
           );
         })}
     </>
+  );
+}
+
+function MarriageRing({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x}, ${y})`} pointerEvents="none">
+      <circle
+        cx={-4}
+        cy={0}
+        r={5}
+        fill="white"
+        stroke="#d97706"
+        strokeWidth={1.6}
+      />
+      <circle
+        cx={4}
+        cy={0}
+        r={5}
+        fill="white"
+        stroke="#d97706"
+        strokeWidth={1.6}
+      />
+      <circle cx={0} cy={0} r={2.1} fill="#fbbf24" />
+    </g>
   );
 }
 
@@ -812,211 +856,169 @@ function buildTreeBlock({
     };
   });
 
-  /**
-   * Nếu người này chưa có family làm cha/mẹ,
-   * vẫn render node đơn.
-   */
   if (groupDrafts.length === 0) {
     return buildSinglePersonBlock(person);
   }
 
-  /**
-   * BƯỚC 1:
-   * Layout các family group/con TRƯỚC.
-   * Mỗi group có một slot riêng, slot rộng theo số con/subtree.
-   * Tâm slot chính là anchor của family đó.
-   */
   const groupSlots = layoutFamilyGroupSlots(groupDrafts);
-
-  /**
-   * BƯỚC 2:
-   * Từ anchor của từng group, đặt lại node vợ/chồng/cha/mẹ.
-   * Không lấy trung điểm vợ-chồng nữa.
-   */
   const positionedPeople = new Map<string, { person: Person; x: number }>();
 
-  const personGender = person.gender;
+  const visibleSpouseByGroupId = new Map<string, Person | null>();
 
-/**
- * Khi bật filter ẩn dâu/rễ/nam/nữ, có những family chỉ còn lại
- * 1 parent hiển thị. Trường hợp đó không được neo theo khoảng giữa
- * vợ/chồng nữa, mà phải đặt parent còn hiển thị ngay giữa slot con.
- */
-const visibleSpouseByGroupId = new Map<string, Person | null>();
-
-for (const group of groupDrafts) {
-  const visibleSpouses = group.spouses.filter((spouse) =>
-    shouldShowSpouse(spouse, filters),
-  );
-
-  if (person.gender === "male") {
-    visibleSpouseByGroupId.set(
-      group.groupId,
-      visibleSpouses.find((spouse) => spouse.gender === "female") ??
-        visibleSpouses[0] ??
-        null,
+  for (const group of groupDrafts) {
+    const visibleSpouses = group.spouses.filter((spouse) =>
+      shouldShowSpouse(spouse, filters),
     );
-  } else if (person.gender === "female") {
-    visibleSpouseByGroupId.set(
-      group.groupId,
-      visibleSpouses.find((spouse) => spouse.gender === "male") ??
-        visibleSpouses[0] ??
-        null,
-    );
+
+    if (person.gender === "male") {
+      visibleSpouseByGroupId.set(
+        group.groupId,
+        visibleSpouses.find((spouse) => spouse.gender === "female") ??
+          visibleSpouses[0] ??
+          null,
+      );
+    } else if (person.gender === "female") {
+      visibleSpouseByGroupId.set(
+        group.groupId,
+        visibleSpouses.find((spouse) => spouse.gender === "male") ??
+          visibleSpouses[0] ??
+          null,
+      );
+    } else {
+      visibleSpouseByGroupId.set(group.groupId, visibleSpouses[0] ?? null);
+    }
+  }
+
+  if (person.gender === "female") {
+    const husbandGroups = groupDrafts.map((group, index) => ({
+      group,
+      slot: groupSlots[index],
+      husband: visibleSpouseByGroupId.get(group.groupId),
+    }));
+
+    const groupsWithHusband = husbandGroups.filter((item) => item.husband);
+    const groupsWithoutHusband = husbandGroups.filter((item) => !item.husband);
+
+    for (const item of groupsWithHusband) {
+      const husband = item.husband!;
+      const husbandX = item.slot.anchorX - NODE_WIDTH - SPOUSE_GAP / 2;
+
+      positionedPeople.set(husband.id, {
+        person: husband,
+        x: husbandX,
+      });
+    }
+
+    if (groupsWithHusband.length > 0) {
+      const rightMostHusbandRight = Math.max(
+        ...groupsWithHusband.map((item) => {
+          const husband = item.husband!;
+          const pos = positionedPeople.get(husband.id);
+          return (pos?.x ?? 0) + NODE_WIDTH;
+        }),
+      );
+
+      positionedPeople.set(person.id, {
+        person,
+        x: rightMostHusbandRight + SPOUSE_GAP,
+      });
+    } else if (groupsWithoutHusband.length > 0) {
+      const firstSlot = groupsWithoutHusband[0].slot;
+      const lastSlot = groupsWithoutHusband[groupsWithoutHusband.length - 1].slot;
+      const visibleCenter = (firstSlot.anchorX + lastSlot.anchorX) / 2;
+
+      positionedPeople.set(person.id, {
+        person,
+        x: visibleCenter - NODE_WIDTH / 2,
+      });
+    }
+
+    let extraX =
+      (positionedPeople.get(person.id)?.x ?? 0) + NODE_WIDTH + SPOUSE_GAP;
+
+    for (const group of groupDrafts) {
+      for (const spouse of group.spouses) {
+        if (spouse.gender === "male") continue;
+        if (!shouldShowSpouse(spouse, filters)) continue;
+        if (positionedPeople.has(spouse.id)) continue;
+
+        positionedPeople.set(spouse.id, {
+          person: spouse,
+          x: extraX,
+        });
+
+        extraX += NODE_WIDTH + SPOUSE_GAP;
+      }
+    }
   } else {
-    visibleSpouseByGroupId.set(group.groupId, visibleSpouses[0] ?? null);
-  }
-}
+    const wifeGroups = groupDrafts.map((group, index) => ({
+      group,
+      slot: groupSlots[index],
+      wife: visibleSpouseByGroupId.get(group.groupId),
+    }));
 
-if (personGender === "female") {
-  /**
-   * Đa phu:
-   * - Nếu chồng/rễ còn hiển thị: chồng nằm trái, vợ nằm phải.
-   * - Nếu chồng/rễ bị ẩn: vợ/mẹ nằm ngay giữa slot con.
-   */
-  const husbandGroups = groupDrafts.map((group, index) => ({
-    group,
-    slot: groupSlots[index],
-    husband: visibleSpouseByGroupId.get(group.groupId),
-  }));
+    const groupsWithWife = wifeGroups.filter((item) => item.wife);
+    const groupsWithoutWife = wifeGroups.filter((item) => !item.wife);
 
-  const groupsWithHusband = husbandGroups.filter((item) => item.husband);
-  const groupsWithoutHusband = husbandGroups.filter((item) => !item.husband);
+    for (const item of groupsWithWife) {
+      const wife = item.wife!;
+      const wifeX = item.slot.anchorX + SPOUSE_GAP / 2;
 
-  for (const item of groupsWithHusband) {
-    const husband = item.husband!;
-    const husbandX = item.slot.anchorX - NODE_WIDTH - SPOUSE_GAP / 2;
-
-    positionedPeople.set(husband.id, {
-      person: husband,
-      x: husbandX,
-    });
-  }
-
-  if (groupsWithHusband.length > 0) {
-    const rightMostHusbandRight = Math.max(
-      ...groupsWithHusband.map((item) => {
-        const husband = item.husband!;
-        const pos = positionedPeople.get(husband.id);
-        return (pos?.x ?? 0) + NODE_WIDTH;
-      }),
-    );
-
-    positionedPeople.set(person.id, {
-      person,
-      x: rightMostHusbandRight + SPOUSE_GAP,
-    });
-  } else if (groupsWithoutHusband.length > 0) {
-    const firstSlot = groupsWithoutHusband[0].slot;
-    const lastSlot = groupsWithoutHusband[groupsWithoutHusband.length - 1].slot;
-    const visibleCenter = (firstSlot.anchorX + lastSlot.anchorX) / 2;
-
-    positionedPeople.set(person.id, {
-      person,
-      x: visibleCenter - NODE_WIDTH / 2,
-    });
-  }
-
-  /**
-   * Các spouse khác còn hiển thị nhưng không phải chồng được đặt sau người chính.
-   */
-  let extraX =
-    (positionedPeople.get(person.id)?.x ?? 0) + NODE_WIDTH + SPOUSE_GAP;
-
-  for (const group of groupDrafts) {
-    for (const spouse of group.spouses) {
-      if (spouse.gender === "male") continue;
-      if (!shouldShowSpouse(spouse, filters)) continue;
-      if (positionedPeople.has(spouse.id)) continue;
-
-      positionedPeople.set(spouse.id, {
-        person: spouse,
-        x: extraX,
+      positionedPeople.set(wife.id, {
+        person: wife,
+        x: wifeX,
       });
+    }
 
-      extraX += NODE_WIDTH + SPOUSE_GAP;
+    if (groupsWithWife.length > 0) {
+      const leftMostWifeLeft = Math.min(
+        ...groupsWithWife.map((item) => {
+          const wife = item.wife!;
+          const pos = positionedPeople.get(wife.id);
+          return pos?.x ?? 0;
+        }),
+      );
+
+      positionedPeople.set(person.id, {
+        person,
+        x: leftMostWifeLeft - SPOUSE_GAP - NODE_WIDTH,
+      });
+    } else if (groupsWithoutWife.length > 0) {
+      const firstSlot = groupsWithoutWife[0].slot;
+      const lastSlot = groupsWithoutWife[groupsWithoutWife.length - 1].slot;
+      const visibleCenter = (firstSlot.anchorX + lastSlot.anchorX) / 2;
+
+      positionedPeople.set(person.id, {
+        person,
+        x: visibleCenter - NODE_WIDTH / 2,
+      });
+    }
+
+    let extraX =
+      positionedPeople.size > 0
+        ? Math.max(
+            ...Array.from(positionedPeople.values()).map(
+              (item) => item.x + NODE_WIDTH,
+            ),
+          ) + SPOUSE_GAP
+        : NODE_WIDTH + SPOUSE_GAP;
+
+    for (const group of groupDrafts) {
+      for (const spouse of group.spouses) {
+        if (spouse.gender === "female") continue;
+        if (!shouldShowSpouse(spouse, filters)) continue;
+        if (positionedPeople.has(spouse.id)) continue;
+
+        positionedPeople.set(spouse.id, {
+          person: spouse,
+          x: extraX,
+        });
+
+        extraX += NODE_WIDTH + SPOUSE_GAP;
+      }
     }
   }
-} else {
-  /**
-   * Mặc định / đa thê:
-   * - Nếu vợ/dâu còn hiển thị: chồng bên trái, vợ bên phải.
-   * - Nếu vợ/dâu bị ẩn: cha/chồng nằm ngay giữa slot con.
-   */
-  const wifeGroups = groupDrafts.map((group, index) => ({
-    group,
-    slot: groupSlots[index],
-    wife: visibleSpouseByGroupId.get(group.groupId),
-  }));
 
-  const groupsWithWife = wifeGroups.filter((item) => item.wife);
-  const groupsWithoutWife = wifeGroups.filter((item) => !item.wife);
-
-  for (const item of groupsWithWife) {
-    const wife = item.wife!;
-    const wifeX = item.slot.anchorX + SPOUSE_GAP / 2;
-
-    positionedPeople.set(wife.id, {
-      person: wife,
-      x: wifeX,
-    });
-  }
-
-  if (groupsWithWife.length > 0) {
-    const leftMostWifeLeft = Math.min(
-      ...groupsWithWife.map((item) => {
-        const wife = item.wife!;
-        const pos = positionedPeople.get(wife.id);
-        return pos?.x ?? 0;
-      }),
-    );
-
-    positionedPeople.set(person.id, {
-      person,
-      x: leftMostWifeLeft - SPOUSE_GAP - NODE_WIDTH,
-    });
-  } else if (groupsWithoutWife.length > 0) {
-    const firstSlot = groupsWithoutWife[0].slot;
-    const lastSlot = groupsWithoutWife[groupsWithoutWife.length - 1].slot;
-    const visibleCenter = (firstSlot.anchorX + lastSlot.anchorX) / 2;
-
-    positionedPeople.set(person.id, {
-      person,
-      x: visibleCenter - NODE_WIDTH / 2,
-    });
-  }
-
-  /**
-   * Các spouse khác còn hiển thị nhưng không phải vợ được đặt sau các vợ.
-   */
-  let extraX =
-    positionedPeople.size > 0
-      ? Math.max(
-          ...Array.from(positionedPeople.values()).map(
-            (item) => item.x + NODE_WIDTH,
-          ),
-        ) + SPOUSE_GAP
-      : NODE_WIDTH + SPOUSE_GAP;
-
-  for (const group of groupDrafts) {
-    for (const spouse of group.spouses) {
-      if (spouse.gender === "female") continue;
-      if (!shouldShowSpouse(spouse, filters)) continue;
-      if (positionedPeople.has(spouse.id)) continue;
-
-      positionedPeople.set(spouse.id, {
-        person: spouse,
-        x: extraX,
-      });
-
-      extraX += NODE_WIDTH + SPOUSE_GAP;
-    }
-  }
-}
-  /**
-   * Nếu family chỉ có một cha/mẹ, chưa có spouse,
-   * anchor chính là giữa node người đó.
-   */
   if (!positionedPeople.has(person.id)) {
     const firstAnchor = groupSlots[0]?.anchorX ?? NODE_WIDTH / 2;
 
@@ -1026,10 +1028,6 @@ if (personGender === "female") {
     });
   }
 
-  /**
-   * BƯỚC 3:
-   * Normalize toàn bộ x để không âm.
-   */
   const peoplePositions = Array.from(positionedPeople.values());
 
   const minPeopleX = Math.min(...peoplePositions.map((item) => item.x));
@@ -1045,8 +1043,7 @@ if (personGender === "female") {
   const minX = Math.min(minPeopleX, minGroupX, 0);
   const shiftX = minX < 0 ? -minX : 0;
 
-  const width =
-    Math.max(maxPeopleRight, maxGroupRight) + shiftX;
+  const width = Math.max(maxPeopleRight, maxGroupRight) + shiftX;
 
   const normalizedPeople = peoplePositions
     .map((item) => ({
@@ -1079,24 +1076,19 @@ if (personGender === "female") {
   }));
 
   const groups: FamilyGroup[] = groupDrafts.map((group, index) => {
-  const slot = groupSlots[index];
-  const groupX = slot.x + shiftX;
+    const slot = groupSlots[index];
+    const groupX = slot.x + shiftX;
+    const visibleSpouse = visibleSpouseByGroupId.get(group.groupId) ?? null;
 
-  const visibleSpouse = visibleSpouseByGroupId.get(group.groupId) ?? null;
+    let anchorX = slot.anchorX + shiftX;
 
-  let anchorX = slot.anchorX + shiftX;
+    if (!visibleSpouse) {
+      const mainNode = positionedPeople.get(person.id);
 
-  /**
-   * Nếu spouse của family này đang bị ẩn bởi filter,
-   * đường con phải neo ngay giữa node người chính còn hiển thị.
-   */
-  if (!visibleSpouse) {
-    const mainNode = positionedPeople.get(person.id);
-
-    if (mainNode) {
-      anchorX = mainNode.x + shiftX + NODE_WIDTH / 2;
+      if (mainNode) {
+        anchorX = mainNode.x + shiftX + NODE_WIDTH / 2;
+      }
     }
-  }
 
     const visibleChildren: ChildSlot[] = [];
 
@@ -1161,6 +1153,7 @@ if (personGender === "female") {
     nodes,
   };
 }
+
 function buildSinglePersonBlock(person: Person): TreeBlock {
   return {
     person,
@@ -1223,17 +1216,6 @@ function layoutFamilyGroupSlots(
   return slots;
 }
 
-function pickMaleSpouse(spouses: Person[]) {
-  return sortVietnamesePeople(spouses).find(
-    (spouse) => spouse.gender === "male",
-  );
-}
-
-function pickFemaleSpouse(spouses: Person[]) {
-  return sortVietnamesePeople(spouses).find(
-    (spouse) => spouse.gender === "female",
-  );
-}
 function buildFamilyIndex({
   families,
   familyParents,
@@ -1359,119 +1341,6 @@ function sortChildrenByFamilyRows({
     .filter((child) => shouldShowChild(child as Person, filters)) as Person[];
 
   return sortVietnamesePeople(children);
-}
-
-function pickSpouseForAnchor({
-  person,
-  spouses,
-  centerRelXByPersonId,
-}: {
-  person: Person;
-  spouses: Person[];
-  centerRelXByPersonId: Map<string, number>;
-}) {
-  if (spouses.length === 0) return null;
-
-  const preferred =
-    person.gender === "male"
-      ? spouses.find((spouse) => spouse.gender === "female")
-      : spouses.find((spouse) => spouse.gender === "male");
-
-  if (preferred) return preferred;
-
-  return [...spouses].sort((a, b) => {
-    const ax = centerRelXByPersonId.get(a.id) ?? 0;
-    const bx = centerRelXByPersonId.get(b.id) ?? 0;
-    return ax - bx;
-  })[0];
-}
-
-function arrangeMarriageUnit(person: Person, spouses: Person[]) {
-  const sortedSpouses = sortVietnamesePeople(spouses);
-
-  if (person.gender === "female") {
-    const husbands = sortedSpouses.filter((spouse) => spouse.gender === "male");
-    const others = sortedSpouses.filter((spouse) => spouse.gender !== "male");
-
-    return [...husbands, ...others, person];
-  }
-
-  const wives = sortedSpouses.filter((spouse) => spouse.gender === "female");
-  const others = sortedSpouses.filter((spouse) => spouse.gender !== "female");
-
-  return [person, ...wives, ...others];
-}
-
-function layoutVisibleGroups({
-  unitWidth,
-  groups,
-}: {
-  unitWidth: number;
-  groups: Array<{
-    groupId: string;
-    groupWidth: number;
-    anchorRelX: number;
-    orderX: number;
-  }>;
-}) {
-  if (groups.length === 0) {
-    return {
-      width: unitWidth,
-      slots: [] as Array<{ groupId: string; x: number; width: number }>,
-    };
-  }
-
-  const ordered = [...groups].sort((a, b) => a.orderX - b.orderX);
-
-  let width = Math.max(
-    unitWidth,
-    ordered.reduce((sum, group) => sum + group.groupWidth, 0) +
-      Math.max(0, ordered.length - 1) * MARRIAGE_GROUP_GAP,
-  );
-
-  let slots: Array<{ groupId: string; x: number; width: number }> = [];
-
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const unitX = (width - unitWidth) / 2;
-
-    const rawSlots = ordered.map((group) => ({
-      groupId: group.groupId,
-      width: group.groupWidth,
-      x: unitX + group.anchorRelX - group.groupWidth / 2,
-    }));
-
-    for (let i = 1; i < rawSlots.length; i += 1) {
-      const prev = rawSlots[i - 1];
-      const cur = rawSlots[i];
-
-      cur.x = Math.max(cur.x, prev.x + prev.width + MARRIAGE_GROUP_GAP);
-    }
-
-    const minX = Math.min(...rawSlots.map((slot) => slot.x));
-
-    if (minX < 0) {
-      for (const slot of rawSlots) {
-        slot.x -= minX;
-      }
-    }
-
-    const maxRight = Math.max(...rawSlots.map((slot) => slot.x + slot.width));
-    const nextWidth = Math.max(width, unitWidth, maxRight);
-
-    slots = rawSlots;
-
-    if (Math.abs(nextWidth - width) < 1) {
-      width = nextWidth;
-      break;
-    }
-
-    width = nextWidth;
-  }
-
-  return {
-    width,
-    slots,
-  };
 }
 
 function shouldShowChild(person: Person, filters: FilterOptions) {
