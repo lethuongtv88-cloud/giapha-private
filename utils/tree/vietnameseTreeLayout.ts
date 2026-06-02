@@ -12,6 +12,7 @@ export type VietnameseTreePerson = {
   birth_order?: number | null;
   generation?: number | null;
   is_in_law?: boolean | null;
+  avatar_url?: string | null;
 };
 
 export type VietnameseTreeParent = {
@@ -56,12 +57,18 @@ export type VietnameseTreeLayoutFamily = {
   height: number;
 };
 
-export const VIET_NODE_WIDTH = 190;
-export const VIET_NODE_HEIGHT = 78;
+/**
+ * Kích thước node kiểu FamilyNodeCard cũ:
+ * - đủ rộng để tên dài xuống 2 dòng
+ * - cao hơn để có avatar + ngày tuổi
+ */
+export const VIET_NODE_WIDTH = 230;
+export const VIET_NODE_HEIGHT = 96;
+export const VIET_AVATAR_SIZE = 42;
 export const VIET_SPOUSE_GAP = 42;
-export const VIET_SIBLING_GAP = 38;
-export const VIET_GENERATION_GAP = 128;
-export const VIET_CHILD_BAR_OFFSET = 42;
+export const VIET_SIBLING_GAP = 42;
+export const VIET_GENERATION_GAP = 132;
+export const VIET_CHILD_BAR_OFFSET = 44;
 
 const NODE_WIDTH = VIET_NODE_WIDTH;
 const NODE_HEIGHT = VIET_NODE_HEIGHT;

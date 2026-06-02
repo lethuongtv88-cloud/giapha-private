@@ -1,9 +1,13 @@
 "use client";
 
 import { Person, Relationship } from "@/types";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Minus, Plus } from "lucide-react";
+import { usePanZoom } from "@/hooks/usePanZoom";
+import { useMemberListView } from "@/context/MemberListContext";
+import TreeToolbar from "@/components/TreeToolbar";
 import {
+  VIET_AVATAR_SIZE,
   VIET_CHILD_BAR_OFFSET,
   VIET_GENERATION_GAP,
   VIET_NODE_HEIGHT,
@@ -51,8 +55,20 @@ type TreeBlock = {
   nodes: LayoutNode[];
 };
 
+type FilterOptions = {
+  hideDaughtersInLaw: boolean;
+  hideSonsInLaw: boolean;
+  hideDaughters: boolean;
+  hideSons: boolean;
+  hideMales: boolean;
+  hideFemales: boolean;
+};
+
+const DEFAULT_AUTO_COLLAPSE_LEVEL = 1;
+
 const NODE_WIDTH = VIET_NODE_WIDTH;
 const NODE_HEIGHT = VIET_NODE_HEIGHT;
+const AVATAR_SIZE = VIET_AVATAR_SIZE;
 const SPOUSE_GAP = VIET_SPOUSE_GAP;
 const SIBLING_GAP = VIET_SIBLING_GAP;
 const GENERATION_GAP = VIET_GENERATION_GAP;
@@ -64,8 +80,52 @@ export default function VietnameseFamilyTree({
   personsMap,
   relationships,
   roots,
+  canEdit,
 }: VietnameseFamilyTreeProps) {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const [manualExpandedIds, setManualExpandedIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [manualCollapsedIds, setManualCollapsedIds] = useState<Set<string>>(
+    new Set(),
+  );
+
+  const [hideDaughtersInLaw, setHideDaughtersInLaw] = useState(false);
+  const [hideSonsInLaw, setHideSonsInLaw] = useState(false);
+  const [hideDaughters, setHideDaughters] = useState(false);
+  const [hideSons, setHideSons] = useState(false);
+  const [hideMales, setHideMales] = useState(false);
+  const [hideFemales, setHideFemales] = useState(false);
+  const [hideExpandButtons, setHideExpandButtons] = useState(false);
+  const [autoCollapseLevel, setAutoCollapseLevel] = useState(
+    DEFAULT_AUTO_COLLAPSE_LEVEL,
+  );
+
+  const { showAvatar } = useMemberListView();
+
+  const {
+    scale,
+    isPressed,
+    handlers: {
+      handleMouseDown,
+      handleMouseMove,
+      handleMouseUpOrLeave,
+      handleClickCapture,
+      handleZoomIn,
+      handleZoomOut,
+      handleResetZoom,
+    },
+  } = usePanZoom(containerRef);
+
+  const filters: FilterOptions = {
+    hideDaughtersInLaw,
+    hideSonsInLaw,
+    hideDaughters,
+    hideSons,
+    hideMales,
+    hideFemales,
+  };
 
   const relIndex = useMemo(
     () => buildRelationshipIndex(relationships),
@@ -80,51 +140,165 @@ export default function VietnameseFamilyTree({
       person: root,
       personsMap,
       relIndex,
-      expandedIds,
+      manualExpandedIds,
+      manualCollapsedIds,
+      autoCollapseLevel,
+      filters,
+      level: 0,
       visited: new Set(),
     });
-  }, [roots, personsMap, relIndex, expandedIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    roots,
+    personsMap,
+    relIndex,
+    manualExpandedIds,
+    manualCollapsedIds,
+    autoCollapseLevel,
+    hideDaughtersInLaw,
+    hideSonsInLaw,
+    hideDaughters,
+    hideSons,
+    hideMales,
+    hideFemales,
+  ]);
 
-  const toggleExpanded = (personId: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
+  const toggleExpanded = (personId: string, currentlyExpanded: boolean) => {
+    setManualExpandedIds((prevExpanded) => {
+      const nextExpanded = new Set(prevExpanded);
 
-      if (next.has(personId)) {
-        next.delete(personId);
-      } else {
-        next.add(personId);
-      }
+      setManualCollapsedIds((prevCollapsed) => {
+        const nextCollapsed = new Set(prevCollapsed);
 
-      return next;
+        if (currentlyExpanded) {
+          nextExpanded.delete(personId);
+          nextCollapsed.add(personId);
+        } else {
+          nextCollapsed.delete(personId);
+          nextExpanded.add(personId);
+        }
+
+        return nextCollapsed;
+      });
+
+      return nextExpanded;
     });
   };
+
+  const centerTree = useCallback(() => {
+    if (!containerRef.current) return;
+
+    const el = containerRef.current;
+    const inner = el.querySelector("#export-container");
+
+    if (inner) {
+      const innerRect = inner.getBoundingClientRect();
+      const containerRect = el.getBoundingClientRect();
+
+      el.scrollLeft +=
+        innerRect.left +
+        innerRect.width / 2 -
+        (containerRect.left + containerRect.width / 2);
+    } else {
+      el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+    }
+  }, []);
 
   if (!rootBlock) {
     return (
       <div className="p-10 text-center text-stone-500">
-        Không tìm thấy dữ liệu cây.
+        Không tìm thấy dữ liệu.
       </div>
     );
   }
 
   return (
-    <div className="w-full h-full overflow-auto bg-stone-50 p-8">
-      <div className="inline-block rounded-3xl border border-stone-200 bg-white p-8 shadow-sm">
-        <svg
-          width={rootBlock.width + 96}
-          height={rootBlock.height + 96}
-          className="bg-linear-to-br from-stone-50 to-white rounded-2xl"
+    <div className="w-full h-full relative">
+      <TreeToolbar
+        scale={scale}
+        handleZoomIn={handleZoomIn}
+        handleZoomOut={handleZoomOut}
+        handleResetZoom={handleResetZoom}
+        handleCenter={centerTree}
+        hideExpandButtons={hideExpandButtons}
+        setHideExpandButtons={setHideExpandButtons}
+        autoCollapseLevel={autoCollapseLevel}
+        setAutoCollapseLevel={setAutoCollapseLevel}
+        hideDaughtersInLaw={hideDaughtersInLaw}
+        setHideDaughtersInLaw={setHideDaughtersInLaw}
+        hideSonsInLaw={hideSonsInLaw}
+        setHideSonsInLaw={setHideSonsInLaw}
+        hideDaughters={hideDaughters}
+        setHideDaughters={setHideDaughters}
+        hideSons={hideSons}
+        setHideSons={setHideSons}
+        hideMales={hideMales}
+        setHideMales={setHideMales}
+        hideFemales={hideFemales}
+        setHideFemales={setHideFemales}
+        canEdit={canEdit}
+      />
+
+      <div
+        ref={containerRef}
+        className={`w-full h-full overflow-auto bg-stone-50 ${
+          isPressed ? "cursor-grabbing" : "cursor-grab"
+        }`}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUpOrLeave}
+        onMouseLeave={handleMouseUpOrLeave}
+        onClickCapture={handleClickCapture}
+        onDragStart={(e) => e.preventDefault()}
+      >
+        <div
+          id="export-container"
+          className="inline-block p-8"
+          style={{
+            transform: `scale(${scale})`,
+            transformOrigin: "top left",
+          }}
         >
-          <g transform="translate(48, 48)">
-            <RenderTreeBlock
-              block={rootBlock}
-              x={0}
-              y={0}
-              expandedIds={expandedIds}
-              onToggleExpanded={toggleExpanded}
-            />
-          </g>
-        </svg>
+          <div className="inline-block rounded-3xl border border-stone-200/80 bg-white p-8 shadow-sm">
+            <svg
+              width={rootBlock.width + 96}
+              height={rootBlock.height + 96}
+              className="rounded-2xl bg-linear-to-br from-stone-50 to-white"
+            >
+              <defs>
+                <filter
+                  id="viet-node-shadow"
+                  x="-20%"
+                  y="-20%"
+                  width="140%"
+                  height="140%"
+                >
+                  <feDropShadow
+                    dx="0"
+                    dy="4"
+                    stdDeviation="4"
+                    floodColor="#000000"
+                    floodOpacity="0.08"
+                  />
+                </filter>
+              </defs>
+
+              <g transform="translate(48, 48)">
+                <RenderTreeBlock
+                  block={rootBlock}
+                  x={0}
+                  y={0}
+                  showAvatar={showAvatar}
+                  hideExpandButtons={hideExpandButtons}
+                  manualExpandedIds={manualExpandedIds}
+                  manualCollapsedIds={manualCollapsedIds}
+                  autoCollapseLevel={autoCollapseLevel}
+                  onToggleExpanded={toggleExpanded}
+                />
+              </g>
+            </svg>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -134,14 +308,22 @@ function RenderTreeBlock({
   block,
   x,
   y,
-  expandedIds,
+  showAvatar,
+  hideExpandButtons,
+  manualExpandedIds,
+  manualCollapsedIds,
+  autoCollapseLevel,
   onToggleExpanded,
 }: {
   block: TreeBlock;
   x: number;
   y: number;
-  expandedIds: Set<string>;
-  onToggleExpanded: (personId: string) => void;
+  showAvatar: boolean;
+  hideExpandButtons: boolean;
+  manualExpandedIds: Set<string>;
+  manualCollapsedIds: Set<string>;
+  autoCollapseLevel: number;
+  onToggleExpanded: (personId: string, currentlyExpanded: boolean) => void;
 }) {
   const absoluteUnitCenterX = x + block.unitCenterX;
   const unitCenterY = y + NODE_HEIGHT / 2;
@@ -176,15 +358,16 @@ function RenderTreeBlock({
             node={node}
             x={x + node.x}
             y={y + node.y}
+            showAvatar={showAvatar}
           />
         ))}
 
-        {block.hasChildren ? (
+        {!hideExpandButtons && block.hasChildren ? (
           <g
             transform={`translate(${absoluteUnitCenterX - 12}, ${unitCenterY - 12})`}
             onClick={(event) => {
               event.stopPropagation();
-              onToggleExpanded(block.person.id);
+              onToggleExpanded(block.person.id, block.expanded);
             }}
             style={{ cursor: "pointer" }}
           >
@@ -196,7 +379,7 @@ function RenderTreeBlock({
               stroke="#d6d3d1"
               strokeWidth={1.5}
             />
-            {expandedIds.has(block.person.id) ? (
+            {block.expanded ? (
               <Minus x={6} y={6} width={12} height={12} color="#57534e" />
             ) : (
               <Plus x={6} y={6} width={12} height={12} color="#57534e" />
@@ -247,7 +430,11 @@ function RenderTreeBlock({
               block={slot.block}
               x={x + slot.x}
               y={childTopY}
-              expandedIds={expandedIds}
+              showAvatar={showAvatar}
+              hideExpandButtons={hideExpandButtons}
+              manualExpandedIds={manualExpandedIds}
+              manualCollapsedIds={manualCollapsedIds}
+              autoCollapseLevel={autoCollapseLevel}
               onToggleExpanded={onToggleExpanded}
             />
           ))}
@@ -261,42 +448,67 @@ function PersonNode({
   node,
   x,
   y,
+  showAvatar,
 }: {
   node: LayoutNode;
   x: number;
   y: number;
+  showAvatar: boolean;
 }) {
   const palette = getGenderPalette(node.person.gender);
   const dateParts = getPersonDateParts(node.person);
+  const nameLines = splitNameIntoLines(node.person.full_name ?? "", showAvatar ? 19 : 26);
 
   return (
     <g transform={`translate(${x}, ${y})`}>
       <rect
         width={NODE_WIDTH}
         height={NODE_HEIGHT}
-        rx={16}
-        fill={palette.fill}
+        rx={18}
+        fill="white"
         stroke={palette.stroke}
-        strokeWidth={1.8}
-        filter="url(#none)"
+        strokeWidth={2}
+        filter="url(#viet-node-shadow)"
       />
 
+      <rect
+        x={1}
+        y={1}
+        width={NODE_WIDTH - 2}
+        height={NODE_HEIGHT - 2}
+        rx={17}
+        fill={palette.softFill}
+        opacity={0.72}
+      />
+
+      {showAvatar ? (
+        <Avatar person={node.person} palette={palette} />
+      ) : null}
+
       <text
-        x={NODE_WIDTH / 2}
-        y={31}
-        textAnchor="middle"
+        x={showAvatar ? 70 : NODE_WIDTH / 2}
+        y={nameLines.length > 1 ? 30 : 38}
+        textAnchor={showAvatar ? "start" : "middle"}
         fontSize={13}
-        fontWeight={700}
+        fontWeight={800}
         fill="#1c1917"
       >
-        {truncateText(node.person.full_name ?? "", 22)}
+        {nameLines.map((line, index) => (
+          <tspan
+            key={`${line}-${index}`}
+            x={showAvatar ? 70 : NODE_WIDTH / 2}
+            dy={index === 0 ? 0 : 15}
+          >
+            {line}
+          </tspan>
+        ))}
       </text>
 
       {dateParts ? (
         <text
-          x={NODE_WIDTH / 2}
-          y={53}
-          textAnchor="middle"
+          x={showAvatar ? 70 : NODE_WIDTH / 2}
+          y={showAvatar ? 70 : 72}
+          textAnchor={showAvatar ? "start" : "middle"}
           fontSize={11}
           fill="#57534e"
         >
@@ -304,7 +516,7 @@ function PersonNode({
           {dateParts.age ? (
             <>
               <tspan> (</tspan>
-              <tspan fontWeight={800}>{dateParts.age}</tspan>
+              <tspan fontWeight={900}>{dateParts.age}</tspan>
               <tspan> tuổi)</tspan>
             </>
           ) : null}
@@ -314,17 +526,91 @@ function PersonNode({
   );
 }
 
+function Avatar({
+  person,
+  palette,
+}: {
+  person: Person;
+  palette: ReturnType<typeof getGenderPalette>;
+}) {
+  const avatarX = 18;
+  const avatarY = (NODE_HEIGHT - AVATAR_SIZE) / 2;
+  const clipId = `avatar-clip-${person.id}`;
+
+  return (
+    <g>
+      <defs>
+        <clipPath id={clipId}>
+          <circle
+            cx={avatarX + AVATAR_SIZE / 2}
+            cy={avatarY + AVATAR_SIZE / 2}
+            r={AVATAR_SIZE / 2}
+          />
+        </clipPath>
+      </defs>
+
+      <circle
+        cx={avatarX + AVATAR_SIZE / 2}
+        cy={avatarY + AVATAR_SIZE / 2}
+        r={AVATAR_SIZE / 2 + 2}
+        fill="white"
+        stroke={palette.stroke}
+        strokeWidth={2}
+      />
+
+      {person.avatar_url ? (
+        <image
+          href={person.avatar_url}
+          x={avatarX}
+          y={avatarY}
+          width={AVATAR_SIZE}
+          height={AVATAR_SIZE}
+          clipPath={`url(#${clipId})`}
+          preserveAspectRatio="xMidYMid slice"
+        />
+      ) : (
+        <>
+          <circle
+            cx={avatarX + AVATAR_SIZE / 2}
+            cy={avatarY + AVATAR_SIZE / 2}
+            r={AVATAR_SIZE / 2}
+            fill={palette.avatarFill}
+          />
+          <text
+            x={avatarX + AVATAR_SIZE / 2}
+            y={avatarY + AVATAR_SIZE / 2 + 5}
+            textAnchor="middle"
+            fontSize={15}
+            fontWeight={800}
+            fill="white"
+          >
+            {getInitial(person.full_name)}
+          </text>
+        </>
+      )}
+    </g>
+  );
+}
+
 function buildTreeBlock({
   person,
   personsMap,
   relIndex,
-  expandedIds,
+  manualExpandedIds,
+  manualCollapsedIds,
+  autoCollapseLevel,
+  filters,
+  level,
   visited,
 }: {
   person: Person;
   personsMap: Map<string, Person>;
   relIndex: ReturnType<typeof buildRelationshipIndex>;
-  expandedIds: Set<string>;
+  manualExpandedIds: Set<string>;
+  manualCollapsedIds: Set<string>;
+  autoCollapseLevel: number;
+  filters: FilterOptions;
+  level: number;
   visited: Set<string>;
 }): TreeBlock {
   const nextVisited = new Set(visited);
@@ -334,13 +620,15 @@ function buildTreeBlock({
   const spouses = spouseIds
     .filter((id) => !nextVisited.has(id))
     .map((id) => personsMap.get(id))
-    .filter(Boolean) as Person[];
+    .filter(Boolean)
+    .filter((spouse) => shouldShowSpouse(spouse as Person, filters)) as Person[];
 
   const childIds = relIndex.childrenByParent.get(person.id) ?? [];
   const childPeople = sortVietnamesePeople(
     childIds
       .map((id) => personsMap.get(id))
-      .filter(Boolean) as Person[],
+      .filter(Boolean)
+      .filter((child) => shouldShowChild(child as Person, filters)) as Person[],
   );
 
   const childBlocks = childPeople
@@ -350,12 +638,26 @@ function buildTreeBlock({
         person: child,
         personsMap,
         relIndex,
-        expandedIds,
+        manualExpandedIds,
+        manualCollapsedIds,
+        autoCollapseLevel,
+        filters,
+        level: level + 1,
         visited: nextVisited,
       }),
     );
 
-  const expanded = expandedIds.has(person.id);
+  const defaultExpanded =
+    autoCollapseLevel > 0 &&
+    level < autoCollapseLevel &&
+    childBlocks.length > 0 &&
+    !manualCollapsedIds.has(person.id);
+
+  const expanded =
+    childBlocks.length > 0 &&
+    (manualExpandedIds.has(person.id) || defaultExpanded) &&
+    !manualCollapsedIds.has(person.id);
+
   const hasChildren = childBlocks.length > 0;
 
   const unitPeople = [person, ...spouses];
@@ -459,24 +761,43 @@ function buildRelationshipIndex(relationships: Relationship[]) {
   };
 }
 
+function shouldShowChild(person: Person, filters: FilterOptions) {
+  if (filters.hideMales && person.gender === "male") return false;
+  if (filters.hideFemales && person.gender === "female") return false;
+  if (filters.hideSons && person.gender === "male") return false;
+  if (filters.hideDaughters && person.gender === "female") return false;
+  return true;
+}
+
+function shouldShowSpouse(person: Person, filters: FilterOptions) {
+  if (filters.hideMales && person.gender === "male") return false;
+  if (filters.hideFemales && person.gender === "female") return false;
+  if (filters.hideSonsInLaw && person.gender === "male") return false;
+  if (filters.hideDaughtersInLaw && person.gender === "female") return false;
+  return true;
+}
+
 function getGenderPalette(gender?: string | null) {
   if (gender === "male") {
     return {
-      fill: "#eff6ff",
-      stroke: "#60a5fa",
+      softFill: "#eff6ff",
+      stroke: "#3b82f6",
+      avatarFill: "#2563eb",
     };
   }
 
   if (gender === "female") {
     return {
-      fill: "#fff1f2",
-      stroke: "#fb7185",
+      softFill: "#fff1f2",
+      stroke: "#f43f5e",
+      avatarFill: "#e11d48",
     };
   }
 
   return {
-    fill: "#fafaf9",
+    softFill: "#fafaf9",
     stroke: "#a8a29e",
+    avatarFill: "#78716c",
   };
 }
 
@@ -489,6 +810,7 @@ function getPersonDateParts(person: Person): { prefix: string; age: number | nul
 
   if (person.is_deceased && person.death_year) {
     const age = calculateDeathAge(person);
+
     return {
       prefix: `${birthYear} - ${person.death_year}`,
       age,
@@ -496,6 +818,7 @@ function getPersonDateParts(person: Person): { prefix: string; age: number | nul
   }
 
   const age = calculateLivingAge(person);
+
   return {
     prefix: formatBirthDate(birthYear, birthMonth, birthDay),
     age,
@@ -564,7 +887,50 @@ function pad2(value: number) {
   return String(value).padStart(2, "0");
 }
 
-function truncateText(text: string, max: number) {
-  if (text.length <= max) return text;
-  return `${text.slice(0, max - 1)}…`;
+function getInitial(name?: string | null) {
+  const clean = String(name ?? "").trim();
+
+  if (!clean) return "?";
+
+  const parts = clean.split(/\s+/);
+  return parts[parts.length - 1]?.slice(0, 1).toUpperCase() ?? "?";
+}
+
+function splitNameIntoLines(name: string, maxChars: number) {
+  const clean = name.trim();
+
+  if (!clean) return [""];
+
+  if (clean.length <= maxChars) return [clean];
+
+  const words = clean.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+
+    if (next.length <= maxChars) {
+      current = next;
+    } else {
+      if (current) lines.push(current);
+      current = word;
+    }
+
+    if (lines.length === 2) break;
+  }
+
+  if (lines.length < 2 && current) {
+    lines.push(current);
+  }
+
+  if (lines.length > 2) {
+    return lines.slice(0, 2);
+  }
+
+  if (lines.length === 2 && words.join(" ").length > lines.join(" ").length) {
+    lines[1] = `${lines[1].slice(0, Math.max(1, maxChars - 1))}…`;
+  }
+
+  return lines.slice(0, 2);
 }
