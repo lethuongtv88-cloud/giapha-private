@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useMemberListView } from "@/context/MemberListContext";
 import { useUser } from "@/components/UserProvider";
+import { PersonTimelineClient } from "@/components/PersonTimelineClient";
 
 export default function MemberDetailModal() {
   const {
@@ -304,12 +305,22 @@ export default function MemberDetailModal() {
                   transition={{ duration: 0.3 }}
                   className="flex-1 overflow-y-auto custom-scrollbar"
                 >
-                  <MemberDetailContent
+                  <div className="px-4 sm:px-8 pt-16 pb-8">
+                   <MemberDetailContent
                     person={person}
                     privateData={privateData}
                     isAdmin={isAdmin}
                     canEdit={canEdit}
-                  />
+                   />
+
+                  <div className="mt-6 border-t border-stone-200 pt-5">
+                   <h3 className="mb-3 text-sm font-semibold text-stone-800">
+                    Mốc thời gian
+                   </h3>
+
+                   <PersonTimelineClient personId={person.id} />
+                   </div>
+                  </div>
                 </motion.div>
               ) : null}
             </AnimatePresence>
