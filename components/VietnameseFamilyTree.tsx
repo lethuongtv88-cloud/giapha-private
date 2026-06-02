@@ -64,7 +64,7 @@ type FilterOptions = {
   hideFemales: boolean;
 };
 
-const DEFAULT_AUTO_COLLAPSE_LEVEL = 1;
+const DEFAULT_AUTO_COLLAPSE_LEVEL = 4;
 
 const NODE_WIDTH = VIET_NODE_WIDTH;
 const NODE_HEIGHT = VIET_NODE_HEIGHT;
@@ -275,10 +275,10 @@ export default function VietnameseFamilyTree({
                 >
                   <feDropShadow
                     dx="0"
-                    dy="4"
-                    stdDeviation="4"
+                    dy="3"
+                    stdDeviation="3"
                     floodColor="#000000"
-                    floodOpacity="0.08"
+                    floodOpacity="0.10"
                   />
                 </filter>
               </defs>
@@ -290,9 +290,6 @@ export default function VietnameseFamilyTree({
                   y={0}
                   showAvatar={showAvatar}
                   hideExpandButtons={hideExpandButtons}
-                  manualExpandedIds={manualExpandedIds}
-                  manualCollapsedIds={manualCollapsedIds}
-                  autoCollapseLevel={autoCollapseLevel}
                   onToggleExpanded={toggleExpanded}
                 />
               </g>
@@ -310,9 +307,6 @@ function RenderTreeBlock({
   y,
   showAvatar,
   hideExpandButtons,
-  manualExpandedIds,
-  manualCollapsedIds,
-  autoCollapseLevel,
   onToggleExpanded,
 }: {
   block: TreeBlock;
@@ -320,9 +314,6 @@ function RenderTreeBlock({
   y: number;
   showAvatar: boolean;
   hideExpandButtons: boolean;
-  manualExpandedIds: Set<string>;
-  manualCollapsedIds: Set<string>;
-  autoCollapseLevel: number;
   onToggleExpanded: (personId: string, currentlyExpanded: boolean) => void;
 }) {
   const absoluteUnitCenterX = x + block.unitCenterX;
@@ -432,9 +423,6 @@ function RenderTreeBlock({
               y={childTopY}
               showAvatar={showAvatar}
               hideExpandButtons={hideExpandButtons}
-              manualExpandedIds={manualExpandedIds}
-              manualCollapsedIds={manualCollapsedIds}
-              autoCollapseLevel={autoCollapseLevel}
               onToggleExpanded={onToggleExpanded}
             />
           ))}
@@ -457,7 +445,8 @@ function PersonNode({
 }) {
   const palette = getGenderPalette(node.person.gender);
   const dateParts = getPersonDateParts(node.person);
-  const nameLines = splitNameIntoLines(node.person.full_name ?? "", showAvatar ? 19 : 26);
+  const nameLines = splitNameIntoLines(node.person.full_name ?? "", showAvatar ? 13 : 18);
+  const avatarHref = getAvatarHref(node.person);
 
   return (
     <g transform={`translate(${x}, ${y})`}>
@@ -467,7 +456,7 @@ function PersonNode({
         rx={18}
         fill="white"
         stroke={palette.stroke}
-        strokeWidth={2}
+        strokeWidth={1.8}
         filter="url(#viet-node-shadow)"
       />
 
@@ -482,22 +471,22 @@ function PersonNode({
       />
 
       {showAvatar ? (
-        <Avatar person={node.person} palette={palette} />
+        <Avatar person={node.person} palette={palette} href={avatarHref} />
       ) : null}
 
       <text
-        x={showAvatar ? 70 : NODE_WIDTH / 2}
-        y={nameLines.length > 1 ? 30 : 38}
-        textAnchor={showAvatar ? "start" : "middle"}
-        fontSize={13}
+        x={NODE_WIDTH / 2}
+        y={showAvatar ? 70 : nameLines.length > 1 ? 34 : 42}
+        textAnchor="middle"
+        fontSize={12.5}
         fontWeight={800}
         fill="#1c1917"
       >
         {nameLines.map((line, index) => (
           <tspan
             key={`${line}-${index}`}
-            x={showAvatar ? 70 : NODE_WIDTH / 2}
-            dy={index === 0 ? 0 : 15}
+            x={NODE_WIDTH / 2}
+            dy={index === 0 ? 0 : 14}
           >
             {line}
           </tspan>
@@ -505,22 +494,31 @@ function PersonNode({
       </text>
 
       {dateParts ? (
-        <text
-          x={showAvatar ? 70 : NODE_WIDTH / 2}
-          y={showAvatar ? 70 : 72}
-          textAnchor={showAvatar ? "start" : "middle"}
-          fontSize={11}
-          fill="#57534e"
-        >
-          <tspan>{dateParts.prefix}</tspan>
+        <>
+          <text
+            x={NODE_WIDTH / 2}
+            y={showAvatar ? 100 : 82}
+            textAnchor="middle"
+            fontSize={10.5}
+            fill="#57534e"
+          >
+            {dateParts.prefix}
+          </text>
+
           {dateParts.age ? (
-            <>
-              <tspan> (</tspan>
+            <text
+              x={NODE_WIDTH / 2}
+              y={showAvatar ? 116 : 98}
+              textAnchor="middle"
+              fontSize={10.5}
+              fill="#57534e"
+            >
+              <tspan>(</tspan>
               <tspan fontWeight={900}>{dateParts.age}</tspan>
               <tspan> tuổi)</tspan>
-            </>
+            </text>
           ) : null}
-        </text>
+        </>
       ) : null}
     </g>
   );
@@ -529,12 +527,14 @@ function PersonNode({
 function Avatar({
   person,
   palette,
+  href,
 }: {
   person: Person;
   palette: ReturnType<typeof getGenderPalette>;
+  href: string;
 }) {
-  const avatarX = 18;
-  const avatarY = (NODE_HEIGHT - AVATAR_SIZE) / 2;
+  const avatarX = (NODE_WIDTH - AVATAR_SIZE) / 2;
+  const avatarY = 10;
   const clipId = `avatar-clip-${person.id}`;
 
   return (
@@ -552,42 +552,21 @@ function Avatar({
       <circle
         cx={avatarX + AVATAR_SIZE / 2}
         cy={avatarY + AVATAR_SIZE / 2}
-        r={AVATAR_SIZE / 2 + 2}
+        r={AVATAR_SIZE / 2 + 3}
         fill="white"
         stroke={palette.stroke}
         strokeWidth={2}
       />
 
-      {person.avatar_url ? (
-        <image
-          href={person.avatar_url}
-          x={avatarX}
-          y={avatarY}
-          width={AVATAR_SIZE}
-          height={AVATAR_SIZE}
-          clipPath={`url(#${clipId})`}
-          preserveAspectRatio="xMidYMid slice"
-        />
-      ) : (
-        <>
-          <circle
-            cx={avatarX + AVATAR_SIZE / 2}
-            cy={avatarY + AVATAR_SIZE / 2}
-            r={AVATAR_SIZE / 2}
-            fill={palette.avatarFill}
-          />
-          <text
-            x={avatarX + AVATAR_SIZE / 2}
-            y={avatarY + AVATAR_SIZE / 2 + 5}
-            textAnchor="middle"
-            fontSize={15}
-            fontWeight={800}
-            fill="white"
-          >
-            {getInitial(person.full_name)}
-          </text>
-        </>
-      )}
+      <image
+        href={href}
+        x={avatarX}
+        y={avatarY}
+        width={AVATAR_SIZE}
+        height={AVATAR_SIZE}
+        clipPath={`url(#${clipId})`}
+        preserveAspectRatio="xMidYMid slice"
+      />
     </g>
   );
 }
@@ -781,24 +760,31 @@ function getGenderPalette(gender?: string | null) {
   if (gender === "male") {
     return {
       softFill: "#eff6ff",
-      stroke: "#3b82f6",
-      avatarFill: "#2563eb",
+      stroke: "#0ea5e9",
     };
   }
 
   if (gender === "female") {
     return {
       softFill: "#fff1f2",
-      stroke: "#f43f5e",
-      avatarFill: "#e11d48",
+      stroke: "#fb3f6c",
     };
   }
 
   return {
     softFill: "#fafaf9",
     stroke: "#a8a29e",
-    avatarFill: "#78716c",
   };
+}
+
+function getAvatarHref(person: Person) {
+  if (person.avatar_url) return person.avatar_url;
+
+  if (person.gender === "female") {
+    return "/avatar/v2/female.svg";
+  }
+
+  return "/avatar/v2/male.svg";
 }
 
 function getPersonDateParts(person: Person): { prefix: string; age: number | null } | null {
@@ -887,15 +873,6 @@ function pad2(value: number) {
   return String(value).padStart(2, "0");
 }
 
-function getInitial(name?: string | null) {
-  const clean = String(name ?? "").trim();
-
-  if (!clean) return "?";
-
-  const parts = clean.split(/\s+/);
-  return parts[parts.length - 1]?.slice(0, 1).toUpperCase() ?? "?";
-}
-
 function splitNameIntoLines(name: string, maxChars: number) {
   const clean = name.trim();
 
@@ -924,11 +901,7 @@ function splitNameIntoLines(name: string, maxChars: number) {
     lines.push(current);
   }
 
-  if (lines.length > 2) {
-    return lines.slice(0, 2);
-  }
-
-  if (lines.length === 2 && words.join(" ").length > lines.join(" ").length) {
+  if (lines.length === 2 && clean.length > lines.join(" ").length) {
     lines[1] = `${lines[1].slice(0, Math.max(1, maxChars - 1))}…`;
   }
 

@@ -58,17 +58,16 @@ export type VietnameseTreeLayoutFamily = {
 };
 
 /**
- * Kích thước node kiểu FamilyNodeCard cũ:
- * - đủ rộng để tên dài xuống 2 dòng
- * - cao hơn để có avatar + ngày tuổi
+ * Compact node giống tree cũ:
+ * avatar trên giữa, tên 1-2 dòng, ngày sinh/ngày mất, tuổi riêng.
  */
-export const VIET_NODE_WIDTH = 230;
-export const VIET_NODE_HEIGHT = 96;
+export const VIET_NODE_WIDTH = 138;
+export const VIET_NODE_HEIGHT = 128;
 export const VIET_AVATAR_SIZE = 42;
-export const VIET_SPOUSE_GAP = 42;
-export const VIET_SIBLING_GAP = 42;
-export const VIET_GENERATION_GAP = 132;
-export const VIET_CHILD_BAR_OFFSET = 44;
+export const VIET_SPOUSE_GAP = 26;
+export const VIET_SIBLING_GAP = 30;
+export const VIET_GENERATION_GAP = 122;
+export const VIET_CHILD_BAR_OFFSET = 38;
 
 const NODE_WIDTH = VIET_NODE_WIDTH;
 const NODE_HEIGHT = VIET_NODE_HEIGHT;
@@ -79,8 +78,8 @@ const CHILD_BAR_OFFSET = VIET_CHILD_BAR_OFFSET;
 
 /**
  * Helper layout một family block đơn giản.
- * Component VietnameseFamilyTree hiện dùng thuật toán recursive riêng,
- * nhưng function này vẫn giữ để route test và test unit không vỡ.
+ * VietnameseFamilyTree hiện dùng thuật toán recursive riêng,
+ * nhưng function này vẫn giữ để route test và unit test không vỡ.
  */
 export function buildVietnameseFamilyLayout(
   family: VietnameseTreeFamily,
