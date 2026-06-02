@@ -1,6 +1,8 @@
 import { featureFlags } from '@/lib/featureFlags';
 import type { AgeEvent } from '@/utils/calendar/ageCalculation';
 
+const BATCH_SIZE = 80;
+
 type SupabaseLike = {
   from: (table: string) => any;
 };
@@ -10,15 +12,16 @@ type PersonLike = {
 };
 
 type EventRow = {
+  id: string;
   type: 'birth' | 'death';
   start_date: string | null;
   end_date: string | null;
   date_precision: string | null;
 };
 
-type PersonEventJoinRow = {
+type PersonEventRow = {
   person_id: string;
-  events: EventRow | EventRow[] | null;
+  event_id: string;
 };
 
 export type PersonWithHydratedDates<T> = T & {
@@ -34,83 +37,142 @@ export async function hydratePersonsWithDateEvents<T extends PersonLike>(
     return persons;
   }
 
-  const ids = persons.map((p) => p.id).filter(Boolean);
+  try {
+    const ids = persons.map((p) => p.id).filter(Boolean);
 
-  if (ids.length === 0) {
-    return persons;
-  }
-
-  const { data, error } = await supabase
-    .from('person_events')
-    .select(`
-      person_id,
-      events:event_id (
-        type,
-        start_date,
-        end_date,
-        date_precision
-      )
-    `)
-    .in('person_id', ids);
-
-  if (error) {
-    console.warn('Failed to hydrate person date events:', error.message);
-    return persons;
-  }
-
-  const map = new Map<string, { birthEvent: AgeEvent | null; deathEvent: AgeEvent | null }>();
-
-  for (const row of (data ?? []) as PersonEventJoinRow[]) {
-    const event = normalizeJoinedEvent(row.events);
-    if (!event?.start_date) continue;
-
-    const current = map.get(row.person_id) ?? {
-      birthEvent: null,
-      deathEvent: null,
-    };
-
-    const ageEvent: AgeEvent = {
-      start_date: event.start_date,
-      end_date: event.end_date,
-      date_precision: event.date_precision ?? 'unknown',
-    };
-
-    if (event.type === 'birth' && !current.birthEvent) {
-      current.birthEvent = ageEvent;
+    if (ids.length === 0) {
+      return persons;
     }
 
-    if (event.type === 'death' && !current.deathEvent) {
-      current.deathEvent = ageEvent;
-    }
+    const personEvents = await loadPersonEventsInBatches(supabase, ids);
+    const eventIds = Array.from(
+      new Set(personEvents.map((row) => row.event_id).filter(Boolean)),
+    );
 
-    map.set(row.person_id, current);
-  }
-
-  return persons.map((person) => {
-    const hydrated = map.get(person.id);
-
-    if (!hydrated) {
-      return {
+    if (eventIds.length === 0) {
+      return persons.map((person) => ({
         ...person,
         birthEvent: null,
         deathEvent: null,
-      };
+      }));
     }
 
-    return {
-      ...person,
-      birthEvent: hydrated.birthEvent,
-      deathEvent: hydrated.deathEvent,
-    };
-  });
+    const events = await loadEventsInBatches(supabase, eventIds);
+    const eventsById = new Map<string, EventRow>();
+
+    for (const event of events) {
+      eventsById.set(event.id, event);
+    }
+
+    const dateMap = new Map<
+      string,
+      { birthEvent: AgeEvent | null; deathEvent: AgeEvent | null }
+    >();
+
+    for (const row of personEvents) {
+      const event = eventsById.get(row.event_id);
+      if (!event?.start_date) continue;
+
+      const current = dateMap.get(row.person_id) ?? {
+        birthEvent: null,
+        deathEvent: null,
+      };
+
+      const ageEvent: AgeEvent = {
+        start_date: event.start_date,
+        end_date: event.end_date,
+        date_precision: event.date_precision ?? 'unknown',
+      };
+
+      if (event.type === 'birth' && !current.birthEvent) {
+        current.birthEvent = ageEvent;
+      }
+
+      if (event.type === 'death' && !current.deathEvent) {
+        current.deathEvent = ageEvent;
+      }
+
+      dateMap.set(row.person_id, current);
+    }
+
+    return persons.map((person) => {
+      const hydrated = dateMap.get(person.id);
+
+      return {
+        ...person,
+        birthEvent: hydrated?.birthEvent ?? null,
+        deathEvent: hydrated?.deathEvent ?? null,
+      };
+    });
+  } catch (error) {
+    console.warn('Failed to hydrate person date events:', error);
+    return persons;
+  }
 }
 
-function normalizeJoinedEvent(value: EventRow | EventRow[] | null): EventRow | null {
-  if (!value) return null;
+async function loadPersonEventsInBatches(
+  supabase: SupabaseLike,
+  personIds: string[],
+): Promise<PersonEventRow[]> {
+  const rows: PersonEventRow[] = [];
 
-  if (Array.isArray(value)) {
-    return value[0] ?? null;
+  for (const batch of chunk(personIds, BATCH_SIZE)) {
+    const { data, error } = await supabase
+      .from('person_events')
+      .select('person_id, event_id')
+      .in('person_id', batch);
+
+    if (error) {
+      console.warn('Failed to load person_events for date hydration:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+      continue;
+    }
+
+    rows.push(...((data ?? []) as PersonEventRow[]));
   }
 
-  return value;
+  return rows;
+}
+
+async function loadEventsInBatches(
+  supabase: SupabaseLike,
+  eventIds: string[],
+): Promise<EventRow[]> {
+  const rows: EventRow[] = [];
+
+  for (const batch of chunk(eventIds, BATCH_SIZE)) {
+    const { data, error } = await supabase
+      .from('events_active')
+      .select('id, type, start_date, end_date, date_precision')
+      .in('id', batch)
+      .in('type', ['birth', 'death']);
+
+    if (error) {
+      console.warn('Failed to load events for date hydration:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+      continue;
+    }
+
+    rows.push(...((data ?? []) as EventRow[]));
+  }
+
+  return rows;
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
+
+  return out;
 }
