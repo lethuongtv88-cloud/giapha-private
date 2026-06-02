@@ -3,7 +3,7 @@ import MembersViews from "@/components/MembersViews";
 import MemberDetailModal from "@/components/modal/MemberDetailModal";
 import ViewToggle from "@/components/ViewToggle";
 import { getProfile, getSupabase } from "@/utils/supabase/queries";
-
+import { hydratePersonsWithDateEvents } from '@/compat/dateHydration.compat';
 import { ViewMode } from "@/components/ViewToggle";
 
 interface PageProps {
@@ -31,7 +31,8 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
     supabase.from("relationships_active").select("*"),
   ]);
 
-  const persons = personsRes.data || [];
+  const rawPersons = personsRes.data || [];
+  const persons = await hydratePersonsWithDateEvents(supabase, rawPersons);
   const relationships = relsRes.data || [];
 
   // Prepare map and roots for tree views

@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useMemberListView } from "@/context/MemberListContext";
 import DefaultAvatar from "./DefaultAvatar";
 import { FemaleIcon, MaleIcon } from "./GenderIcons";
-import { formatPersonLifespanFromLegacy } from '@/compat/personDateDisplay.compat';
+import { formatPersonLifespan } from '@/compat/personDateDisplay.compat';
 
 interface PersonCardProps {
   person: Person;
@@ -16,7 +16,7 @@ export default function PersonCard({ person }: PersonCardProps) {
   const { setMemberModalId } = useMemberListView();
 
   const isDeceased = person.is_deceased;
-  const lifespan = formatPersonLifespanFromLegacy(person);
+  const lifespan = formatPersonLifespan(person);
 
   const getGenderStyle = (gender: string) => {
     if (gender === "male") return "bg-sky-100 text-sky-600";

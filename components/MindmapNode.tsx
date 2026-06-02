@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import { memo, useState } from "react";
 import DefaultAvatar from "./DefaultAvatar";
-import { formatPersonLifespanFromLegacy } from '@/compat/personDateDisplay.compat';
+import { formatPersonLifespan } from '@/compat/personDateDisplay.compat';
 
 import { getAvatarBg } from "@/utils/styleHelprs";
 import { AdjacencyLists, getFilteredTreeData } from "@/utils/treeHelpers";
@@ -77,7 +77,7 @@ export const MindmapNode = memo(
     if (!data.person) return null;
 
     const hasChildren = data.children.length > 0;
-    const lifespan = formatPersonLifespanFromLegacy(data.person);
+    const lifespan = formatPersonLifespan(data.person);
 
     return (
       <div className={`relative py-1.5 ${level > 0 ? "pl-6" : "pl-0"}`}>
