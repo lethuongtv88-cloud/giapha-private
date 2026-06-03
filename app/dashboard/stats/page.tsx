@@ -8,10 +8,21 @@ export const metadata = {
 export default async function StatsPage() {
   const supabase = await getSupabase();
 
-  const { data: persons } = await supabase.from("persons_active").select("*");
-  const { data: relationships } = await supabase
-    .from("relationships_active")
-    .select("*");
+  const [
+    personsRes,
+    relationshipsRes,
+    familiesRes,
+    familyParentsRes,
+    familyChildrenRes,
+    eventsRes,
+  ] = await Promise.all([
+    supabase.from("persons_active").select("*"),
+    supabase.from("relationships_active").select("*"),
+    supabase.from("families").select("*").is("deleted_at", null),
+    supabase.from("family_parents").select("*"),
+    supabase.from("family_children").select("*"),
+    supabase.from("events").select("*").is("deleted_at", null),
+  ]);
 
   return (
     <div className="flex-1 w-full relative flex flex-col pb-12">
@@ -24,8 +35,12 @@ export default async function StatsPage() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-1">
         <FamilyStats
-          persons={persons ?? []}
-          relationships={relationships ?? []}
+          persons={personsRes.data ?? []}
+          relationships={relationshipsRes.data ?? []}
+          families={familiesRes.data ?? []}
+          familyParents={familyParentsRes.data ?? []}
+          familyChildren={familyChildrenRes.data ?? []}
+          events={eventsRes.data ?? []}
         />
       </main>
     </div>
