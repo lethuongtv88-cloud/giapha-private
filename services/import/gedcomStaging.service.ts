@@ -131,8 +131,9 @@ export function buildGedcomStagingPreview(
   }
 
   for (const person of parsed.persons ?? []) {
-    const externalId = String(
-      person.id ?? person.external_id ?? `person_${records.length + 1}`,
+    const externalId = getGedcomPersonExternalId(
+      person,
+      `person_${records.length + 1}`,
     );
 
     const fullName = getGedcomPersonFullName(person);
@@ -148,6 +149,7 @@ export function buildGedcomStagingPreview(
 
     const match = findBestExistingPersonMatch(
       {
+        external_id: externalId,
         full_name: fullName,
         gender: normalizeGender(person.gender),
         birth_year: birthYear,
@@ -385,8 +387,12 @@ export function buildGedcomStagingPreview(
 
   for (const rel of parsed.relationships ?? []) {
     if (rel.type === "marriage") {
-      const a = String(rel.person_a ?? rel.husband_id ?? rel.person1_id ?? "");
-      const b = String(rel.person_b ?? rel.wife_id ?? rel.person2_id ?? "");
+      const a = normalizeGedcomExternalId(
+        rel.person_a ?? rel.husband_id ?? rel.person1_id ?? "",
+      );
+      const b = normalizeGedcomExternalId(
+        rel.person_b ?? rel.wife_id ?? rel.person2_id ?? "",
+      );
 
       if (!a || !b) {
         warnings.push("GEDCOM marriage thiếu spouse id.");
@@ -412,7 +418,7 @@ export function buildGedcomStagingPreview(
         continue;
       }
 
-      const familyExternalId = String(
+      const familyExternalId = normalizeGedcomExternalId(
         rel.family_id ?? rel.id ?? `family_${records.length + 1}`,
       );
 
@@ -476,8 +482,8 @@ export function buildGedcomStagingPreview(
   for (const rel of parsed.relationships ?? []) {
     if (rel.type !== "biological_child" && rel.type !== "adopted_child") continue;
 
-    const parentId = String(rel.person_a ?? rel.parent_id ?? "");
-    const childId = String(rel.person_b ?? rel.child_id ?? "");
+    const parentId = normalizeGedcomExternalId(rel.person_a ?? rel.parent_id ?? "");
+    const childId = normalizeGedcomExternalId(rel.person_b ?? rel.child_id ?? "");
 
     if (!parentId || !childId) {
       warnings.push("GEDCOM child relationship thiếu parent/child id.");
@@ -503,7 +509,7 @@ export function buildGedcomStagingPreview(
       continue;
     }
 
-    const familyExternalId = String(
+    const familyExternalId = normalizeGedcomExternalId(
       rel.family_id ?? rel.parent_family_id ?? findFamilyForParent(records, parentId),
     );
 
@@ -562,8 +568,37 @@ export function buildGedcomStagingPreview(
   };
 }
 
+function getGedcomPersonExternalId(
+  person: Record<string, any>,
+  fallback: string,
+): string {
+  const candidates = [
+    person.id,
+    person.external_id,
+    person.externalId,
+    person.xref,
+    person.pointer,
+    person.gedcom_id,
+    person.gedcomId,
+    person._id,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeGedcomExternalId(candidate);
+    if (normalized) return normalized;
+  }
+
+  const raw = JSON.stringify(person);
+  const uuid = raw.match(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+  );
+
+  return uuid?.[0] ?? fallback;
+}
+
 function findBestExistingPersonMatch(
   candidate: {
+    external_id?: string | null;
     full_name: string;
     gender: "male" | "female" | "other" | null;
     birth_year: number | null;
@@ -575,6 +610,22 @@ function findBestExistingPersonMatch(
   },
   existingPersons: ExistingPersonForGedcomMatch[],
 ): GedcomPersonMatchResult {
+  if (candidate.external_id) {
+    const exactIdMatch = existingPersons.find(
+      (person) => person.id === candidate.external_id,
+    );
+
+    if (exactIdMatch) {
+      return {
+        matchedPersonId: exactIdMatch.id,
+        matchedPersonName: exactIdMatch.full_name ?? exactIdMatch.id,
+        score: 999,
+        level: "strong",
+        reason: "trùng GEDCOM external_id với persons.id",
+      };
+    }
+  }
+
   const candidateName = normalizeNameForMatch(candidate.full_name);
 
   if (!candidateName || candidate.full_name === "Chưa rõ tên") {
@@ -739,6 +790,13 @@ function getGedcomPersonSurname(person: Record<string, any>): string | null {
 function getGedcomPersonGivenName(person: Record<string, any>): string | null {
   const value = person.given_name ?? person.givenName ?? person.first_name;
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeGedcomExternalId(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .replace(/^@+/, "")
+    .replace(/@+$/, "");
 }
 
 function emptySummary(warnings: number, errors: number) {

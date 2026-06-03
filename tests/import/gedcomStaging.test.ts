@@ -147,3 +147,36 @@ describe("buildGedcomStagingPreview", () => {
     expect(name?.action).toBe("skip");
     expect(name?.status).toBe("skipped");
   });
+  it("matches exported GEDCOM person by external id even when name is unknown", () => {
+    const gedcom = [
+      "0 HEAD",
+      "1 GEDC",
+      "2 VERS 5.5.1",
+      "1 CHAR UTF-8",
+      "0 @54af0953-78a1-463c-8703-243378987027@ INDI",
+      "1 NAME Chưa rõ tên",
+      "1 SEX U",
+      "0 TRLR",
+    ].join("\n");
+
+    const preview = buildGedcomStagingPreview(gedcom, {
+      existingPersons: [
+        {
+          id: "54af0953-78a1-463c-8703-243378987027",
+          full_name: "Chưa rõ tên",
+          gender: "other",
+        },
+      ],
+    });
+
+    const person = preview.records.find((r) => r.record_type === "person");
+
+    expect(person?.action).toBe("match");
+    expect(person?.status).toBe("skipped");
+    expect(person?.confidence).toBe("certain");
+    expect(person?.normalized_payload.matched_person_id).toBe(
+      "54af0953-78a1-463c-8703-243378987027",
+    );
+    expect(person?.normalized_payload.match_score).toBe(999);
+    expect(person?.normalized_payload.match_reason).toContain("external_id");
+  });
