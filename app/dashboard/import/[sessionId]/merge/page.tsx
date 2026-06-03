@@ -142,9 +142,31 @@ export default async function GedcomMergePlanPage({ params }: PageProps) {
       .select("id, type, legacy_person_id, start_date, end_date, sort_date, deleted_at"),
   ]);
 
-  if (sessionRes.error || !sessionRes.data) {
-    notFound();
-  }
+if (sessionRes.error || !sessionRes.data) {
+  return (
+    <div className="mx-auto max-w-3xl p-8">
+      <h1 className="text-xl font-bold text-red-700">
+        Không tải được import session
+      </h1>
+
+      <p className="mt-2 text-sm text-stone-600">
+        Route /merge đã chạy, nhưng query import_sessions trả lỗi hoặc không có data.
+      </p>
+
+      <pre className="mt-4 overflow-auto rounded-xl bg-red-50 p-4 text-sm text-red-700">
+        {JSON.stringify(
+          {
+            sessionId,
+            error: sessionRes.error,
+            data: sessionRes.data,
+          },
+          null,
+          2,
+        )}
+      </pre>
+    </div>
+  );
+}
 
   const session = sessionRes.data as ImportSession;
 
