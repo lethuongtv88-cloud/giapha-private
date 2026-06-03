@@ -7,6 +7,7 @@ import {
   StagingSessionBulkActions,
 } from "@/components/ImportStagingRecordActions";
 import GedcomCommitPlanPanel from "@/components/GedcomCommitPlanPanel";
+import GedcomRoundTripReport from "@/components/GedcomRoundTripReport";
 import GedcomCommitExecutePanel from "@/components/GedcomCommitExecutePanel";
 
 export const metadata = {
@@ -427,6 +428,12 @@ export default async function ImportSessionPreviewPage({ params }: PageProps) {
             Hash: <span className="font-mono">{session.file_hash ?? "—"}</span>
           </div>
         </section>
+        <GedcomRoundTripReport
+          sessionId={session.id}
+          summary={session.summary as any}
+          records={records as any}
+        />
+
         <StagingSessionBulkActions sessionId={session.id} />
         <GedcomCommitPlanPanel sessionId={session.id} />
         <GedcomCommitExecutePanel sessionId={session.id} />
