@@ -317,10 +317,13 @@ async function insertPersonNames(input: {
     return [
       {
         person_id: personId,
-        full_name: String(p.full_name ?? "Chưa rõ tên"),
-        name_type: p.name_type ? String(p.name_type) : "primary",
+        type: normalizeNameType(p.name_type),
+        full_text: String(p.full_name ?? "Chưa rõ tên"),
+        surname: p.surname ? String(p.surname) : null,
+        given_name: p.given_name ? String(p.given_name) : null,
+        language: p.language ? String(p.language) : "vi",
         is_primary: Boolean(p.is_primary ?? true),
-        sort_order: 0,
+        note: p.note ? String(p.note) : null,
       },
     ];
   });
@@ -593,6 +596,22 @@ async function insertPersonEvents(input: {
   return success((data ?? []).length);
 }
 
+function normalizeNameType(value: unknown) {
+  if (
+    value === "birth" ||
+    value === "courtesy" ||
+    value === "posthumous" ||
+    value === "religious" ||
+    value === "married" ||
+    value === "nickname" ||
+    value === "alias"
+  ) {
+    return value;
+  }
+
+  return "birth";
+}
+
 function normalizeGenderForDb(value: unknown) {
   if (value === "male" || value === "female" || value === "other") return value;
   return "other";
@@ -605,12 +624,13 @@ function normalizeFamilyStatus(value: unknown) {
 
 function normalizeParentRole(value: unknown) {
   if (value === "husband" || value === "wife") return value;
-  return "parent";
+  return "partner";
 }
 
 function normalizeChildRelationshipType(value: unknown) {
   if (value === "adopted") return "adopted";
-  if (value === "step") return "step";
+  if (value === "foster") return "foster";
+  if (value === "step" || value === "stepchild") return "stepchild";
   return "biological";
 }
 

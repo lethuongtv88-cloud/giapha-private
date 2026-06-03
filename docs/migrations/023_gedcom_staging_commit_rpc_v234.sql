@@ -183,17 +183,30 @@ BEGIN
 
     INSERT INTO public.person_names (
       person_id,
-      full_name,
-      name_type,
+      type,
+      full_text,
+      surname,
+      given_name,
+      language,
       is_primary,
-      sort_order
+      note
     )
     VALUES (
       v_person_id,
+      CASE
+        WHEN v_payload->>'name_type' IN (
+          'birth', 'courtesy', 'posthumous', 'religious',
+          'married', 'nickname', 'alias'
+        )
+        THEN (v_payload->>'name_type')::public.name_type_enum
+        ELSE 'birth'::public.name_type_enum
+      END,
       COALESCE(NULLIF(v_payload->>'full_name', ''), 'Chưa rõ tên'),
-      COALESCE(NULLIF(v_payload->>'name_type', ''), 'primary'),
+      NULLIF(v_payload->>'surname', ''),
+      NULLIF(v_payload->>'given_name', ''),
+      COALESCE(NULLIF(v_payload->>'language', ''), 'vi'),
       COALESCE((v_payload->>'is_primary')::BOOLEAN, TRUE),
-      COALESCE(NULLIF(v_payload->>'sort_order', '')::INT, 0)
+      NULLIF(v_payload->>'note', '')
     );
 
     v_name_count := v_name_count + 1;
@@ -216,8 +229,9 @@ BEGIN
     )
     VALUES (
       CASE
-        WHEN v_payload->>'status' IN ('active', 'divorced', 'separated') THEN v_payload->>'status'
-        ELSE 'active'
+        WHEN v_payload->>'status' IN ('active', 'divorced', 'separated')
+        THEN (v_payload->>'status')::public.family_status_enum
+        ELSE 'active'::public.family_status_enum
       END
     )
     RETURNING id INTO v_new_family_id;
@@ -273,8 +287,9 @@ BEGIN
       v_family_id,
       v_person_id,
       CASE
-        WHEN v_payload->>'role' IN ('husband', 'wife', 'parent') THEN v_payload->>'role'
-        ELSE 'parent'
+        WHEN v_payload->>'role' IN ('husband', 'wife')
+        THEN (v_payload->>'role')::public.parent_role_enum
+        ELSE 'partner'::public.parent_role_enum
       END,
       COALESCE(NULLIF(v_payload->>'sort_order', '')::INT, 0)
     )
@@ -324,8 +339,13 @@ BEGIN
       v_family_id,
       v_person_id,
       CASE
-        WHEN v_payload->>'relationship_type' IN ('biological', 'adopted', 'step') THEN v_payload->>'relationship_type'
-        ELSE 'biological'
+        WHEN v_payload->>'relationship_type' = 'adopted'
+        THEN 'adopted'::public.child_type_enum
+        WHEN v_payload->>'relationship_type' IN ('step', 'stepchild')
+        THEN 'stepchild'::public.child_type_enum
+        WHEN v_payload->>'relationship_type' = 'foster'
+        THEN 'foster'::public.child_type_enum
+        ELSE 'biological'::public.child_type_enum
       END,
       COALESCE(NULLIF(v_payload->>'sort_order', '')::INT, 0)
     )
