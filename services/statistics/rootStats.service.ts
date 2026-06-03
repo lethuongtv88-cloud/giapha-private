@@ -26,7 +26,13 @@ export interface RootStatsInput {
 export interface RootStatsResult {
   rootPersonId: string;
 
+  /**
+   * Chỉ tính những người liên quan đến root:
+   * root + huyết thống + dâu/rễ theo root.
+   */
   totalVisiblePeople: number;
+
+  scopedPersonIds: string[];
 
   relation: {
     bloodline: number;
@@ -80,11 +86,15 @@ export function calculateRootStats(input: RootStatsInput): RootStatsResult {
     spouseEdges,
   });
 
+  const scopedPeople = persons.filter((person) => {
+    const className = classification.get(person.id) ?? "unknown";
+    return className !== "unknown";
+  });
+
+  const scopedPersonIds = new Set(scopedPeople.map((person) => person.id));
+
   const marriedIds = getCurrentlyMarriedIds({
     personsMap,
-    relationships: input.relationships ?? [],
-    families: input.families ?? [],
-    familyParents: input.familyParents ?? [],
     spouseEdges,
   });
 
@@ -115,6 +125,10 @@ export function calculateRootStats(input: RootStatsInput): RootStatsResult {
   for (const person of persons) {
     const className = classification.get(person.id) ?? "unknown";
     classifiedPeople.push({ personId: person.id, className });
+  }
+
+  for (const person of scopedPeople) {
+    const className = classification.get(person.id) ?? "unknown";
 
     if (className === "root" || className === "bloodline") {
       relation.bloodline += 1;
@@ -152,7 +166,8 @@ export function calculateRootStats(input: RootStatsInput): RootStatsResult {
 
   return {
     rootPersonId: input.rootPersonId,
-    totalVisiblePeople: persons.length,
+    totalVisiblePeople: scopedPeople.length,
+    scopedPersonIds: Array.from(scopedPersonIds),
     relation,
     gender,
     maritalStatus,
@@ -177,26 +192,39 @@ function classifyByRoot(input: {
     input.parentChildEdges,
   );
 
-  const rootParents = input.parentChildEdges
+  const rootParentIds = input.parentChildEdges
     .filter((edge) => edge.childId === input.rootPersonId)
     .map((edge) => edge.parentId);
 
   const fatherId =
-    rootParents.find((id) => input.personsMap.get(id)?.gender === "male") ??
-    rootParents[0] ??
+    rootParentIds.find((id) => input.personsMap.get(id)?.gender === "male") ??
+    rootParentIds[0] ??
     null;
 
   const motherId =
-    rootParents.find((id) => input.personsMap.get(id)?.gender === "female") ??
-    rootParents.find((id) => id !== fatherId) ??
+    rootParentIds.find((id) => input.personsMap.get(id)?.gender === "female") ??
+    rootParentIds.find((id) => id !== fatherId) ??
     null;
 
+  /**
+   * Nhánh cha/mẹ chỉ đi từ cha/mẹ trở lên hoặc sang nhánh khác,
+   * không đi xuyên qua root xuống con cháu của root.
+   * Nhờ vậy con/cháu của root không bị tính sai là cả họ nội/họ ngoại.
+   */
   const paternal = fatherId
-    ? collectConnectedByParentChild(fatherId, input.parentChildEdges)
+    ? collectBranchWithoutPassingBlockedNode(
+        fatherId,
+        input.rootPersonId,
+        input.parentChildEdges,
+      )
     : new Set<string>();
 
   const maternal = motherId
-    ? collectConnectedByParentChild(motherId, input.parentChildEdges)
+    ? collectBranchWithoutPassingBlockedNode(
+        motherId,
+        input.rootPersonId,
+        input.parentChildEdges,
+      )
     : new Set<string>();
 
   for (const personId of bloodline) {
@@ -247,7 +275,9 @@ function buildParentChildEdges(input: RootStatsInput): ParentChildEdge[] {
   const parentsByFamily = new Map<string, string[]>();
 
   for (const parent of input.familyParents ?? []) {
-    if (activeFamilyIds.size > 0 && !activeFamilyIds.has(parent.family_id)) continue;
+    if (activeFamilyIds.size > 0 && !activeFamilyIds.has(parent.family_id)) {
+      continue;
+    }
 
     const arr = parentsByFamily.get(parent.family_id) ?? [];
     arr.push(parent.person_id);
@@ -255,7 +285,9 @@ function buildParentChildEdges(input: RootStatsInput): ParentChildEdge[] {
   }
 
   for (const child of input.familyChildren ?? []) {
-    if (activeFamilyIds.size > 0 && !activeFamilyIds.has(child.family_id)) continue;
+    if (activeFamilyIds.size > 0 && !activeFamilyIds.has(child.family_id)) {
+      continue;
+    }
 
     const parents = parentsByFamily.get(child.family_id) ?? [];
     for (const parentId of parents) {
@@ -266,9 +298,11 @@ function buildParentChildEdges(input: RootStatsInput): ParentChildEdge[] {
     }
   }
 
-  // Fallback legacy.
+  // Fallback legacy nếu page chưa truyền Family Model.
   for (const rel of input.relationships ?? []) {
-    if (rel.type !== "biological_child" && rel.type !== "adopted_child") continue;
+    if (rel.type !== "biological_child" && rel.type !== "adopted_child") {
+      continue;
+    }
 
     out.push({
       parentId: rel.person_a,
@@ -285,14 +319,22 @@ function buildSpouseEdges(input: RootStatsInput): SpouseEdge[] {
   const activeCurrentFamilyIds = new Set(
     (input.families ?? [])
       .filter((family) => !family.deleted_at)
-      .filter((family) => family.status !== "divorced" && family.status !== "separated")
+      .filter(
+        (family) =>
+          family.status !== "divorced" && family.status !== "separated",
+      )
       .map((family) => family.id),
   );
 
   const parentsByFamily = new Map<string, string[]>();
 
   for (const parent of input.familyParents ?? []) {
-    if (activeCurrentFamilyIds.size > 0 && !activeCurrentFamilyIds.has(parent.family_id)) continue;
+    if (
+      activeCurrentFamilyIds.size > 0 &&
+      !activeCurrentFamilyIds.has(parent.family_id)
+    ) {
+      continue;
+    }
 
     const arr = parentsByFamily.get(parent.family_id) ?? [];
     arr.push(parent.person_id);
@@ -352,11 +394,38 @@ function collectConnectedByParentChild(
   return out;
 }
 
+function collectBranchWithoutPassingBlockedNode(
+  startPersonId: string,
+  blockedPersonId: string,
+  edges: ParentChildEdge[],
+): Set<string> {
+  const out = new Set<string>();
+  const queue = [startPersonId];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) continue;
+    if (out.has(current)) continue;
+    if (current === blockedPersonId) continue;
+
+    out.add(current);
+
+    for (const edge of edges) {
+      if (edge.parentId === current && edge.childId !== blockedPersonId) {
+        queue.push(edge.childId);
+      }
+
+      if (edge.childId === current && edge.parentId !== blockedPersonId) {
+        queue.push(edge.parentId);
+      }
+    }
+  }
+
+  return out;
+}
+
 function getCurrentlyMarriedIds(input: {
   personsMap: Map<string, Person>;
-  relationships: Relationship[];
-  families: FamilyRow[];
-  familyParents: FamilyParentRow[];
   spouseEdges: SpouseEdge[];
 }): Set<string> {
   const out = new Set<string>();
