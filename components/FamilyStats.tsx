@@ -1,4 +1,5 @@
 import type { Person, Relationship } from "@/types";
+import RootStatsPanel from "@/components/RootStatsPanel";
 import {
   calculateGlobalStats,
   type EventRow,
@@ -142,6 +143,13 @@ export default function FamilyStats({
           </div>
         </div>
       </section>
+<RootStatsPanel
+  persons={persons}
+  relationships={relationships}
+  families={families}
+  familyParents={familyParents}
+  familyChildren={familyChildren}
+/>
     </div>
   );
 }
