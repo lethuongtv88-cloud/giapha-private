@@ -13,6 +13,7 @@ import {
 } from "@/services/import/gedcomMergePlan.service";
 import {
   BulkApproveMergeSuggestionsButton,
+  CommitApprovedMergeSuggestionsButton,
   GenerateMergeSuggestionsButton,
   MergeSuggestionStatusActions,
 } from "@/components/GedcomMergeSuggestionActions";
@@ -398,7 +399,13 @@ export default async function GedcomMergePlanPage({ params }: PageProps) {
                 </p>
               </div>
 
-              <BulkApproveMergeSuggestionsButton sessionId={sessionId} />
+              <div className="flex flex-wrap gap-2">
+  <BulkApproveMergeSuggestionsButton sessionId={sessionId} />
+  <CommitApprovedMergeSuggestionsButton
+    sessionId={sessionId}
+    approvedCount={suggestionCounts.approved}
+  />
+</div>
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">

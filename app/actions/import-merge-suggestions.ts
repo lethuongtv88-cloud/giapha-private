@@ -160,3 +160,32 @@ export async function bulkApproveGedcomMergeSuggestions(input: {
     ok: true as const,
   };
 }
+export async function commitApprovedGedcomMergeSuggestions(input: {
+  sessionId: string;
+}) {
+  const supabase = await getSupabase();
+
+  const { data, error } = await supabase.rpc(
+    "commit_gedcom_merge_suggestions",
+    {
+      p_session_id: input.sessionId,
+    },
+  );
+
+  if (error) {
+    return {
+      ok: false as const,
+      error: error.message,
+    };
+  }
+
+  revalidatePath(`/dashboard/import/${input.sessionId}`);
+  revalidatePath(`/dashboard/import/${input.sessionId}/merge`);
+  revalidatePath("/dashboard/events");
+  revalidatePath("/dashboard/data-quality");
+
+  return {
+    ok: true as const,
+    result: data,
+  };
+}

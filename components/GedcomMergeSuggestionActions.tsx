@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import {
   bulkApproveGedcomMergeSuggestions,
+  commitApprovedGedcomMergeSuggestions,
   generateGedcomMergeSuggestions,
   updateGedcomMergeSuggestionStatus,
 } from "@/app/actions/import-merge-suggestions";
@@ -195,6 +196,60 @@ export function MergeSuggestionStatusActions({
         <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           {error}
         </div>
+      ) : null}
+    </div>
+  );
+}
+export function CommitApprovedMergeSuggestionsButton({
+  sessionId,
+  approvedCount,
+}: {
+  sessionId: string;
+  approvedCount: number;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
+
+  function run() {
+    const confirmed = window.confirm(
+      `Commit ${approvedCount} approved merge suggestions vào events/person_events? Thao tác này sẽ ghi dữ liệu thật.`,
+    );
+
+    if (!confirmed) return;
+
+    setMessage(null);
+
+    startTransition(async () => {
+      const result = await commitApprovedGedcomMergeSuggestions({ sessionId });
+
+      if (result.ok) {
+        setMessage(JSON.stringify(result.result, null, 2));
+      } else {
+        setMessage(result.error);
+      }
+    });
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        disabled={isPending || approvedCount === 0}
+        onClick={run}
+        className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+      >
+        {isPending ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <FilePlus2 className="size-4" />
+        )}
+        Commit approved suggestions
+      </button>
+
+      {message ? (
+        <pre className="mt-2 max-h-64 overflow-auto rounded-xl bg-stone-900 px-3 py-2 text-xs text-white">
+          {message}
+        </pre>
       ) : null}
     </div>
   );
