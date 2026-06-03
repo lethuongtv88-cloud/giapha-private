@@ -5,6 +5,10 @@ export type LegacyLikeRelationship = {
   type: string;
   person_a: string;
   person_b: string;
+  note?: string | null;
+  status?: string | null;
+  ended_at?: string | null;
+  divorce_note?: string | null;
   family_id?: string;
   migration_confidence?: string | null;
 };
@@ -12,6 +16,9 @@ export type LegacyLikeRelationship = {
 type FamilyRow = {
   id: string;
   legacy_relationship_id: string | null;
+  status?: string | null;
+  end_year?: number | null;
+  note?: string | null;
 };
 
 type FamilyParentRow = {
@@ -36,7 +43,7 @@ export async function getRelationshipsFromFamilies(
 ): Promise<LegacyLikeRelationship[]> {
   const { data: families, error: familiesError } = await supabase
     .from("families")
-    .select("id, legacy_relationship_id")
+    .select("id, legacy_relationship_id, status, end_year, note")
     .is("deleted_at", null);
 
   if (familiesError) throw familiesError;
@@ -92,6 +99,8 @@ export async function getRelationshipsFromFamilies(
         type: "marriage",
         person_a: famParents[0].person_id,
         person_b: famParents[1].person_id,
+        note: fam.status === "divorced" ? "Đã ly hôn" : fam.note,
+        status: fam.status,
         family_id: fam.id,
       });
     }

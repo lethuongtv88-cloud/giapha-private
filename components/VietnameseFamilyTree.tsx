@@ -82,7 +82,6 @@ type FamilyGroup = {
   x: number;
   width: number;
   anchorX: number;
-  anchorRelX: number;
   orderX: number;
   childrenWidth: number;
 };
@@ -117,6 +116,32 @@ type FilterOptions = {
   hideFemales: boolean;
 };
 
+type GroupDraft = {
+  family: FamilyRow;
+  groupId: string;
+  parents: Person[];
+  spouses: Person[];
+  children: Person[];
+  childBlocks: TreeBlock[];
+  expanded: boolean;
+  childLayout: BiologicalChildLayout;
+  childrenWidth: number;
+  groupWidth: number;
+};
+
+type BiologicalChildLayout = {
+  width: number;
+  anchorOffset: number;
+  childXs: number[];
+};
+
+type GroupSlot = {
+  groupId: string;
+  x: number;
+  width: number;
+  anchorX: number;
+};
+
 const DEFAULT_AUTO_COLLAPSE_LEVEL = 4;
 
 const NODE_WIDTH = VIET_NODE_WIDTH;
@@ -129,7 +154,6 @@ const GENERATION_GAP = VIET_GENERATION_GAP;
 const CHILD_BAR_OFFSET = VIET_CHILD_BAR_OFFSET;
 
 const LINE_COLOR = "#a8a29e";
-const CONNECTOR_BUTTON_OFFSET_Y = 8;
 
 export default function VietnameseFamilyTree({
   personsMap,
@@ -404,25 +428,82 @@ function RenderTreeBlock({
   onToggleGroupExpanded: (groupId: string, currentlyExpanded: boolean) => void;
   onOpenPerson: (personId: string | null) => void;
 }) {
-  const spouseLineY = y + NODE_HEIGHT / 2;
-  const connectorStartY = y + NODE_HEIGHT + CONNECTOR_BUTTON_OFFSET_Y;
+  const unitCenterY = y + NODE_HEIGHT / 2;
   const childTopY = y + NODE_HEIGHT + GENERATION_GAP;
   const childBarY = childTopY - CHILD_BAR_OFFSET;
+
+  const nodeByPersonId = new Map(
+    block.nodes.map((node) => [node.person.id, node]),
+  );
 
   return (
     <>
       <g>
-        {block.nodes.length > 1 ? (
-          <line
-            x1={x + block.nodes[0].x + NODE_WIDTH / 2}
-            y1={spouseLineY}
-            x2={x + block.nodes[block.nodes.length - 1].x + NODE_WIDTH / 2}
-            y2={spouseLineY}
-            stroke={LINE_COLOR}
-            strokeWidth={2}
+        {block.groups.map((group) => (
+          <MarriageConnector
+            key={`marriage-${group.groupId}`}
+            group={group}
+            mainPersonId={block.person.id}
+            nodeByPersonId={nodeByPersonId}
+            x={x}
+            y={y}
+            unitCenterY={unitCenterY}
           />
-        ) : null}
+        ))}
 
+        {block.groups
+          .filter((group) => group.expanded && group.visibleChildren.length > 0)
+          .map((group) => {
+            const childCenters = group.visibleChildren.map(
+              (slot) => x + group.x + slot.x + slot.childTopCenterX,
+            );
+
+            const firstChildCenter = childCenters[0];
+            const lastChildCenter = childCenters[childCenters.length - 1];
+            const anchorX = x + group.anchorX;
+
+            return (
+              <g key={`group-lines-${group.groupId}`}>
+                <line
+                  x1={anchorX}
+                  y1={unitCenterY}
+                  x2={anchorX}
+                  y2={childBarY}
+                  stroke={LINE_COLOR}
+                  strokeWidth={2}
+                />
+
+                <line
+                  x1={Math.min(firstChildCenter, anchorX)}
+                  y1={childBarY}
+                  x2={Math.max(lastChildCenter, anchorX)}
+                  y2={childBarY}
+                  stroke={LINE_COLOR}
+                  strokeWidth={2}
+                />
+
+                {group.visibleChildren.map((slot) => {
+                  const childCenterX =
+                    x + group.x + slot.x + slot.childTopCenterX;
+
+                  return (
+                    <line
+                      key={`child-line-${slot.childId}`}
+                      x1={childCenterX}
+                      y1={childBarY}
+                      x2={childCenterX}
+                      y2={childTopY}
+                      stroke={LINE_COLOR}
+                      strokeWidth={2}
+                    />
+                  );
+                })}
+              </g>
+            );
+          })}
+      </g>
+
+      <g>
         {block.nodes.map((node) => (
           <PersonNode
             key={node.id}
@@ -436,24 +517,23 @@ function RenderTreeBlock({
           />
         ))}
 
-        {block.groups
-          .filter((group) => group.spouses.length > 0)
-          .map((group) => (
-            <MarriageRing
-              key={`ring-${group.groupId}`}
-              x={x + group.anchorX}
-              y={spouseLineY}
-            />
-          ))}
+        {block.groups.map((group) => (
+          <MarriageRing
+            key={`ring-${group.groupId}`}
+            group={group}
+            x={x}
+            y={unitCenterY}
+          />
+        ))}
 
         {!hideExpandButtons
           ? block.groups
-              .filter((group) => group.hasChildren)
+              .filter((group) => group.hasChildren && group.spouses.length > 0)
               .map((group) => (
                 <g
                   key={`toggle-${group.groupId}`}
                   transform={`translate(${x + group.anchorX - 12}, ${
-                    connectorStartY - 12
+                    unitCenterY + 18
                   })`}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -461,14 +541,6 @@ function RenderTreeBlock({
                   }}
                   style={{ cursor: "pointer" }}
                 >
-                  <line
-                    x1={12}
-                    y1={-CONNECTOR_BUTTON_OFFSET_Y}
-                    x2={12}
-                    y2={0}
-                    stroke={LINE_COLOR}
-                    strokeWidth={2}
-                  />
                   <circle
                     cx={12}
                     cy={12}
@@ -487,96 +559,133 @@ function RenderTreeBlock({
           : null}
       </g>
 
-      {block.groups
-        .filter((group) => group.expanded && group.visibleChildren.length > 0)
-        .map((group) => {
-          const childCenters = group.visibleChildren.map(
-            (slot) => x + group.x + slot.x + slot.childTopCenterX,
-          );
-
-          const firstChildCenter = childCenters[0];
-          const lastChildCenter = childCenters[childCenters.length - 1];
-          const anchorX = x + group.anchorX;
-
-          return (
-            <g key={`group-children-${group.groupId}`}>
-              <line
-                x1={anchorX}
-                y1={connectorStartY}
-                x2={anchorX}
-                y2={childBarY}
-                stroke={LINE_COLOR}
-                strokeWidth={2}
+      <g>
+        {block.groups
+          .filter((group) => group.expanded && group.visibleChildren.length > 0)
+          .map((group) =>
+            group.visibleChildren.map((slot) => (
+              <RenderTreeBlock
+                key={slot.childId}
+                block={slot.block}
+                x={x + group.x + slot.x}
+                y={childTopY}
+                showAvatar={showAvatar}
+                hideExpandButtons={hideExpandButtons}
+                hoveredNodeId={hoveredNodeId}
+                setHoveredNodeId={setHoveredNodeId}
+                onToggleGroupExpanded={onToggleGroupExpanded}
+                onOpenPerson={onOpenPerson}
               />
-
-              <line
-                x1={Math.min(firstChildCenter, anchorX)}
-                y1={childBarY}
-                x2={Math.max(lastChildCenter, anchorX)}
-                y2={childBarY}
-                stroke={LINE_COLOR}
-                strokeWidth={2}
-              />
-
-              {group.visibleChildren.map((slot) => {
-                const childCenterX = x + group.x + slot.x + slot.childTopCenterX;
-
-                return (
-                  <line
-                    key={`child-line-${slot.childId}`}
-                    x1={childCenterX}
-                    y1={childBarY}
-                    x2={childCenterX}
-                    y2={childTopY}
-                    stroke={LINE_COLOR}
-                    strokeWidth={2}
-                  />
-                );
-              })}
-
-              {group.visibleChildren.map((slot) => (
-                <RenderTreeBlock
-                  key={slot.childId}
-                  block={slot.block}
-                  x={x + group.x + slot.x}
-                  y={childTopY}
-                  showAvatar={showAvatar}
-                  hideExpandButtons={hideExpandButtons}
-                  hoveredNodeId={hoveredNodeId}
-                  setHoveredNodeId={setHoveredNodeId}
-                  onToggleGroupExpanded={onToggleGroupExpanded}
-                  onOpenPerson={onOpenPerson}
-                />
-              ))}
-            </g>
-          );
-        })}
+            )),
+          )}
+      </g>
     </>
   );
 }
 
-function MarriageRing({ x, y }: { x: number; y: number }) {
+function MarriageConnector({
+  group,
+  mainPersonId,
+  nodeByPersonId,
+  x,
+  y,
+  unitCenterY,
+}: {
+  group: FamilyGroup;
+  mainPersonId: string;
+  nodeByPersonId: Map<string, LayoutNode>;
+  x: number;
+  y: number;
+  unitCenterY: number;
+}) {
+  if (group.spouses.length === 0) return null;
+
+  const mainNode = nodeByPersonId.get(mainPersonId);
+  if (!mainNode) return null;
+
   return (
-    <g transform={`translate(${x}, ${y})`} pointerEvents="none">
+    <>
+      {group.spouses.map((spouse) => {
+        const spouseNode = nodeByPersonId.get(spouse.id);
+        if (!spouseNode) return null;
+
+        return (
+          <line
+            key={`${group.groupId}-${spouse.id}`}
+            x1={x + mainNode.x + NODE_WIDTH / 2}
+            y1={unitCenterY}
+            x2={x + spouseNode.x + NODE_WIDTH / 2}
+            y2={unitCenterY}
+            stroke={isEndedFamily(group.family) ? "#ef4444" : LINE_COLOR}
+            strokeWidth={2}
+            strokeDasharray={isEndedFamily(group.family) ? "8 6" : undefined}
+            strokeLinecap="round"
+          />
+        );
+      })}
+    </>
+  );
+}
+
+function MarriageRing({
+  group,
+  x,
+  y,
+}: {
+  group: FamilyGroup;
+  x: number;
+  y: number;
+}) {
+  if (group.spouses.length === 0) return null;
+
+  const ended = isEndedFamily(group.family);
+  const primary = ended ? "#ef4444" : "#f59e0b";
+  const secondary = ended ? "#fca5a5" : "#d6a21e";
+
+  return (
+    <g transform={`translate(${x + group.anchorX - 10}, ${y - 31})`}>
+      <title>{ended ? "Đã ly hôn / đã kết thúc" : "Hôn nhân"}</title>
       <circle
-        cx={-4}
-        cy={0}
-        r={5}
+        cx={7}
+        cy={10}
+        r={6}
         fill="white"
-        stroke="#d97706"
-        strokeWidth={1.6}
+        stroke={secondary}
+        strokeWidth={1.8}
       />
       <circle
-        cx={4}
-        cy={0}
-        r={5}
-        fill="white"
-        stroke="#d97706"
-        strokeWidth={1.6}
+        cx={13}
+        cy={10}
+        r={6}
+        fill="none"
+        stroke={primary}
+        strokeWidth={1.8}
       />
-      <circle cx={0} cy={0} r={2.1} fill="#fbbf24" />
+      <path
+        d="M7 2 L10 0 L13 2"
+        fill="none"
+        stroke={primary}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {ended ? (
+        <line
+          x1={3}
+          y1={18}
+          x2={17}
+          y2={2}
+          stroke={primary}
+          strokeWidth={1.8}
+          strokeLinecap="round"
+        />
+      ) : null}
     </g>
   );
+}
+
+function isEndedFamily(family: FamilyRow) {
+  return family.status === "divorced" || family.status === "separated";
 }
 
 function PersonNode({
@@ -598,7 +707,7 @@ function PersonNode({
 }) {
   const palette = getGenderPalette(node.person.gender);
   const dateParts = getPersonDateParts(node.person);
-  const nameLines = splitNameIntoLines(node.person.full_name ?? "", 11);
+  const nameLines = splitNameIntoLines(node.person.full_name ?? "", 13);
   const avatarHref = getAvatarHref(node.person);
 
   const scale = isHovered ? 1.055 : 1;
@@ -627,24 +736,14 @@ function PersonNode({
           width={NODE_WIDTH}
           height={NODE_HEIGHT}
           rx={16}
-          fill="white"
-          stroke={isHovered ? palette.hoverStroke : palette.stroke}
-          strokeWidth={isHovered ? 2.4 : 1.8}
+          fill={isHovered ? "#fff" : "rgba(255,255,255,0.72)"}
+          stroke={isHovered ? "#fcd34d" : "rgba(231,229,228,0.80)"}
+          strokeWidth={isHovered ? 1.8 : 1.2}
           filter={
             isHovered
               ? "url(#viet-node-hover-shadow)"
               : "url(#viet-node-shadow)"
           }
-        />
-
-        <rect
-          x={1}
-          y={1}
-          width={NODE_WIDTH - 2}
-          height={NODE_HEIGHT - 2}
-          rx={15}
-          fill={palette.softFill}
-          opacity={isHovered ? 0.95 : 0.72}
         />
 
         {showAvatar ? (
@@ -663,9 +762,9 @@ function PersonNode({
                 : 49
           }
           textAnchor="middle"
-          fontSize={11.2}
-          fontWeight={800}
-          fill="#1c1917"
+          fontSize={12}
+          fontWeight={700}
+          fill={isHovered ? "#92400e" : "#292524"}
         >
           {nameLines.map((line, index) => (
             <tspan
@@ -685,7 +784,8 @@ function PersonNode({
               y={showAvatar ? 112 : 74}
               textAnchor="middle"
               fontSize={9.8}
-              fill="#57534e"
+              fontWeight={500}
+              fill="#78716c"
             >
               {dateParts.prefix}
             </text>
@@ -739,9 +839,9 @@ function Avatar({
         cx={avatarX + AVATAR_SIZE / 2}
         cy={avatarY + AVATAR_SIZE / 2}
         r={AVATAR_SIZE / 2 + 3}
-        fill="white"
-        stroke={palette.stroke}
-        strokeWidth={2}
+        fill={palette.avatarBg}
+        stroke="white"
+        strokeWidth={3}
       />
 
       <image
@@ -791,14 +891,14 @@ function buildTreeBlock({
     })
     .sort((a, b) => compareFamilies(a, b, familyIndex));
 
-  const groupDrafts = rawFamilies.map((family) => {
+  let groupDrafts: GroupDraft[] = rawFamilies.map((family) => {
     const parentRows = familyIndex.parentsByFamilyId.get(family.id) ?? [];
 
     const parentPeople = parentRows
       .map((row) => familyIndex.personById.get(row.person_id))
       .filter(Boolean) as Person[];
 
-    const spouses = parentPeople
+    const visibleSpouses = parentPeople
       .filter((p) => p.id !== person.id)
       .filter((p) => shouldShowSpouse(p, filters));
 
@@ -836,24 +936,28 @@ function buildTreeBlock({
       (manualExpandedIds.has(groupId) || defaultExpanded) &&
       !manualCollapsedIds.has(groupId);
 
-    const childrenWidth =
-      expanded && childBlocks.length > 0
-        ? childBlocks.reduce((sum, child) => sum + child.width, 0) +
-          Math.max(0, childBlocks.length - 1) * SIBLING_GAP
-        : 0;
+    const childLayout = expanded
+      ? layoutChildBlocksByBiologicalCenters(childBlocks)
+      : emptyBiologicalChildLayout();
+    const childrenWidth = childLayout.width;
 
     return {
       family,
       groupId,
-      parentRows,
       parents: parentPeople,
-      spouses,
+      spouses: visibleSpouses,
       children,
       childBlocks,
       expanded,
+      childLayout,
       childrenWidth,
       groupWidth: Math.max(childrenWidth, NODE_WIDTH),
     };
+  });
+
+  groupDrafts = mergeHiddenSpouseGroups({
+    person,
+    groups: groupDrafts,
   });
 
   if (groupDrafts.length === 0) {
@@ -861,45 +965,19 @@ function buildTreeBlock({
   }
 
   const groupSlots = layoutFamilyGroupSlots(groupDrafts);
+
   const positionedPeople = new Map<string, { person: Person; x: number }>();
 
-  const visibleSpouseByGroupId = new Map<string, Person | null>();
-
-  for (const group of groupDrafts) {
-    const visibleSpouses = group.spouses.filter((spouse) =>
-      shouldShowSpouse(spouse, filters),
-    );
-
-    if (person.gender === "male") {
-      visibleSpouseByGroupId.set(
-        group.groupId,
-        visibleSpouses.find((spouse) => spouse.gender === "female") ??
-          visibleSpouses[0] ??
-          null,
-      );
-    } else if (person.gender === "female") {
-      visibleSpouseByGroupId.set(
-        group.groupId,
-        visibleSpouses.find((spouse) => spouse.gender === "male") ??
-          visibleSpouses[0] ??
-          null,
-      );
-    } else {
-      visibleSpouseByGroupId.set(group.groupId, visibleSpouses[0] ?? null);
-    }
-  }
-
   if (person.gender === "female") {
-    const husbandGroups = groupDrafts.map((group, index) => ({
-      group,
-      slot: groupSlots[index],
-      husband: visibleSpouseByGroupId.get(group.groupId),
-    }));
+    const husbandGroups = groupDrafts
+      .map((group, index) => ({
+        group,
+        slot: groupSlots[index],
+        husband: pickMaleSpouse(group.spouses),
+      }))
+      .filter((item) => item.husband);
 
-    const groupsWithHusband = husbandGroups.filter((item) => item.husband);
-    const groupsWithoutHusband = husbandGroups.filter((item) => !item.husband);
-
-    for (const item of groupsWithHusband) {
+    for (const item of husbandGroups) {
       const husband = item.husband!;
       const husbandX = item.slot.anchorX - NODE_WIDTH - SPOUSE_GAP / 2;
 
@@ -909,9 +987,11 @@ function buildTreeBlock({
       });
     }
 
-    if (groupsWithHusband.length > 0) {
+    const hasVisibleSpouse = husbandGroups.length > 0;
+
+    if (hasVisibleSpouse) {
       const rightMostHusbandRight = Math.max(
-        ...groupsWithHusband.map((item) => {
+        ...husbandGroups.map((item) => {
           const husband = item.husband!;
           const pos = positionedPeople.get(husband.id);
           return (pos?.x ?? 0) + NODE_WIDTH;
@@ -922,24 +1002,19 @@ function buildTreeBlock({
         person,
         x: rightMostHusbandRight + SPOUSE_GAP,
       });
-    } else if (groupsWithoutHusband.length > 0) {
-      const firstSlot = groupsWithoutHusband[0].slot;
-      const lastSlot = groupsWithoutHusband[groupsWithoutHusband.length - 1].slot;
-      const visibleCenter = (firstSlot.anchorX + lastSlot.anchorX) / 2;
-
+    } else {
+      const center = centerOfGroupSlots(groupSlots);
       positionedPeople.set(person.id, {
         person,
-        x: visibleCenter - NODE_WIDTH / 2,
+        x: center - NODE_WIDTH / 2,
       });
     }
 
-    let extraX =
-      (positionedPeople.get(person.id)?.x ?? 0) + NODE_WIDTH + SPOUSE_GAP;
+    let extraX = positionedPeople.get(person.id)!.x + NODE_WIDTH + SPOUSE_GAP;
 
     for (const group of groupDrafts) {
       for (const spouse of group.spouses) {
         if (spouse.gender === "male") continue;
-        if (!shouldShowSpouse(spouse, filters)) continue;
         if (positionedPeople.has(spouse.id)) continue;
 
         positionedPeople.set(spouse.id, {
@@ -951,16 +1026,15 @@ function buildTreeBlock({
       }
     }
   } else {
-    const wifeGroups = groupDrafts.map((group, index) => ({
-      group,
-      slot: groupSlots[index],
-      wife: visibleSpouseByGroupId.get(group.groupId),
-    }));
+    const wifeGroups = groupDrafts
+      .map((group, index) => ({
+        group,
+        slot: groupSlots[index],
+        wife: pickFemaleSpouse(group.spouses),
+      }))
+      .filter((item) => item.wife);
 
-    const groupsWithWife = wifeGroups.filter((item) => item.wife);
-    const groupsWithoutWife = wifeGroups.filter((item) => !item.wife);
-
-    for (const item of groupsWithWife) {
+    for (const item of wifeGroups) {
       const wife = item.wife!;
       const wifeX = item.slot.anchorX + SPOUSE_GAP / 2;
 
@@ -970,9 +1044,11 @@ function buildTreeBlock({
       });
     }
 
-    if (groupsWithWife.length > 0) {
+    const hasVisibleSpouse = wifeGroups.length > 0;
+
+    if (hasVisibleSpouse) {
       const leftMostWifeLeft = Math.min(
-        ...groupsWithWife.map((item) => {
+        ...wifeGroups.map((item) => {
           const wife = item.wife!;
           const pos = positionedPeople.get(wife.id);
           return pos?.x ?? 0;
@@ -983,30 +1059,24 @@ function buildTreeBlock({
         person,
         x: leftMostWifeLeft - SPOUSE_GAP - NODE_WIDTH,
       });
-    } else if (groupsWithoutWife.length > 0) {
-      const firstSlot = groupsWithoutWife[0].slot;
-      const lastSlot = groupsWithoutWife[groupsWithoutWife.length - 1].slot;
-      const visibleCenter = (firstSlot.anchorX + lastSlot.anchorX) / 2;
-
+    } else {
+      const center = centerOfGroupSlots(groupSlots);
       positionedPeople.set(person.id, {
         person,
-        x: visibleCenter - NODE_WIDTH / 2,
+        x: center - NODE_WIDTH / 2,
       });
     }
 
     let extraX =
-      positionedPeople.size > 0
-        ? Math.max(
-            ...Array.from(positionedPeople.values()).map(
-              (item) => item.x + NODE_WIDTH,
-            ),
-          ) + SPOUSE_GAP
-        : NODE_WIDTH + SPOUSE_GAP;
+      Math.max(
+        ...Array.from(positionedPeople.values()).map(
+          (item) => item.x + NODE_WIDTH,
+        ),
+      ) + SPOUSE_GAP;
 
     for (const group of groupDrafts) {
       for (const spouse of group.spouses) {
         if (spouse.gender === "female") continue;
-        if (!shouldShowSpouse(spouse, filters)) continue;
         if (positionedPeople.has(spouse.id)) continue;
 
         positionedPeople.set(spouse.id, {
@@ -1020,11 +1090,10 @@ function buildTreeBlock({
   }
 
   if (!positionedPeople.has(person.id)) {
-    const firstAnchor = groupSlots[0]?.anchorX ?? NODE_WIDTH / 2;
-
+    const center = centerOfGroupSlots(groupSlots);
     positionedPeople.set(person.id, {
       person,
-      x: firstAnchor - NODE_WIDTH / 2,
+      x: center - NODE_WIDTH / 2,
     });
   }
 
@@ -1052,7 +1121,9 @@ function buildTreeBlock({
     }))
     .sort((a, b) => a.x - b.x);
 
-  const personNode = normalizedPeople.find((item) => item.person.id === person.id);
+  const personNode = normalizedPeople.find(
+    (item) => item.person.id === person.id,
+  );
 
   const nodeTopCenterX = personNode
     ? personNode.x + NODE_WIDTH / 2
@@ -1077,34 +1148,24 @@ function buildTreeBlock({
 
   const groups: FamilyGroup[] = groupDrafts.map((group, index) => {
     const slot = groupSlots[index];
+
+    const hasVisibleSpouse = group.spouses.length > 0;
+    const personCenterX = nodeTopCenterX;
+    const anchorX = hasVisibleSpouse
+      ? slot.anchorX + shiftX
+      : personCenterX;
+
     const groupX = slot.x + shiftX;
-    const visibleSpouse = visibleSpouseByGroupId.get(group.groupId) ?? null;
-
-    let anchorX = slot.anchorX + shiftX;
-
-    if (!visibleSpouse) {
-      const mainNode = positionedPeople.get(person.id);
-
-      if (mainNode) {
-        anchorX = mainNode.x + shiftX + NODE_WIDTH / 2;
-      }
-    }
-
     const visibleChildren: ChildSlot[] = [];
 
     if (group.expanded && group.childBlocks.length > 0) {
-      const childStartX = (slot.width - group.childrenWidth) / 2;
-      let childCursorX = childStartX;
-
-      for (const childBlock of group.childBlocks) {
+      for (const [childIndex, childBlock] of group.childBlocks.entries()) {
         visibleChildren.push({
           childId: childBlock.person.id,
           block: childBlock,
-          x: childCursorX,
+          x: group.childLayout.childXs[childIndex] ?? 0,
           childTopCenterX: childBlock.nodeTopCenterX,
         });
-
-        childCursorX += childBlock.width + SIBLING_GAP;
       }
     }
 
@@ -1121,7 +1182,6 @@ function buildTreeBlock({
       x: groupX,
       width: slot.width,
       anchorX,
-      anchorRelX: anchorX,
       orderX: anchorX,
       childrenWidth: group.childrenWidth,
     };
@@ -1154,6 +1214,52 @@ function buildTreeBlock({
   };
 }
 
+function mergeHiddenSpouseGroups({
+  person,
+  groups,
+}: {
+  person: Person;
+  groups: GroupDraft[];
+}) {
+  const withVisibleSpouse = groups.filter((group) => group.spouses.length > 0);
+  const withoutVisibleSpouse = groups.filter(
+    (group) => group.spouses.length === 0,
+  );
+
+  if (withoutVisibleSpouse.length <= 1) return groups;
+
+  const mergedChildren = withoutVisibleSpouse.flatMap((group) => group.children);
+  const mergedChildBlocks = withoutVisibleSpouse.flatMap(
+    (group) => group.childBlocks,
+  );
+
+  const expanded = withoutVisibleSpouse.some((group) => group.expanded);
+
+  const childLayout = expanded
+    ? layoutChildBlocksByBiologicalCenters(mergedChildBlocks)
+    : emptyBiologicalChildLayout();
+  const childrenWidth = childLayout.width;
+
+  const merged: GroupDraft = {
+    family: withoutVisibleSpouse[0].family,
+    groupId: `${person.id}::__visible_single_parent`,
+    parents: [person],
+    spouses: [],
+    children: sortVietnamesePeople(mergedChildren),
+    childBlocks: mergedChildBlocks,
+    expanded,
+    childLayout,
+    childrenWidth,
+    groupWidth: Math.max(childrenWidth, NODE_WIDTH),
+  };
+
+  return [...withVisibleSpouse, merged].sort((a, b) =>
+    String(a.family.created_at ?? "").localeCompare(
+      String(b.family.created_at ?? ""),
+    ),
+  );
+}
+
 function buildSinglePersonBlock(person: Person): TreeBlock {
   return {
     person,
@@ -1178,21 +1284,8 @@ function buildSinglePersonBlock(person: Person): TreeBlock {
   };
 }
 
-function layoutFamilyGroupSlots(
-  groups: Array<{
-    groupId: string;
-    childrenWidth: number;
-    groupWidth: number;
-    expanded: boolean;
-  }>,
-) {
-  const slots: Array<{
-    groupId: string;
-    x: number;
-    width: number;
-    anchorX: number;
-  }> = [];
-
+function layoutFamilyGroupSlots(groups: GroupDraft[]): GroupSlot[] {
+  const slots: GroupSlot[] = [];
   let cursorX = 0;
 
   for (const group of groups) {
@@ -1201,7 +1294,10 @@ function layoutFamilyGroupSlots(
         ? Math.max(group.childrenWidth, NODE_WIDTH)
         : NODE_WIDTH;
 
-    const anchorX = cursorX + width / 2;
+    const anchorX =
+      group.expanded && group.childrenWidth > 0
+        ? cursorX + group.childLayout.anchorOffset
+        : cursorX + width / 2;
 
     slots.push({
       groupId: group.groupId,
@@ -1214,6 +1310,72 @@ function layoutFamilyGroupSlots(
   }
 
   return slots;
+}
+
+function layoutChildBlocksByBiologicalCenters(
+  childBlocks: TreeBlock[],
+): BiologicalChildLayout {
+  if (childBlocks.length === 0) return emptyBiologicalChildLayout();
+
+  const rawXs: number[] = [];
+  let cursorX = 0;
+
+  for (const childBlock of childBlocks) {
+    rawXs.push(cursorX);
+    cursorX += childBlock.width + SIBLING_GAP;
+  }
+
+  const rawLeft = Math.min(...rawXs);
+  const rawRight = Math.max(
+    ...rawXs.map((childX, index) => childX + childBlocks[index].width),
+  );
+
+  const childNodeCenters = rawXs.map(
+    (childX, index) => childX + childBlocks[index].nodeTopCenterX,
+  );
+
+  // Chỉ lấy tâm các node con ruột/con đẻ còn hiển thị.
+  // Không lấy tâm cả childBlock vì childBlock có thể gồm vợ/chồng của con,
+  // nếu lấy toàn block sẽ kéo lệch đường nối cha/mẹ khi dâu/rễ hiện hoặc ẩn.
+  const biologicalCenter =
+    (Math.min(...childNodeCenters) + Math.max(...childNodeCenters)) / 2;
+
+  const shiftX = -rawLeft;
+
+  return {
+    width: rawRight - rawLeft,
+    anchorOffset: biologicalCenter + shiftX,
+    childXs: rawXs.map((childX) => childX + shiftX),
+  };
+}
+
+function emptyBiologicalChildLayout(): BiologicalChildLayout {
+  return {
+    width: 0,
+    anchorOffset: NODE_WIDTH / 2,
+    childXs: [],
+  };
+}
+
+function centerOfGroupSlots(slots: GroupSlot[]) {
+  if (slots.length === 0) return NODE_WIDTH / 2;
+
+  const minX = Math.min(...slots.map((slot) => slot.x));
+  const maxX = Math.max(...slots.map((slot) => slot.x + slot.width));
+
+  return (minX + maxX) / 2;
+}
+
+function pickMaleSpouse(spouses: Person[]) {
+  return sortVietnamesePeople(spouses).find(
+    (spouse) => spouse.gender === "male",
+  );
+}
+
+function pickFemaleSpouse(spouses: Person[]) {
+  return sortVietnamesePeople(spouses).find(
+    (spouse) => spouse.gender === "female",
+  );
 }
 
 function buildFamilyIndex({
@@ -1272,12 +1434,9 @@ function buildFamilyIndex({
       const fa = familyById.get(a);
       const fb = familyById.get(b);
       if (!fa || !fb) return 0;
+
       return compareFamilies(fa, fb, {
-        familyById,
         parentsByFamilyId,
-        childrenByFamilyId,
-        familyIdsByParentId,
-        personById,
       });
     });
 
@@ -1371,24 +1530,18 @@ function compareNullableNumber(a?: number | null, b?: number | null) {
 function getGenderPalette(gender?: string | null) {
   if (gender === "male") {
     return {
-      softFill: "#eff6ff",
-      stroke: "#0ea5e9",
-      hoverStroke: "#0284c7",
+      avatarBg: "#38bdf8",
     };
   }
 
   if (gender === "female") {
     return {
-      softFill: "#fff1f2",
-      stroke: "#fb3f6c",
-      hoverStroke: "#e11d48",
+      avatarBg: "#fb7185",
     };
   }
 
   return {
-    softFill: "#fafaf9",
-    stroke: "#a8a29e",
-    hoverStroke: "#78716c",
+    avatarBg: "#a8a29e",
   };
 }
 

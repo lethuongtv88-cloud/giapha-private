@@ -57,17 +57,14 @@ export type VietnameseTreeLayoutFamily = {
   height: number;
 };
 
-/**
- * Compact node:
- * - block: 112 x 141
- * - avatar: 56 x 56
- * - text area visually fits 104px width
- */
 export const VIET_NODE_WIDTH = 112;
 export const VIET_NODE_HEIGHT = 141;
 export const VIET_AVATAR_SIZE = 56;
+
 export const VIET_SPOUSE_GAP = 28;
 export const VIET_SIBLING_GAP = 34;
+export const VIET_MARRIAGE_GROUP_GAP = 48;
+
 export const VIET_GENERATION_GAP = 86;
 export const VIET_CHILD_BAR_OFFSET = 34;
 
@@ -80,8 +77,7 @@ const CHILD_BAR_OFFSET = VIET_CHILD_BAR_OFFSET;
 
 /**
  * Helper layout một family block đơn giản.
- * VietnameseFamilyTree hiện dùng thuật toán recursive riêng,
- * nhưng function này vẫn giữ để route test và unit test không vỡ.
+ * VietnameseFamilyTree hiện dùng thuật toán recursive riêng.
  */
 export function buildVietnameseFamilyLayout(
   family: VietnameseTreeFamily,
@@ -97,11 +93,9 @@ export function buildVietnameseFamilyLayout(
 
   const childUnits = sortedChildren.map((child) => {
     const spouses = family.expandedSpousesByChildId?.get(child.id) ?? [];
-
     const naturalWidth =
       (1 + spouses.length) * NODE_WIDTH +
       Math.max(0, spouses.length) * SPOUSE_GAP;
-
     const requestedWidth = family.childUnitWidthByChildId?.get(child.id) ?? 0;
 
     return {
