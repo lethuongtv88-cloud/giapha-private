@@ -427,7 +427,7 @@ export default async function ImportSessionPreviewPage({ params }: PageProps) {
 
             <div className="flex flex-wrap gap-2">
               <Link
-                href="matches"
+                href={`/dashboard/import/${session.id}/matches`}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800"
               >
                 <Search className="size-4" />
@@ -435,7 +435,7 @@ export default async function ImportSessionPreviewPage({ params }: PageProps) {
               </Link>
 
               <Link
-                href="merge"
+                href={`/dashboard/import/${session.id}/merge`}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800"
               >
                 <GitCompareArrows className="size-4" />
