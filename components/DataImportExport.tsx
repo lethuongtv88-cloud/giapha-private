@@ -28,7 +28,7 @@ export default function DataImportExport() {
         const { createClient } = await import("@/utils/supabase/client");
         const supabase = createClient();
         const { data } = await supabase
-          .from("persons")
+          .from("persons_active")
           .select("id, full_name, birth_year, gender, avatar_url, generation")
           .order("birth_year", { ascending: true, nullsFirst: false });
         if (data) setPersons(data as Person[]);
@@ -81,7 +81,12 @@ export default function DataImportExport() {
         extension = "ged";
       }
 
-      const blob = new Blob([content], { type });
+      const blobType =
+       format === 'gedcom'
+        ? 'text/plain;charset=utf-8'
+        : 'application/json;charset=utf-8';
+
+      const blob = new Blob([content], { type: blobType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

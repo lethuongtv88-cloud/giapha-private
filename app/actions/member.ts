@@ -16,10 +16,11 @@ export async function deleteMemberProfile(memberId: string) {
 
   // 2. Check for existing relationships
   const { data: relationships, error: relationshipError } = await supabase
-    .from("relationships")
-    .select("id")
-    .or(`person_a.eq.${memberId},person_b.eq.${memberId}`)
-    .limit(1);
+   .from("relationships")
+   .select("id")
+   .or(`person_a.eq.${memberId},person_b.eq.${memberId}`)
+   .is("deleted_at", null)
+   .limit(1);
 
   if (relationshipError) {
     console.error("Error checking relationships:", relationshipError);
@@ -35,9 +36,13 @@ export async function deleteMemberProfile(memberId: string) {
 
   // 3. Delete the member
   const { error: deleteError } = await supabase
-    .from("persons")
-    .delete()
-    .eq("id", memberId);
+   .from("persons")
+   .update({
+     deleted_at: new Date().toISOString(),
+     deleted_by: profile.id,
+   })
+   .eq("id", memberId)
+   .is("deleted_at", null);
 
   if (deleteError) {
     console.error("Error deleting person:", deleteError);

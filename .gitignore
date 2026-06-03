@@ -43,3 +43,13 @@ next-env.d.ts
 .agents/
 .agent/
 skills-lock.json
+# Local migration backups
+/backups/
+backups/
+*.dump
+*.jsonl
+package-lock.json
+*.ged
+
+# Local migration reports
+/reports/

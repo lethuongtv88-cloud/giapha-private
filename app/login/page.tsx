@@ -28,7 +28,7 @@ export default function LoginPage() {
       const hostname = window.location.hostname;
       if (hostname === config.demoDomain) {
         setIsDemo(true);
-        setEmail("giaphaos@homielab.com");
+        setEmail("admin@thuongle.net");
         setPassword("giaphaos");
       }
     }

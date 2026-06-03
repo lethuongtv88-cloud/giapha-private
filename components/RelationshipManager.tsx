@@ -31,6 +31,9 @@ interface EnrichedRelationship {
   direction: "parent" | "child" | "spouse" | "child_in_law";
   targetPerson: Person;
   note: string | null;
+  status?: string | null;
+  ended_at?: string | null;
+  divorce_note?: string | null;
 }
 
 export default function RelationshipManager({
@@ -111,12 +114,14 @@ export default function RelationshipManager({
       const { data: relsA, error: errA } = await supabase
         .from("relationships")
         .select(`*, target:persons!person_b(*)`) // if I am A, target is B
-        .eq("person_a", personId);
+        .eq("person_a", personId)
+        .is("deleted_at", null);
 
       const { data: relsB, error: errB } = await supabase
-        .from("relationships")
-        .select(`*, target:persons!person_a(*)`) // if I am B, target is A
-        .eq("person_b", personId);
+       .from("relationships")
+       .select(`*, target:persons!person_a(*)`) // if I am B, target is A
+       .eq("person_b", personId)
+       .is("deleted_at", null);
 
       if (errA || errB) throw errA || errB;
 
@@ -135,6 +140,9 @@ export default function RelationshipManager({
           direction,
           targetPerson: r.target,
           note: r.note,
+          status: r.status,
+          ended_at: r.ended_at,
+          divorce_note: r.divorce_note,
         });
       });
 
@@ -151,6 +159,9 @@ export default function RelationshipManager({
           direction,
           targetPerson: r.target,
           note: r.note,
+          status: r.status,
+          ended_at: r.ended_at,
+          divorce_note: r.divorce_note,
         });
       });
 
@@ -161,14 +172,15 @@ export default function RelationshipManager({
 
       if (childrenIds.length > 0) {
         const { data: childrenMarriages } = await supabase
-          .from("relationships")
-          .select(
-            `*, person_a_data:persons!person_a(*), person_b_data:persons!person_b(*)`,
-          )
-          .eq("type", "marriage")
-          .or(
-            `person_a.in.(${childrenIds.join(",")}),person_b.in.(${childrenIds.join(",")})`,
-          );
+         .from("relationships")
+         .select(
+           `*, person_a_data:persons!person_a(*), person_b_data:persons!person_b(*)`,
+         )
+         .eq("type", "marriage")
+         .is("deleted_at", null)
+         .or(
+           `person_a.in.(${childrenIds.join(",")}),person_b.in.(${childrenIds.join(",")})`,
+         );
 
         if (childrenMarriages) {
           childrenMarriages.forEach((m) => {
@@ -193,6 +205,9 @@ export default function RelationshipManager({
                 direction: "child_in_law",
                 targetPerson: spousePerson,
                 note: noteLabel,
+                status: m.status,
+                ended_at: m.ended_at,
+                divorce_note: m.divorce_note,
               });
             }
           });
@@ -229,7 +244,8 @@ export default function RelationshipManager({
             .from("relationships")
             .select("id, person_a")
             .in("type", ["biological_child", "adopted_child"])
-            .in("person_a", childrenIds);
+            .in("person_a", childrenIds)
+            .is("deleted_at", null);
 
           if (grandchildrenData) {
             const maleChildrenIds = formattedRels
@@ -286,7 +302,7 @@ export default function RelationshipManager({
       }
 
       const { data } = await supabase
-        .from("persons")
+        .from("persons_active")
         .select("*")
         .ilike("full_name", `%${searchTerm}%`)
         .neq("id", personId) // Exclude self
@@ -304,7 +320,7 @@ export default function RelationshipManager({
     if (isAdding && recentMembers.length === 0) {
       const fetchRecent = async () => {
         const { data } = await supabase
-          .from("persons")
+          .from("persons_active")
           .select("*")
           .neq("id", personId)
           .order("created_at", { ascending: false })
@@ -599,9 +615,12 @@ export default function RelationshipManager({
     if (!confirm("Bạn có chắc chắn muốn xóa mối quan hệ này?")) return;
     try {
       const { error } = await supabase
-        .from("relationships")
-        .delete()
-        .eq("id", relId);
+       .from("relationships")
+       .update({
+         deleted_at: new Date().toISOString(),
+       })
+       .eq("id", relId)
+       .is("deleted_at", null);
       if (error) throw error;
       fetchRelationships();
       router.refresh();
@@ -609,6 +628,64 @@ export default function RelationshipManager({
       const e = err as Error;
       setError("Không thể xóa: " + e.message);
       setTimeout(() => setError(null), 5000);
+    }
+  };
+
+  const handleDivorce = async (rel: EnrichedRelationship) => {
+    if (rel.type !== "marriage" || rel.direction !== "spouse") return;
+
+    if (rel.status === "divorced") {
+      setError("Quan hệ này đã được đánh dấu ly hôn rồi.");
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+
+    const ok = confirm(
+      `Đánh dấu ly hôn giữa ${person.full_name} và ${rel.targetPerson.full_name}?\n\nThao tác này không xóa quan hệ, chỉ đổi trạng thái để giữ lịch sử.`,
+    );
+
+    if (!ok) return;
+
+    setProcessing(true);
+    setError(null);
+
+    try {
+      const now = new Date();
+
+      const { error: relError } = await supabase
+        .from("relationships")
+        .update({
+          status: "divorced",
+          ended_at: now.toISOString(),
+        })
+        .eq("id", rel.id)
+        .eq("type", "marriage")
+        .is("deleted_at", null);
+
+      if (relError) throw relError;
+
+      // Đồng bộ Family Model nếu family được migrate từ relationship legacy này.
+      // Nếu không có family khớp, update vẫn an toàn và không ảnh hưởng dữ liệu khác.
+      const { error: familyError } = await supabase
+        .from("families")
+        .update({
+          status: "divorced",
+          end_year: now.getFullYear(),
+          updated_at: now.toISOString(),
+        })
+        .eq("legacy_relationship_id", rel.id)
+        .is("deleted_at", null);
+
+      if (familyError) throw familyError;
+
+      fetchRelationships();
+      router.refresh();
+    } catch (err: unknown) {
+      const e = err as Error;
+      setError("Không thể đánh dấu ly hôn: " + e.message);
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -692,6 +769,11 @@ export default function RelationshipManager({
                             ({rel.note})
                           </span>
                         )}
+                        {rel.status === "divorced" && (
+                          <span className="text-xs text-red-600 font-semibold mt-0.5">
+                            Đã ly hôn
+                          </span>
+                        )}
                         {rel.type === "adopted_child" && (
                           <span className="text-xs text-stone-400 italic mt-0.5">
                             (Con nuôi)
@@ -700,30 +782,58 @@ export default function RelationshipManager({
                       </div>
                     </button>
                     {canEdit && rel.direction !== "child_in_law" && (
-                      <button
-                        onClick={() => handleDelete(rel.id)}
-                        className="text-stone-300 hover:text-red-500 hover:bg-red-50 p-2 sm:p-2.5 rounded-lg transition-colors flex items-center justify-center ml-2"
-                        title="Xóa mối quan hệ"
-                        aria-label="Xóa mối quan hệ"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                      <div className="ml-2 flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        {rel.type === "marriage" && rel.direction === "spouse" && rel.status !== "divorced" && (
+                          <button
+                            onClick={() => handleDivorce(rel)}
+                            disabled={processing}
+                            className="text-stone-300 hover:text-red-600 hover:bg-red-50 p-2 sm:p-2.5 rounded-lg transition-colors flex items-center justify-center disabled:opacity-50"
+                            title="Đánh dấu ly hôn"
+                            aria-label="Đánh dấu ly hôn"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M12 21C7 17 3 13.5 3 8.8A4.8 4.8 0 0 1 11.1 5.4L12 6.4l.9-1A4.8 4.8 0 0 1 21 8.8c0 1.9-.7 3.6-1.9 5.2" />
+                              <path d="M12 21l3.2-3.1" />
+                              <path d="M15 14l-3 4h4l-3 4" />
+                            </svg>
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => handleDelete(rel.id)}
+                          className="text-stone-300 hover:text-red-500 hover:bg-red-50 p-2 sm:p-2.5 rounded-lg transition-colors flex items-center justify-center"
+                          title="Xóa mối quan hệ"
+                          aria-label="Xóa mối quan hệ"
                         >
-                          <path d="M3 6h18" />
-                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                          <line x1="10" x2="10" y1="11" y2="17" />
-                          <line x1="14" x2="14" y1="11" y2="17" />
-                        </svg>
-                      </button>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M3 6h18" />
+                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                            <line x1="10" x2="10" y1="11" y2="17" />
+                            <line x1="14" x2="14" y1="11" y2="17" />
+                          </svg>
+                        </button>
+                      </div>
                     )}
                   </li>
                 ))}

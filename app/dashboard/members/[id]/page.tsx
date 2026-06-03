@@ -21,7 +21,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
 
   // Fetch Person Public Data
   const { data: person, error } = await supabase
-    .from("persons")
+    .from("persons_active")
     .select("*")
     .eq("id", id)
     .single();

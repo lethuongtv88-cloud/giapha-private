@@ -7,8 +7,10 @@ import { Person, Relationship } from "@/types";
 import { useEffect, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
+import { featureFlags } from "@/lib/featureFlags";
 
 const FamilyTree = dynamic(() => import("@/components/FamilyTree"));
+const VietnameseFamilyTree = dynamic(() => import("@/components/VietnameseFamilyTree"));
 const MindmapTree = dynamic(() => import("@/components/MindmapTree"));
 const BubbleMapTree = dynamic(
   () =>
@@ -25,16 +27,55 @@ const BubbleMapTree = dynamic(
   { ssr: false },
 );
 
-interface MembersViewsProps {
+type FamilyRow = {
+  id: string;
+  type?: string | null;
+  status?: string | null;
+  start_year?: number | null;
+  end_year?: number | null;
+  note?: string | null;
+  legacy_relationship_id?: string | null;
+  version?: number | null;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+type FamilyParentRow = {
+  id: string;
+  family_id: string;
+  person_id: string;
+  role?: string | null;
+  sort_order?: number | null;
+};
+
+type FamilyChildRow = {
+  id: string;
+  family_id: string;
+  person_id: string;
+  relationship_type?: string | null;
+  sort_order?: number | null;
+  legacy_relationship_id?: string | null;
+  migration_confidence?: string | null;
+};
+
+type MembersViewsProps = {
   persons: Person[];
   relationships: Relationship[];
+  families?: FamilyRow[];
+  familyParents?: FamilyParentRow[];
+  familyChildren?: FamilyChildRow[];
   canEdit?: boolean;
-}
+};
 
 export default function MembersViews({
   persons,
   relationships,
-  canEdit = false,
+  families = [],
+  familyParents = [],
+  familyChildren = [],
+  canEdit,
 }: MembersViewsProps) {
   const { view: currentView, rootId, setView, setRootId } = useMemberListView();
   const searchParams = useSearchParams();
@@ -151,14 +192,25 @@ export default function MembersViews({
         )}
 
         <div className="flex-1 w-full relative z-10">
-          {currentView === "tree" && (
-            <FamilyTree
+          {currentView === "tree" &&
+           (featureFlags.vietnameseTreeLayout ? (
+             <VietnameseFamilyTree
+               personsMap={personsMap}
+               relationships={relationships}
+               families={families}
+               familyParents={familyParents}
+               familyChildren={familyChildren}
+               roots={roots}
+               canEdit={canEdit}
+             />
+          ) : (
+             <FamilyTree
               personsMap={personsMap}
               relationships={relationships}
               roots={roots}
               canEdit={canEdit}
-            />
-          )}
+             />
+        ))}
           {currentView === "mindmap" && (
             <MindmapTree
               personsMap={personsMap}

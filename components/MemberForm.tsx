@@ -344,7 +344,8 @@ export default function MemberForm({
         const { error: updateError } = await supabase
           .from("persons")
           .update(getPersonData(currentAvatarUrl || null))
-          .eq("id", currentPersonId);
+          .eq("id", currentPersonId)
+          .is("deleted_at", null);
         if (updateError) throw updateError;
       }
 
@@ -371,7 +372,8 @@ export default function MemberForm({
         const { error: updateAvatarError } = await supabase
           .from("persons")
           .update({ avatar_url: currentAvatarUrl })
-          .eq("id", currentPersonId);
+          .eq("id", currentPersonId)
+          .is("deleted_at", null);
         if (updateAvatarError) throw updateAvatarError;
       }
 

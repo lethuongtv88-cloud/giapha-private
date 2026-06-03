@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import { memo, useState } from "react";
 import DefaultAvatar from "./DefaultAvatar";
+import { formatPersonLifespan } from '@/compat/personDateDisplay.compat';
 
 import { getAvatarBg } from "@/utils/styleHelprs";
 import { AdjacencyLists, getFilteredTreeData } from "@/utils/treeHelpers";
@@ -76,6 +77,7 @@ export const MindmapNode = memo(
     if (!data.person) return null;
 
     const hasChildren = data.children.length > 0;
+    const lifespan = formatPersonLifespan(data.person);
 
     return (
       <div className={`relative py-1.5 ${level > 0 ? "pl-6" : "pl-0"}`}>
@@ -177,9 +179,7 @@ export const MindmapNode = memo(
                           />
                         </svg>
                         <span className="truncate">
-                          {data.person.birth_year || "Chưa rõ"}
-                          {data.person.is_deceased &&
-                            ` → ${data.person.death_lunar_year || data.person.death_year || "Chưa rõ"}`}
+                          {lifespan || 'Chưa rõ'}
                         </span>
                       </span>
                       {(data.person.is_deceased || data.person.is_in_law) && (

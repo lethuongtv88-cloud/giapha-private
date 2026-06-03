@@ -138,7 +138,7 @@ export async function exportData(
   // Fetch ALL persons and relationships first to perform traversal in memory.
   // This is safe since typical family trees are < 10,000 nodes, easily fitting in memory.
   const { data: allPersons, error: personsError } = await supabase
-    .from("persons")
+    .from("persons_active")
     .select(
       "id, full_name, gender, birth_year, birth_month, birth_day, death_year, death_month, death_day, death_lunar_year, death_lunar_month, death_lunar_day, is_deceased, is_in_law, birth_order, generation, other_names, avatar_url, note, created_at, updated_at",
     )
@@ -148,7 +148,7 @@ export async function exportData(
     return { error: "Lỗi tải dữ liệu persons: " + personsError.message };
 
   const { data: allRels, error: relationshipsError } = await supabase
-    .from("relationships")
+    .from("relationships_active")
     .select("id, type, person_a, person_b, note, created_at, updated_at")
     .order("created_at", { ascending: true });
 

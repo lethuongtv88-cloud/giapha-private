@@ -3,12 +3,13 @@ import MembersViews from "@/components/MembersViews";
 import MemberDetailModal from "@/components/modal/MemberDetailModal";
 import ViewToggle from "@/components/ViewToggle";
 import { getProfile, getSupabase } from "@/utils/supabase/queries";
-
+import { hydratePersonsWithDateEvents } from "@/compat/dateHydration.compat";
 import { ViewMode } from "@/components/ViewToggle";
 
 interface PageProps {
   searchParams: Promise<{ view?: string; rootId?: string; avatar?: string }>;
 }
+
 export default async function FamilyTreePage({ searchParams }: PageProps) {
   const { view, rootId, avatar } = await searchParams;
   const initialView = view as ViewMode | undefined;
@@ -17,24 +18,48 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
   const profile = await getProfile();
   const canEdit = profile?.role === "admin" || profile?.role === "editor";
 
-  // If view is list, we only need persons, not relationships.
-  // We fetch persons for all views to pass down as a prop if we want, or let components fetch.
-  // Actually, to make transitions fast and avoid duplicate fetching across components,
-  // we will fetch data here and pass it down as props.
   const supabase = await getSupabase();
 
-  const [personsRes, relsRes] = await Promise.all([
+  const [
+    personsRes,
+    relsRes,
+    familiesRes,
+    familyParentsRes,
+    familyChildrenRes,
+  ] = await Promise.all([
     supabase
-      .from("persons")
+      .from("persons_active")
       .select("*")
       .order("birth_year", { ascending: true, nullsFirst: false }),
-    supabase.from("relationships").select("*"),
+
+    supabase.from("relationships_active").select("*"),
+
+    supabase
+      .from("families")
+      .select("*")
+      .is("deleted_at", null)
+      .order("start_year", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true, nullsFirst: false }),
+
+    supabase
+      .from("family_parents")
+      .select("*")
+      .order("sort_order", { ascending: true, nullsFirst: false }),
+
+    supabase
+      .from("family_children")
+      .select("*")
+      .order("sort_order", { ascending: true, nullsFirst: false }),
   ]);
 
-  const persons = personsRes.data || [];
+  const rawPersons = personsRes.data || [];
+  const persons = await hydratePersonsWithDateEvents(supabase, rawPersons);
   const relationships = relsRes.data || [];
 
-  // Prepare map and roots for tree views
+  const families = familiesRes.data || [];
+  const familyParents = familyParentsRes.data || [];
+  const familyChildren = familyChildrenRes.data || [];
+
   const personsMap = new Map();
   persons.forEach((p) => personsMap.set(p.id, p));
 
@@ -48,13 +73,13 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
 
   let finalRootId = rootId;
 
-  // If no rootId is provided, fallback to the earliest created person
   if (!finalRootId || !personsMap.has(finalRootId)) {
     const rootsFallback = persons.filter((p) => !childIds.has(p.id));
+
     if (rootsFallback.length > 0) {
       finalRootId = rootsFallback[0].id;
     } else if (persons.length > 0) {
-      finalRootId = persons[0].id; // ultimate fallback
+      finalRootId = persons[0].id;
     }
   }
 
@@ -65,9 +90,13 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
       initialShowAvatar={initialShowAvatar}
     >
       <ViewToggle />
+
       <MembersViews
         persons={persons}
         relationships={relationships}
+        families={families}
+        familyParents={familyParents}
+        familyChildren={familyChildren}
         canEdit={canEdit}
       />
 
