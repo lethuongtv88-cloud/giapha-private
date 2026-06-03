@@ -94,3 +94,34 @@ describe("buildGedcomCommitPlan", () => {
     expect(plan.counts.persons).toBe(0);
   });
 });
+  it("blocks commit when pending possible matches remain", () => {
+    const plan = buildGedcomCommitPlan({
+      sessionId: "s1",
+      records: [
+        {
+          id: "r1",
+          record_type: "person",
+          external_id: "I1",
+          parent_external_id: null,
+          action: "match",
+          confidence: "review",
+          status: "pending",
+          normalized_payload: {
+            full_name: "Nguyễn Văn A",
+            matched_person_id: "existing-p1",
+            match_level: "weak",
+          },
+          warnings: [],
+          errors: [],
+          sort_order: 1,
+        },
+      ],
+    });
+
+    expect(plan.ok).toBe(false);
+    expect(
+      plan.issues.some((issue) =>
+        issue.title.includes("possible matches chưa duyệt"),
+      ),
+    ).toBe(true);
+  });

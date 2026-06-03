@@ -66,6 +66,18 @@ BEGIN
   INTO v_error_count
   FROM public.import_staging_records
   WHERE session_id = p_session_id
+    AND record_type = 'person'
+    AND action = 'match'
+    AND status = 'pending';
+
+  IF v_error_count > 0 THEN
+    RAISE EXCEPTION 'pending_possible_matches: còn % person possible matches chưa duyệt. Hãy xử lý trong Match Review trước khi commit', v_error_count;
+  END IF;
+
+  SELECT COUNT(*)
+  INTO v_error_count
+  FROM public.import_staging_records
+  WHERE session_id = p_session_id
     AND status = 'approved'
     AND action = 'create'
     AND jsonb_array_length(COALESCE(errors, '[]'::jsonb)) > 0;

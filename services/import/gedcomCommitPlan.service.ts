@@ -73,6 +73,23 @@ export function buildGedcomCommitPlan(input: {
     unsupported: 0,
   };
 
+  const pendingPersonMatches = input.records.filter((record) => {
+    return (
+      record.record_type === "person" &&
+      record.action === "match" &&
+      record.status === "pending"
+    );
+  });
+
+  if (pendingPersonMatches.length > 0) {
+    issues.push({
+      severity: "error",
+      title: "Còn possible matches chưa duyệt",
+      description: `Session còn ${pendingPersonMatches.length} person records action=match status=pending. Hãy mở Match Review để skip hoặc chuyển thành create trước khi commit.`,
+      recordType: "person",
+    });
+  }
+
   for (const record of approved) {
     const externalId = record.external_id;
 
