@@ -108,12 +108,9 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
     const externalId = String(person.id ?? person.external_id ?? `person_${records.length + 1}`);
     personIdMap.set(externalId, externalId);
 
-    const fullName =
-      person.full_name ??
-      person.name ??
-      person.gedcom_name ??
-      person.display_name ??
-      "Chưa rõ tên";
+    const fullName = getGedcomPersonFullName(person);
+    const surname = getGedcomPersonSurname(person);
+    const givenName = getGedcomPersonGivenName(person);
 
     records.push({
       record_type: "person",
@@ -151,12 +148,17 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
       payload: {
         person_external_id: externalId,
         full_name: fullName,
+        surname,
+        given_name: givenName,
       },
       normalized_payload: {
         person_external_id: externalId,
         full_name: fullName,
+        surname,
+        given_name: givenName,
         is_primary: true,
-        name_type: "primary",
+        name_type: "birth",
+        language: "vi",
       },
       warnings: [],
       errors: [],
@@ -414,6 +416,50 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
     warnings,
     errors,
   };
+}
+
+function getGedcomPersonFullName(person: Record<string, any>): string {
+  const candidates = [
+    person.full_name,
+    person.fullName,
+    person.name,
+    person.gedcom_name,
+    person.display_name,
+    person.full_text,
+  ];
+
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim() && value.trim() !== "Unknown") {
+      return value.trim();
+    }
+  }
+
+  if (Array.isArray(person.names)) {
+    for (const name of person.names) {
+      const value =
+        name?.full_name ??
+        name?.fullName ??
+        name?.full_text ??
+        name?.name ??
+        null;
+
+      if (typeof value === "string" && value.trim() && value.trim() !== "Unknown") {
+        return value.trim();
+      }
+    }
+  }
+
+  return "Chưa rõ tên";
+}
+
+function getGedcomPersonSurname(person: Record<string, any>): string | null {
+  const value = person.surname ?? person.last_name ?? person.family_name;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function getGedcomPersonGivenName(person: Record<string, any>): string | null {
+  const value = person.given_name ?? person.givenName ?? person.first_name;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function emptySummary(warnings: number, errors: number) {
