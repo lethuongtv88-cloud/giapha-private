@@ -306,6 +306,8 @@ function RecordCard({
       <StagingRecordActions
         sessionId={sessionId}
         recordId={record.id}
+        recordType={record.record_type}
+        currentAction={record.action}
         currentStatus={record.status as any}
       />
     </div>

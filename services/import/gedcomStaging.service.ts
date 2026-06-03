@@ -160,6 +160,9 @@ export function buildGedcomStagingPreview(
       existingPersons,
     );
 
+    const blocksCreateForPossibleMatch =
+      match.level === "strong" || match.level === "medium";
+
     const personWarnings: string[] = [];
     let action: ImportStagingRecordDraft["action"] = "create";
     let status: ImportStagingRecordDraft["status"] = "pending";
@@ -226,9 +229,9 @@ export function buildGedcomStagingPreview(
       record_type: "name",
       external_id: `${externalId}:primary_name`,
       parent_external_id: externalId,
-      action: match.level === "strong" ? "skip" : "create",
-      confidence: match.level === "strong" ? "certain" : confidence,
-      status: match.level === "strong" ? "skipped" : "pending",
+      action: blocksCreateForPossibleMatch ? "skip" : "create",
+      confidence: blocksCreateForPossibleMatch ? "review" : confidence,
+      status: blocksCreateForPossibleMatch ? "skipped" : "pending",
       payload: {
         person_external_id: externalId,
         full_name: fullName,
@@ -245,8 +248,8 @@ export function buildGedcomStagingPreview(
         language: "vi",
       },
       warnings:
-        match.level === "strong"
-          ? ["Person đã match chắc với dữ liệu hiện có, không tạo person_name mới."]
+        blocksCreateForPossibleMatch
+          ? ["Person đã match/nghi trùng với dữ liệu hiện có, không tạo person_name mới."]
           : [],
       errors: [],
       sort_order: records.length,
@@ -260,9 +263,9 @@ export function buildGedcomStagingPreview(
         record_type: "event",
         external_id: eventExternalId,
         parent_external_id: externalId,
-        action: match.level === "strong" ? "skip" : "create",
-        confidence: match.level === "strong" ? "certain" : "certain",
-        status: match.level === "strong" ? "skipped" : "pending",
+        action: blocksCreateForPossibleMatch ? "skip" : "create",
+        confidence: blocksCreateForPossibleMatch ? "review" : "certain",
+        status: blocksCreateForPossibleMatch ? "skipped" : "pending",
         payload: person,
         normalized_payload: {
           type: "birth",
@@ -274,14 +277,14 @@ export function buildGedcomStagingPreview(
           legacy_source: "gedcom.birth",
         },
         warnings:
-          match.level === "strong"
-            ? ["Person đã match chắc với dữ liệu hiện có, không tạo birth event mới."]
+          blocksCreateForPossibleMatch
+            ? ["Person đã match/nghi trùng với dữ liệu hiện có, không tạo birth event mới."]
             : [],
         errors: [],
         sort_order: records.length,
       });
 
-      if (match.level !== "strong") {
+      if (!blocksCreateForPossibleMatch) {
         records.push({
           record_type: "person_event",
           external_id: `${eventExternalId}:person_event`,
@@ -309,9 +312,9 @@ export function buildGedcomStagingPreview(
         record_type: "event",
         external_id: eventExternalId,
         parent_external_id: externalId,
-        action: match.level === "strong" ? "skip" : deathYear ? "create" : "skip",
-        confidence: deathYear ? "certain" : "review",
-        status: match.level === "strong" || !deathYear ? "skipped" : "pending",
+        action: blocksCreateForPossibleMatch ? "skip" : deathYear ? "create" : "skip",
+        confidence: blocksCreateForPossibleMatch ? "review" : deathYear ? "certain" : "review",
+        status: blocksCreateForPossibleMatch || !deathYear ? "skipped" : "pending",
         payload: person,
         normalized_payload: deathYear
           ? {
@@ -335,8 +338,8 @@ export function buildGedcomStagingPreview(
               legacy_source: "gedcom.death_no_date",
             },
         warnings:
-          match.level === "strong"
-            ? ["Person đã match chắc với dữ liệu hiện có, không tạo death event mới."]
+          blocksCreateForPossibleMatch
+            ? ["Person đã match/nghi trùng với dữ liệu hiện có, không tạo death event mới."]
             : deathYear
               ? []
               : [
@@ -346,7 +349,7 @@ export function buildGedcomStagingPreview(
         sort_order: records.length,
       });
 
-      if (match.level !== "strong" && deathYear) {
+      if (!blocksCreateForPossibleMatch && deathYear) {
         records.push({
           record_type: "person_event",
           external_id: `${eventExternalId}:person_event`,
@@ -368,11 +371,10 @@ export function buildGedcomStagingPreview(
     }
   }
 
-  const strongMatchedPersonIds = new Set(
+  const matchedOrPossibleMatchedPersonIds = new Set(
     records
       .filter((record) => record.record_type === "person")
       .filter((record) => record.action === "match")
-      .filter((record) => record.status === "skipped")
       .map((record) => record.external_id)
       .filter(Boolean) as string[],
   );
@@ -387,7 +389,7 @@ export function buildGedcomStagingPreview(
         continue;
       }
 
-      if (strongMatchedPersonIds.has(a) || strongMatchedPersonIds.has(b)) {
+      if (matchedOrPossibleMatchedPersonIds.has(a) || matchedOrPossibleMatchedPersonIds.has(b)) {
         records.push({
           record_type: "warning",
           external_id: null,
@@ -478,7 +480,7 @@ export function buildGedcomStagingPreview(
       continue;
     }
 
-    if (strongMatchedPersonIds.has(parentId) || strongMatchedPersonIds.has(childId)) {
+    if (matchedOrPossibleMatchedPersonIds.has(parentId) || matchedOrPossibleMatchedPersonIds.has(childId)) {
       records.push({
         record_type: "warning",
         external_id: null,

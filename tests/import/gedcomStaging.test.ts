@@ -73,3 +73,39 @@ describe("buildGedcomStagingPreview", () => {
     expect(person?.normalized_payload.matched_person_id).toBe("existing-p1");
     expect(preview.summary.matches).toBe(1);
   });
+  it("blocks dependent create records for possible duplicate person", () => {
+    const gedcom = [
+      "0 HEAD",
+      "1 GEDC",
+      "2 VERS 5.5.1",
+      "1 CHAR UTF-8",
+      "0 @I1@ INDI",
+      "1 NAME Văn An /Nguyễn/",
+      "1 SEX M",
+      "1 BIRT",
+      "2 DATE 1981",
+      "0 TRLR",
+    ].join("\n");
+
+    const preview = buildGedcomStagingPreview(gedcom, {
+      existingPersons: [
+        {
+          id: "existing-p1",
+          full_name: "Nguyễn Văn An",
+          gender: "male",
+          birth_year: 1981,
+        },
+      ],
+    });
+
+    const person = preview.records.find((r) => r.record_type === "person");
+    expect(person?.action).toBe("match");
+
+    const name = preview.records.find((r) => r.record_type === "name");
+    expect(name?.action).toBe("skip");
+    expect(name?.status).toBe("skipped");
+
+    const event = preview.records.find((r) => r.record_type === "event");
+    expect(event?.action).toBe("skip");
+    expect(event?.status).toBe("skipped");
+  });

@@ -210,3 +210,157 @@ async function updateSessionReviewStatus(sessionId: string) {
     })
     .eq("id", sessionId);
 }
+export async function markMatchedPersonAsCreate(input: {
+  sessionId: string;
+  recordId: string;
+}) {
+  const supabase = await getSupabase();
+
+  const { data: personRecord, error: loadError } = await supabase
+    .from("import_staging_records")
+    .select("id, external_id, record_type, action, status")
+    .eq("id", input.recordId)
+    .eq("session_id", input.sessionId)
+    .single();
+
+  if (loadError || !personRecord) {
+    return {
+      ok: false as const,
+      error: loadError?.message ?? "Không tìm thấy staging person record.",
+    };
+  }
+
+  if (personRecord.record_type !== "person") {
+    return {
+      ok: false as const,
+      error: "Chỉ person record mới có thể chuyển từ match sang create.",
+    };
+  }
+
+  const externalId = personRecord.external_id;
+
+  if (!externalId) {
+    return {
+      ok: false as const,
+      error: "Person record thiếu external_id.",
+    };
+  }
+
+  const { error: personUpdateError } = await supabase
+    .from("import_staging_records")
+    .update({
+      action: "create",
+      status: "pending",
+      confidence: "review",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.recordId)
+    .eq("session_id", input.sessionId)
+    .neq("status", "committed");
+
+  if (personUpdateError) {
+    return {
+      ok: false as const,
+      error: personUpdateError.message,
+    };
+  }
+
+  const { error: nameUpdateError } = await supabase
+    .from("import_staging_records")
+    .update({
+      action: "create",
+      status: "pending",
+      confidence: "review",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("session_id", input.sessionId)
+    .eq("record_type", "name")
+    .eq("parent_external_id", externalId)
+    .neq("status", "committed");
+
+  if (nameUpdateError) {
+    return {
+      ok: false as const,
+      error: nameUpdateError.message,
+    };
+  }
+
+  const { data: eventRecords, error: eventsLoadError } = await supabase
+    .from("import_staging_records")
+    .select("id, external_id, normalized_payload")
+    .eq("session_id", input.sessionId)
+    .eq("record_type", "event")
+    .eq("parent_external_id", externalId)
+    .neq("status", "committed");
+
+  if (eventsLoadError) {
+    return {
+      ok: false as const,
+      error: eventsLoadError.message,
+    };
+  }
+
+  const eventIdsToCreate = (eventRecords ?? [])
+    .filter((record: any) => {
+      return Boolean(record.normalized_payload?.start_date);
+    })
+    .map((record: any) => record.id);
+
+  const eventExternalIds = (eventRecords ?? [])
+    .filter((record: any) => {
+      return Boolean(record.normalized_payload?.start_date);
+    })
+    .map((record: any) => record.external_id)
+    .filter(Boolean);
+
+  if (eventIdsToCreate.length > 0) {
+    const { error: eventUpdateError } = await supabase
+      .from("import_staging_records")
+      .update({
+        action: "create",
+        status: "pending",
+        confidence: "review",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("session_id", input.sessionId)
+      .in("id", eventIdsToCreate)
+      .neq("status", "committed");
+
+    if (eventUpdateError) {
+      return {
+        ok: false as const,
+        error: eventUpdateError.message,
+      };
+    }
+  }
+
+  if (eventExternalIds.length > 0) {
+    const { error: personEventUpdateError } = await supabase
+      .from("import_staging_records")
+      .update({
+        action: "create",
+        status: "pending",
+        confidence: "review",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("session_id", input.sessionId)
+      .eq("record_type", "person_event")
+      .in("parent_external_id", eventExternalIds)
+      .neq("status", "committed");
+
+    if (personEventUpdateError) {
+      return {
+        ok: false as const,
+        error: personEventUpdateError.message,
+      };
+    }
+  }
+
+  await updateSessionReviewStatus(input.sessionId);
+
+  revalidatePath(`/dashboard/import/${input.sessionId}`);
+
+  return {
+    ok: true as const,
+  };
+}
