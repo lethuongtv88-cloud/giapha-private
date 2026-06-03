@@ -132,8 +132,9 @@ BEGIN
     VALUES (
       COALESCE(NULLIF(v_payload->>'full_name', ''), 'Chưa rõ tên'),
       CASE
-        WHEN v_payload->>'gender' IN ('male', 'female', 'other') THEN v_payload->>'gender'
-        ELSE 'other'
+        WHEN v_payload->>'gender' IN ('male', 'female', 'other')
+        THEN (v_payload->>'gender')::public.gender_enum
+        ELSE 'other'::public.gender_enum
       END,
       NULLIF(v_payload->>'birth_year', '')::INT,
       NULLIF(v_payload->>'birth_month', '')::INT,
