@@ -7,6 +7,7 @@ import {
   StagingSessionBulkActions,
 } from "@/components/ImportStagingRecordActions";
 import GedcomCommitPlanPanel from "@/components/GedcomCommitPlanPanel";
+import GedcomCommitExecutePanel from "@/components/GedcomCommitExecutePanel";
 
 export const metadata = {
   title: "GEDCOM staging preview",
@@ -409,6 +410,7 @@ export default async function ImportSessionPreviewPage({ params }: PageProps) {
         </section>
         <StagingSessionBulkActions sessionId={session.id} />
         <GedcomCommitPlanPanel sessionId={session.id} />
+        <GedcomCommitExecutePanel sessionId={session.id} />
         {recordsRes.error ? (
           <section className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">
             <div className="font-bold">Không tải được staging records</div>
