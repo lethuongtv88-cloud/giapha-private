@@ -66,7 +66,7 @@ export function exportToGedcomWithWarnings(data: ExportData): GedcomExportResult
 
   const xref = new Map<string, string>();
   persons.forEach((person, i) => {
-    if (person.id) xref.set(person.id, `I${i + 1}`);
+    if (person.id) xref.set(person.id, person.id);
   });
 
   const getIndi = (id?: string) => {

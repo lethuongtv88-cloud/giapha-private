@@ -79,9 +79,9 @@ describe("GEDCOM exporter v2.3.4 Family/Event", () => {
     });
 
     expect(result.content).toContain("0 @Ffam1@ FAM");
-    expect(result.content).toContain("1 HUSB @I1@");
-    expect(result.content).toContain("1 WIFE @I2@");
-    expect(result.content).toContain("1 CHIL @I3@");
+    expect(result.content).toContain("1 HUSB @father@");
+    expect(result.content).toContain("1 WIFE @mother@");
+    expect(result.content).toContain("1 CHIL @child@");
   });
 
   it("exports birth and death from Event Model before legacy dates", () => {
@@ -155,4 +155,27 @@ describe("GEDCOM exporter v2.3.4 Family/Event", () => {
     expect(out).toContain("1 NAME Văn Tên Chính /Nguyễn/");
     expect(out).not.toContain("1 NAME Legacy /Tên/");
   });
+});
+it("uses stable person id as GEDCOM INDI XREF", () => {
+  const personId = "72304db3-6e08-44f5-965e-9eba363e4c31";
+
+  const result = exportToGedcomWithWarnings({
+    persons: [
+      {
+        id: personId,
+        full_name: "Chồng Oanh",
+        gender: "male",
+        is_deceased: false,
+      } as any,
+    ],
+    relationships: [],
+    families: [],
+    familyParents: [],
+    familyChildren: [],
+    events: [],
+    personEvents: [],
+    personNames: [],
+  } as any);
+
+  expect(result.content).toContain(`0 @${personId}@ INDI`);
 });
