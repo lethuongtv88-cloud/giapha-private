@@ -18,6 +18,7 @@ export default function DataImportExport() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportWarnings, setExportWarnings] = useState<string[]>([]);
 
   const [persons, setPersons] = useState<Person[]>([]);
   const [exportRootId, setExportRootId] = useState<string | null>(null);
@@ -42,6 +43,7 @@ export default function DataImportExport() {
   const handleExport = async (format: "json" | "gedcom" | "csv") => {
     try {
       setIsExporting(true);
+      setExportWarnings([]);
       const rootParam = exportRootId || undefined;
       const data = await exportData(rootParam);
 
@@ -75,8 +77,10 @@ export default function DataImportExport() {
         type = "application/json";
         extension = "json";
       } else {
-        const { exportToGedcom } = await import("@/utils/gedcom");
-        content = exportToGedcom(data);
+        const { exportToGedcomWithWarnings } = await import("@/utils/gedcom");
+        const result = exportToGedcomWithWarnings(data as any);
+        content = result.content;
+        setExportWarnings(result.warnings);
         type = "text/plain";
         extension = "ged";
       }
@@ -288,6 +292,34 @@ export default function DataImportExport() {
                 <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100 flex items-center gap-2 text-left">
                   <AlertTriangle className="w-5 h-5 shrink-0 text-red-500" />
                   <span>{exportError}</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {exportWarnings.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-4"
+              >
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 text-left">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500" />
+                    <span>GEDCOM export có cảnh báo</span>
+                  </div>
+                  <ul className="mt-2 list-inside list-disc space-y-1">
+                    {exportWarnings.slice(0, 8).map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                  {exportWarnings.length > 8 ? (
+                    <div className="mt-2 text-xs text-amber-700">
+                      Và {exportWarnings.length - 8} cảnh báo khác.
+                    </div>
+                  ) : null}
                 </div>
               </motion.div>
             )}
