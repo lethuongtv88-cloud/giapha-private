@@ -109,3 +109,41 @@ describe("buildGedcomStagingPreview", () => {
     expect(event?.action).toBe("skip");
     expect(event?.status).toBe("skipped");
   });
+  it("marks weak duplicate candidate as pending match instead of create", () => {
+    const gedcom = [
+      "0 HEAD",
+      "1 GEDC",
+      "2 VERS 5.5.1",
+      "1 CHAR UTF-8",
+      "0 @I1@ INDI",
+      "1 NAME Ngọc Đang /Nguyễn/",
+      "1 SEX F",
+      "0 TRLR",
+    ].join("\n");
+
+    const preview = buildGedcomStagingPreview(gedcom, {
+      existingPersons: [
+        {
+          id: "existing-p1",
+          full_name: "Nguyễn Ngọc Đang",
+          gender: "female",
+          birth_year: null,
+          birth_month: null,
+          birth_day: null,
+        },
+      ],
+    });
+
+    const person = preview.records.find((r) => r.record_type === "person");
+
+    expect(person?.action).toBe("match");
+    expect(person?.status).toBe("pending");
+    expect(person?.confidence).toBe("review");
+    expect(person?.normalized_payload.match_level).toBe("weak");
+    expect(person?.normalized_payload.matched_person_id).toBe("existing-p1");
+    expect(preview.summary.possibleMatches).toBe(1);
+
+    const name = preview.records.find((r) => r.record_type === "name");
+    expect(name?.action).toBe("skip");
+    expect(name?.status).toBe("skipped");
+  });

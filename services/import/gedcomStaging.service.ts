@@ -161,7 +161,9 @@ export function buildGedcomStagingPreview(
     );
 
     const blocksCreateForPossibleMatch =
-      match.level === "strong" || match.level === "medium";
+      match.level === "strong" ||
+      match.level === "medium" ||
+      match.level === "weak";
 
     const personWarnings: string[] = [];
     let action: ImportStagingRecordDraft["action"] = "create";
@@ -188,9 +190,11 @@ export function buildGedcomStagingPreview(
         `Nghi trùng với person hiện có: ${match.matchedPersonName} (${match.reason}). Cần review trước khi tạo mới.`,
       );
     } else if (match.level === "weak") {
+      action = "match";
+      status = "pending";
       confidence = "review";
       personWarnings.push(
-        `Có ứng viên gần giống: ${match.matchedPersonName} (${match.reason}).`,
+        `Có ứng viên gần giống: ${match.matchedPersonName} (${match.reason}). Cần review trước khi tạo mới.`,
       );
     }
 
