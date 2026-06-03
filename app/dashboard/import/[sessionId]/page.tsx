@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Database, FileText, Search } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Database, FileText, Search, GitCompareArrows } from "lucide-react";
 import { getSupabase } from "@/utils/supabase/queries";
 import {
   StagingRecordActions,
@@ -208,24 +208,6 @@ function SummaryCard({ label, value }: { label: string; value: unknown }) {
     </div>
   );
 }
-        <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 text-sm text-indigo-800">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="font-bold">Duyệt người trùng/nghi trùng</div>
-              <p className="mt-1">
-                Mở màn hình chuyên để so sánh GEDCOM person với person hiện có trước khi commit.
-              </p>
-            </div>
-
-            <Link
-              href="matches"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800"
-            >
-              <Search className="size-4" />
-              Mở Match Review
-            </Link>
-          </div>
-        </section>
 function RecordCard({
   record,
   sessionId,
@@ -433,6 +415,35 @@ export default async function ImportSessionPreviewPage({ params }: PageProps) {
           summary={session.summary as any}
           records={records as any}
         />
+
+        <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 text-sm text-indigo-800">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="font-bold">Duyệt GEDCOM staging</div>
+              <p className="mt-1">
+                Mở Match Review để so sánh person trùng/nghi trùng, hoặc mở Merge Plan để xem dữ liệu có thể bổ sung cho matched persons.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="matches"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800"
+              >
+                <Search className="size-4" />
+                Mở Match Review
+              </Link>
+
+              <Link
+                href="merge"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800"
+              >
+                <GitCompareArrows className="size-4" />
+                Mở Merge Plan
+              </Link>
+            </div>
+          </div>
+        </section>
 
         <StagingSessionBulkActions sessionId={session.id} />
         <GedcomCommitPlanPanel sessionId={session.id} />
