@@ -496,8 +496,7 @@ BEGIN
     INSERT INTO public.person_events (
       person_id,
       event_id,
-      role,
-      sort_order
+      role
     )
     VALUES (
       v_person_id,
@@ -509,8 +508,7 @@ BEGIN
         )
         THEN (v_payload->>'role')::public.event_role_enum
         ELSE 'principal'::public.event_role_enum
-      END,
-      COALESCE(NULLIF(v_payload->>'sort_order', '')::INT, 0)
+      END
     )
     ON CONFLICT DO NOTHING;
 

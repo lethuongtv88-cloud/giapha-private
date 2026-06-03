@@ -576,7 +576,6 @@ async function insertPersonEvents(input: {
         person_id: personId,
         event_id: eventId,
         role: normalizeEventRole(p.role),
-        sort_order: toNullableNumber(p.sort_order) ?? 0,
       },
     ];
   });
