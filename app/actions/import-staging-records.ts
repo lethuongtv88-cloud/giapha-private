@@ -364,3 +364,109 @@ export async function markMatchedPersonAsCreate(input: {
     ok: true as const,
   };
 }
+export async function bulkSkipPendingPersonMatches(input: {
+  sessionId: string;
+}) {
+  const supabase = await getSupabase();
+
+  const { data: session, error: sessionError } = await supabase
+    .from("import_sessions")
+    .select("id, status")
+    .eq("id", input.sessionId)
+    .single();
+
+  if (sessionError || !session) {
+    return {
+      ok: false as const,
+      error: sessionError?.message ?? "Không tìm thấy import session.",
+    };
+  }
+
+  if (session.status === "committed") {
+    return {
+      ok: false as const,
+      error: "Session đã committed, không thể sửa staging records.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("import_staging_records")
+    .update({
+      status: "skipped",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("session_id", input.sessionId)
+    .eq("record_type", "person")
+    .eq("action", "match")
+    .eq("status", "pending");
+
+  if (error) {
+    return {
+      ok: false as const,
+      error: error.message,
+    };
+  }
+
+  await updateSessionReviewStatus(input.sessionId);
+
+  revalidatePath(`/dashboard/import/${input.sessionId}`);
+  revalidatePath(`/dashboard/import/${input.sessionId}/matches`);
+
+  return {
+    ok: true as const,
+  };
+}
+
+export async function bulkResetSkippedPersonMatches(input: {
+  sessionId: string;
+}) {
+  const supabase = await getSupabase();
+
+  const { data: session, error: sessionError } = await supabase
+    .from("import_sessions")
+    .select("id, status")
+    .eq("id", input.sessionId)
+    .single();
+
+  if (sessionError || !session) {
+    return {
+      ok: false as const,
+      error: sessionError?.message ?? "Không tìm thấy import session.",
+    };
+  }
+
+  if (session.status === "committed") {
+    return {
+      ok: false as const,
+      error: "Session đã committed, không thể sửa staging records.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("import_staging_records")
+    .update({
+      status: "pending",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("session_id", input.sessionId)
+    .eq("record_type", "person")
+    .eq("action", "match")
+    .eq("confidence", "review")
+    .eq("status", "skipped");
+
+  if (error) {
+    return {
+      ok: false as const,
+      error: error.message,
+    };
+  }
+
+  await updateSessionReviewStatus(input.sessionId);
+
+  revalidatePath(`/dashboard/import/${input.sessionId}`);
+  revalidatePath(`/dashboard/import/${input.sessionId}/matches`);
+
+  return {
+    ok: true as const,
+  };
+}

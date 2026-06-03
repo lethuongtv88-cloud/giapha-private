@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, AlertTriangle, CheckCircle2, Search, UserPlus } from "lucide-react";
 import { getSupabase } from "@/utils/supabase/queries";
 import { StagingRecordActions } from "@/components/ImportStagingRecordActions";
+import ImportMatchReviewBulkActions from "@/components/ImportMatchReviewBulkActions";
 
 export const metadata = {
   title: "GEDCOM match review",
@@ -428,6 +429,11 @@ export default async function ImportMatchReviewPage({ params }: PageProps) {
             tone="red"
           />
         </section>
+
+        <ImportMatchReviewBulkActions
+          sessionId={sessionId}
+          possibleMatches={grouped.possibleMatches.length}
+        />
 
         <Section
           title="Possible matches cần review"
