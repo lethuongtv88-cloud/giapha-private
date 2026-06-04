@@ -74,8 +74,8 @@ export function calculateAgeFromEvents(
       minAge: min,
       maxAge: max,
       precision: 'year_only',
-      display: min === max ? `khoảng ${min} tuổi` : `khoảng ${min}–${max} tuổi`,
-      displayShort: min === max ? `~${min} tuổi` : `~${min}–${max} tuổi`,
+      display: `${max} tuổi`,
+      displayShort: `${max} tuổi`,
     };
   }
 

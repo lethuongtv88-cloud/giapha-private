@@ -37,7 +37,7 @@ describe('calculateAgeFromEvents', () => {
     });
   });
 
-  it('handles year-only birth as age range', () => {
+  it('shows living year-only birth as a single display age', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-02T00:00:00Z'));
 
@@ -47,18 +47,21 @@ describe('calculateAgeFromEvents', () => {
     );
 
     expect(age.precision).toBe('year_only');
-    expect(age.minAge).toBeLessThanOrEqual(age.maxAge);
-    expect(age.displayShort).toContain('~');
+    expect(age.minAge).toBe(45);
+    expect(age.maxAge).toBe(46);
+    expect(age.displayShort).toBe('46 tuổi');
   });
 
-  it('handles month precision as partial age', () => {
+  it('shows month precision age as a single display age', () => {
     const age = calculateAgeFromEvents(
       { start_date: '1945-01-01', end_date: '1945-12-31', date_precision: 'year' },
       { start_date: '2001-03-01', end_date: '2001-03-31', date_precision: 'month' },
     );
 
     expect(age.precision).toBe('year_only');
-    expect(age.displayShort).toContain('~');
+    expect(age.minAge).toBe(55);
+    expect(age.maxAge).toBe(56);
+    expect(age.displayShort).toBe('56 tuổi');
   });
 });
 
@@ -105,4 +108,16 @@ describe('formatLifespan', () => {
   it('returns empty string when missing birth event', () => {
     expect(formatLifespan(null, null, true)).toBe('');
   });
+  it('shows deceased year-only age as a single display age', () => {
+    const age = calculateAgeFromEvents(
+      { start_date: '1940-01-01', end_date: '1940-12-31', date_precision: 'year' },
+      { start_date: '2000-01-01', end_date: '2000-12-31', date_precision: 'year' },
+    );
+
+    expect(age.precision).toBe('year_only');
+    expect(age.minAge).toBe(59);
+    expect(age.maxAge).toBe(60);
+    expect(age.displayShort).toBe('60 tuổi');
+  });
+
 });
