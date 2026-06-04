@@ -10,7 +10,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "audit:migrations": "tsx scripts/audit-migrations-v240.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
