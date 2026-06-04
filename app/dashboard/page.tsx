@@ -13,6 +13,7 @@ import {
   Star,
   Users,
  DatabaseZap,
+Activity,
   Image as ImageIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -145,6 +146,14 @@ export default async function DashboardLaunchpad() {
   href: "/dashboard/data-maintenance",
   icon: <DatabaseZap className="size-7" />,
   color: "from-slate-500 to-stone-600",
+},
+{
+  title: "Admin Health",
+  description:
+    "Tổng quan nhanh trạng thái hệ thống: dữ liệu bất thường, import sessions, merge suggestions và maintenance.",
+  href: "/dashboard/admin-health",
+  icon: <Activity className="size-7" />,
+  color: "from-emerald-500 to-teal-600",
 },
     {
       title: "Sao lưu & Phục hồi",

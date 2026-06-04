@@ -225,7 +225,12 @@ export default async function DataQualityPage() {
     >
       Tổng quan maintenance
     </Link>
-
+<Link
+  href="/dashboard/admin-health"
+  className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+>
+  Admin Health
+</Link>
     <Link
       href="/dashboard/data-maintenance/unknown-persons"
       className="rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"

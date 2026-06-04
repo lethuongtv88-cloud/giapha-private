@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { BarChart2, ChevronDown, Database, GitMerge, Info, Network, UserCircle, Users } from "lucide-react";
+import { BarChart2, ChevronDown, Database, GitMerge, Info, Network, UserCircle, Users, DatabaseZap, Activity } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import LogoutButton from "./LogoutButton";
@@ -122,12 +122,21 @@ export default function HeaderMenu() {
                     <Network className="size-4" />
                     Thứ tự gia phả
                   </Link>
-<Link
-  href="/dashboard/data-maintenance"
-  className="..."
->
-  Bảo trì dữ liệu
-</Link>
+                  <Link
+                    href="/dashboard/data-maintenance"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-stone-700 hover:text-teal-700 hover:bg-teal-50 transition-colors"
+                  >
+                    <DatabaseZap className="size-4" />
+                    Bảo trì dữ liệu
+                  </Link>
+                  <Link
+                    href="/dashboard/admin-health"
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-stone-700 hover:text-teal-700 hover:bg-teal-50 transition-colors"
+                  >
+                    <Activity className="size-4" />
+                    Admin Health
+                  </Link>
                   <Link
                     href="/dashboard/data"
                     onClick={() => setIsOpen(false)}
