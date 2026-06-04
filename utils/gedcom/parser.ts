@@ -1,5 +1,23 @@
 import { parseGedcomName } from './name';
 
+function isGedcomUuidLike(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+function normalizeGedcomPointerId(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .replace(/^@+/, "")
+    .replace(/@+$/, "");
+}
+
+function getStableGedcomPersonId(xref: unknown, fallbackFactory: () => string) {
+  const normalized = normalizeGedcomPointerId(xref);
+  return isGedcomUuidLike(normalized) ? normalized : fallbackFactory();
+}
+
 export function parseGedcom(content: string) {
   const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/);
   const persons: any[] = [];
@@ -59,7 +77,7 @@ export function parseGedcom(content: string) {
   }
 
   for (const p of persons) {
-    p.id = makeId();
+    p.id = getStableGedcomPersonId(p.xref, makeId);
   }
 
   const xrefToId = new Map(persons.map(p => [p.xref, p.id]));

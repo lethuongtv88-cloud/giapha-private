@@ -19,12 +19,28 @@ export function formatGedcomName(fullName: string, surname?: string | null, give
 }
 
 export function parseGedcomName(nameVal: string) {
-  const value = nameVal.replace(/@@/g, '@').trim();
+  const value = nameVal.replace(/@@/g, "@").trim();
   const m = value.match(/^(.*?)\s*\/([^\/]*)\/\s*(.*)$/);
-  if (!m) return { fullName: value };
+
+  if (!m) {
+    return {
+      full_name: value,
+      fullName: value,
+      surname: null,
+      given_name: value,
+      givenName: value,
+    };
+  }
 
   const given = `${m[1]} ${m[3]}`.trim();
   const surname = m[2].trim();
   const fullName = surname && given ? `${surname} ${given}` : surname || given;
-  return { fullName, surname, givenName: given };
+
+  return {
+    full_name: fullName,
+    fullName,
+    surname,
+    given_name: given,
+    givenName: given,
+  };
 }

@@ -64,9 +64,11 @@ export function exportToGedcomWithWarnings(data: ExportData): GedcomExportResult
   w.addRaw("2 NAME Giapha OS");
   w.addRaw("2 VERS 2.3.4");
 
+  const personMap = new Map(persons.filter((p) => p.id).map((p) => [p.id!, p]));
+
   const xref = new Map<string, string>();
   persons.forEach((person, i) => {
-    if (person.id) xref.set(person.id, person.id);
+    if (person.id) xref.set(person.id, `I${i + 1}`);
   });
 
   const getIndi = (id?: string) => {
@@ -92,6 +94,7 @@ export function exportToGedcomWithWarnings(data: ExportData): GedcomExportResult
     persons,
     events,
     personEvents,
+    warnings,
   });
 
   for (const person of persons) {
@@ -100,8 +103,7 @@ export function exportToGedcomWithWarnings(data: ExportData): GedcomExportResult
     w.addRaw(`0 @${xref.get(person.id)}@ INDI`);
 
     const primaryName = getPrimaryPersonName(person.id, person, personNames);
-    const fullName =
-      primaryName.full_name?.trim() || person.full_name?.trim() || "Unknown";
+    const fullName = primaryName.full_name?.trim() || person.full_name?.trim() || "Unknown";
 
     w.add(
       1,
@@ -109,12 +111,7 @@ export function exportToGedcomWithWarnings(data: ExportData): GedcomExportResult
       formatGedcomName(fullName, primaryName.surname, primaryName.given_name),
     );
 
-    const n = splitVietnameseName(
-      fullName,
-      primaryName.surname,
-      primaryName.given_name,
-    );
-
+    const n = splitVietnameseName(fullName, primaryName.surname, primaryName.given_name);
     if (n.surname) w.add(2, "SURN", n.surname);
     if (n.givenName) w.add(2, "GIVN", n.givenName);
 
@@ -140,15 +137,11 @@ export function exportToGedcomWithWarnings(data: ExportData): GedcomExportResult
     writeDeathEvent(w, person, bundle.deathEvents[0], warnings);
 
     if (bundle.birthEvents.length > 1) {
-      warnings.push(
-        `Person ${person.id}: có nhiều birth events active, chỉ export event đầu tiên.`,
-      );
+      warnings.push(`Person ${person.id}: có nhiều birth events active, chỉ export event đầu tiên.`);
     }
 
     if (bundle.deathEvents.length > 1) {
-      warnings.push(
-        `Person ${person.id}: có nhiều death events active, chỉ export event đầu tiên.`,
-      );
+      warnings.push(`Person ${person.id}: có nhiều death events active, chỉ export event đầu tiên.`);
     }
 
     for (const famId of personFamc.get(person.id) ?? []) {
@@ -187,19 +180,11 @@ export function exportToGedcomWithWarnings(data: ExportData): GedcomExportResult
     if (fam.marriageEvent) {
       w.addRaw("1 MARR");
       writeEventDatePlace(w, 2, fam.marriageEvent, warnings);
-    } else if (
-      fam.status &&
-      fam.status !== "divorced" &&
-      fam.status !== "separated"
-    ) {
+    } else if (fam.status && fam.status !== "divorced" && fam.status !== "separated") {
       w.addRaw("1 MARR");
     }
 
-    if (
-      fam.divorceEvent ||
-      fam.status === "divorced" ||
-      fam.status === "separated"
-    ) {
+    if (fam.divorceEvent || fam.status === "divorced" || fam.status === "separated") {
       w.addRaw("1 DIV");
       if (fam.divorceEvent) {
         writeEventDatePlace(w, 2, fam.divorceEvent, warnings);
@@ -256,12 +241,11 @@ function buildPersonEventMap(input: {
   persons: GedcomPerson[];
   events: GedcomEvent[];
   personEvents: GedcomPersonEvent[];
+  warnings: string[];
 }): Map<string, PersonEventBundle> {
   const out = new Map<string, PersonEventBundle>();
 
-  const personIds = new Set(
-    input.persons.map((person) => person.id).filter(Boolean) as string[],
-  );
+  const personIds = new Set(input.persons.map((person) => person.id).filter(Boolean) as string[]);
   const eventsById = new Map(input.events.map((event) => [event.id, event]));
 
   for (const pe of input.personEvents) {
@@ -363,18 +347,10 @@ function writeDeathEvent(
 
     if (deathDate) w.add(2, "DATE", deathDate);
 
-    if (
-      person.death_lunar_year ||
-      person.death_lunar_month ||
-      person.death_lunar_day
-    ) {
+    if (person.death_lunar_year || person.death_lunar_month || person.death_lunar_day) {
       const lunar = [
-        person.death_lunar_day
-          ? String(person.death_lunar_day).padStart(2, "0")
-          : "",
-        person.death_lunar_month
-          ? String(person.death_lunar_month).padStart(2, "0")
-          : "",
+        person.death_lunar_day ? String(person.death_lunar_day).padStart(2, "0") : "",
+        person.death_lunar_month ? String(person.death_lunar_month).padStart(2, "0") : "",
         person.death_lunar_year ? String(person.death_lunar_year) : "",
       ].join("/");
 
@@ -435,28 +411,16 @@ function formatGedcomDateFromEvent(
   }
 
   if (event.date_precision === "day" || !event.date_precision) {
-    return formatGedcomDate(
-      start.year,
-      start.month,
-      start.day,
-      event.date_modifier,
-    );
+    return formatGedcomDate(start.year, start.month, start.day, event.date_modifier);
   }
 
   if (event.date_precision === "range" && event.end_date) {
     const end = parseIsoDate(event.end_date);
-    if (!end) {
-      return formatGedcomDate(
-        start.year,
-        start.month,
-        start.day,
-        event.date_modifier,
-      );
-    }
+    if (!end) return formatGedcomDate(start.year, start.month, start.day, event.date_modifier);
 
-    return `FROM ${
-      formatGedcomDate(start.year, start.month, start.day) ?? ""
-    } TO ${formatGedcomDate(end.year, end.month, end.day) ?? ""}`;
+    return `FROM ${formatGedcomDate(start.year, start.month, start.day) ?? ""} TO ${
+      formatGedcomDate(end.year, end.month, end.day) ?? ""
+    }`;
   }
 
   warnings.push(

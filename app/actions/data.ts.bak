@@ -69,15 +69,6 @@ interface BackupPayload {
   relationships: RelationshipExport[];
   person_details_private?: PersonDetailsPrivateExport[];
   custom_events?: CustomEventExport[];
-
-  // v4 export-only fields for Family/Event Model.
-  // Import legacy vẫn chưa phục hồi các bảng này trực tiếp để tránh ghi đè production data.
-  person_names?: unknown[];
-  families?: unknown[];
-  family_parents?: unknown[];
-  family_children?: unknown[];
-  events?: unknown[];
-  person_events?: unknown[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -187,80 +178,11 @@ export async function exportData(
       error: "Lỗi tải dữ liệu custom_events: " + customEventsError.message,
     };
 
-  const { data: allPersonNames, error: personNamesError } = await supabase
-    .from("person_names")
-    .select("*");
-
-  if (personNamesError) {
-    return {
-      error: "Lỗi tải dữ liệu person_names: " + personNamesError.message,
-    };
-  }
-
-  const { data: allFamilies, error: familiesError } = await supabase
-    .from("families")
-    .select("*")
-    .is("deleted_at", null);
-
-  if (familiesError) {
-    return {
-      error: "Lỗi tải dữ liệu families: " + familiesError.message,
-    };
-  }
-
-  const { data: allFamilyParents, error: familyParentsError } = await supabase
-    .from("family_parents")
-    .select("*");
-
-  if (familyParentsError) {
-    return {
-      error: "Lỗi tải dữ liệu family_parents: " + familyParentsError.message,
-    };
-  }
-
-  const { data: allFamilyChildren, error: familyChildrenError } = await supabase
-    .from("family_children")
-    .select("*");
-
-  if (familyChildrenError) {
-    return {
-      error: "Lỗi tải dữ liệu family_children: " + familyChildrenError.message,
-    };
-  }
-
-  const { data: allEvents, error: eventsError } = await supabase
-    .from("events")
-    .select("*")
-    .is("deleted_at", null);
-
-  if (eventsError) {
-    return {
-      error: "Lỗi tải dữ liệu events: " + eventsError.message,
-    };
-  }
-
-  const { data: allPersonEvents, error: personEventsError } = await supabase
-    .from("person_events")
-    .select("*");
-
-  if (personEventsError) {
-    return {
-      error: "Lỗi tải dữ liệu person_events: " + personEventsError.message,
-    };
-  }
-
   let exportPersons = (allPersons ?? []) as PersonExport[];
   let exportRels = (allRels ?? []) as RelationshipExport[];
   let exportPrivateDetails = (allPrivateDetails ??
     []) as PersonDetailsPrivateExport[];
   const exportCustomEvents = (allCustomEvents ?? []) as CustomEventExport[];
-
-  let exportPersonNames = allPersonNames ?? [];
-  let exportFamilies = allFamilies ?? [];
-  let exportFamilyParents = allFamilyParents ?? [];
-  let exportFamilyChildren = allFamilyChildren ?? [];
-  let exportEvents = allEvents ?? [];
-  let exportPersonEvents = allPersonEvents ?? [];
 
   // If a root person is selected, filter the export to only their subtree
   if (exportRootId && exportPersons.some((p) => p.id === exportRootId)) {
@@ -307,72 +229,16 @@ export async function exportData(
     exportPrivateDetails = exportPrivateDetails.filter((d) =>
       includedPersonIds.has(d.person_id),
     );
-
-    exportPersonNames = exportPersonNames.filter((name: any) =>
-      includedPersonIds.has(name.person_id),
-    );
-
-    exportFamilyParents = exportFamilyParents.filter((parent: any) =>
-      includedPersonIds.has(parent.person_id),
-    );
-
-    const includedFamilyIds = new Set(
-      exportFamilyParents.map((parent: any) => parent.family_id),
-    );
-
-    exportFamilyChildren = exportFamilyChildren.filter((child: any) => {
-      const keep =
-        includedPersonIds.has(child.person_id) &&
-        includedFamilyIds.has(child.family_id);
-
-      if (keep) includedFamilyIds.add(child.family_id);
-      return keep;
-    });
-
-    exportFamilies = exportFamilies.filter((family: any) =>
-      includedFamilyIds.has(family.id),
-    );
-
-    exportEvents = exportEvents.filter((event: any) => {
-      if (
-        event.legacy_person_id &&
-        includedPersonIds.has(event.legacy_person_id)
-      ) {
-        return true;
-      }
-
-      if (event.family_id && includedFamilyIds.has(event.family_id)) {
-        return true;
-      }
-
-      return false;
-    });
-
-    const includedEventIds = new Set(exportEvents.map((event: any) => event.id));
-
-    exportPersonEvents = exportPersonEvents.filter((personEvent: any) => {
-      return (
-        includedPersonIds.has(personEvent.person_id) &&
-        includedEventIds.has(personEvent.event_id)
-      );
-    });
-
     // custom_events are not person-scoped, so export all when subtree is selected
   }
 
   return {
-    version: 4, // v4: adds Family/Event Model export fields, still imports legacy-safe payload only
+    version: 3, // v3: adds death_lunar_*, person_details_private, relationship note, custom_events
     timestamp: new Date().toISOString(),
     persons: exportPersons,
     relationships: exportRels,
     person_details_private: exportPrivateDetails,
     custom_events: exportCustomEvents,
-    person_names: exportPersonNames,
-    families: exportFamilies,
-    family_parents: exportFamilyParents,
-    family_children: exportFamilyChildren,
-    events: exportEvents,
-    person_events: exportPersonEvents,
   };
 }
 
