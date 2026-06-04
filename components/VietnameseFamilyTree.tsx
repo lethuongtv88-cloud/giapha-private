@@ -484,6 +484,41 @@ type TreeDiagnostics = {
   measuredAt: string;
 };
 
+function getTreeHealthStatus(diagnostics: TreeDiagnostics) {
+  const danger =
+    diagnostics.visibleNodes >= 600 || diagnostics.layoutDurationMs >= 150;
+
+  const warning =
+    diagnostics.visibleNodes >= 300 || diagnostics.layoutDurationMs >= 80;
+
+  if (danger) {
+    return {
+      level: "danger" as const,
+      label: "Heavy tree",
+      className: "border-red-200 bg-red-50 text-red-800",
+      message:
+        "Cây đang nặng. Nên thu gọn bớt nhánh, tăng auto-collapse hoặc lọc bớt node trước khi thao tác.",
+    };
+  }
+
+  if (warning) {
+    return {
+      level: "warning" as const,
+      label: "Large tree",
+      className: "border-amber-200 bg-amber-50 text-amber-800",
+      message:
+        "Cây khá lớn. Nếu thao tác bị chậm, hãy tăng auto-collapse hoặc ẩn bớt nhóm node.",
+    };
+  }
+
+  return {
+    level: "ok" as const,
+    label: "Healthy",
+    className: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    message: "Layout đang trong ngưỡng ổn.",
+  };
+}
+
 function TreeDiagnosticsPanel({
   diagnostics,
   show,
@@ -493,6 +528,8 @@ function TreeDiagnosticsPanel({
   show: boolean;
   setShow: (value: boolean) => void;
 }) {
+  const health = getTreeHealthStatus(diagnostics);
+
   return (
     <div className="absolute right-4 top-4 z-30 flex flex-col items-end gap-2">
       <button
@@ -508,6 +545,15 @@ function TreeDiagnosticsPanel({
         <div className="w-72 rounded-2xl border border-stone-200 bg-white/95 p-4 text-xs text-stone-700 shadow-xl backdrop-blur">
           <div className="mb-3 font-bold text-stone-900">
             Vietnamese tree diagnostics
+          </div>
+
+          <div className={`mb-3 rounded-xl border px-3 py-2 ${health.className}`}>
+            <div className="text-xs font-black uppercase tracking-wide">
+              {health.label}
+            </div>
+            <div className="mt-1 text-[11px] leading-snug">
+              {health.message}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
