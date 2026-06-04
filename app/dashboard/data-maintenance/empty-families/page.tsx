@@ -21,9 +21,7 @@ export default async function EmptyFamiliesPage() {
   const [familiesRes, parentsRes, childrenRes] = await Promise.all([
     supabase
       .from("families")
-      .select(
-        "id, status, legacy_family_id, legacy_source, created_at, updated_at, deleted_at",
-      )
+      .select("id, status, created_at, updated_at, deleted_at")
       .is("deleted_at", null),
 
     supabase.from("family_parents").select("family_id"),
@@ -101,8 +99,6 @@ export default async function EmptyFamiliesPage() {
                   <tr className="border-b border-stone-200 text-left text-stone-500">
                     <th className="px-3 py-2 font-semibold">Family ID</th>
                     <th className="px-3 py-2 font-semibold">Status</th>
-                    <th className="px-3 py-2 font-semibold">Legacy ID</th>
-                    <th className="px-3 py-2 font-semibold">Legacy source</th>
                     <th className="px-3 py-2 font-semibold">Created</th>
                     <th className="px-3 py-2 font-semibold">Updated</th>
                   </tr>
@@ -114,12 +110,6 @@ export default async function EmptyFamiliesPage() {
                         {row.id}
                       </td>
                       <td className="px-3 py-3 text-stone-700">{row.status}</td>
-                      <td className="px-3 py-3 font-mono text-xs text-stone-500">
-                        {row.legacyFamilyId ?? "—"}
-                      </td>
-                      <td className="px-3 py-3 text-stone-700">
-                        {row.legacySource ?? "—"}
-                      </td>
                       <td className="px-3 py-3 text-stone-700">
                         {formatDate(row.createdAt)}
                       </td>
