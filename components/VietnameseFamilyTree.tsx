@@ -2,7 +2,7 @@
 
 import { Person, Relationship } from "@/types";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Minus, Plus } from "lucide-react";
+import { Activity, Minus, Plus } from "lucide-react";
 import { usePanZoom } from "@/hooks/usePanZoom";
 import { useMemberListView } from "@/context/MemberListContext";
 import TreeToolbar from "@/components/TreeToolbar";
@@ -166,6 +166,7 @@ export default function VietnameseFamilyTree({
 }: VietnameseFamilyTreeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   const [manualExpandedIds, setManualExpandedIds] = useState<Set<string>>(
     new Set(),
@@ -250,6 +251,32 @@ export default function VietnameseFamilyTree({
     hideFemales,
   ]);
 
+  const diagnostics = useMemo(() => {
+    if (!rootBlock) {
+      return {
+        totalPersons: personsMap.size,
+        totalFamilies: families.filter((family) => !family.deleted_at).length,
+        visibleNodes: 0,
+        visiblePeople: 0,
+        visibleFamilyGroups: 0,
+        expandedGroups: 0,
+        collapsedGroups: 0,
+        maxDepth: 0,
+        spouseNodes: 0,
+        multiSpousePeople: 0,
+        width: 0,
+        height: 0,
+      };
+    }
+
+    return collectTreeDiagnostics({
+      rootBlock,
+      personsMap,
+      families,
+      familyParents,
+    });
+  }, [rootBlock, personsMap, families, familyParents]);
+
   const toggleGroupExpanded = (groupId: string, currentlyExpanded: boolean) => {
     setManualExpandedIds((prevExpanded) => {
       const nextExpanded = new Set(prevExpanded);
@@ -324,6 +351,12 @@ export default function VietnameseFamilyTree({
         hideFemales={hideFemales}
         setHideFemales={setHideFemales}
         canEdit={canEdit}
+      />
+
+      <TreeDiagnosticsPanel
+        diagnostics={diagnostics}
+        show={showDiagnostics}
+        setShow={setShowDiagnostics}
       />
 
       <div
@@ -405,6 +438,156 @@ export default function VietnameseFamilyTree({
       </div>
     </div>
   );
+}
+
+type TreeDiagnostics = {
+  totalPersons: number;
+  totalFamilies: number;
+  visibleNodes: number;
+  visiblePeople: number;
+  visibleFamilyGroups: number;
+  expandedGroups: number;
+  collapsedGroups: number;
+  maxDepth: number;
+  spouseNodes: number;
+  multiSpousePeople: number;
+  width: number;
+  height: number;
+};
+
+function TreeDiagnosticsPanel({
+  diagnostics,
+  show,
+  setShow,
+}: {
+  diagnostics: TreeDiagnostics;
+  show: boolean;
+  setShow: (value: boolean) => void;
+}) {
+  return (
+    <div className="absolute right-4 top-4 z-30 flex flex-col items-end gap-2">
+      <button
+        type="button"
+        onClick={() => setShow(!show)}
+        className="inline-flex items-center gap-2 rounded-xl border border-stone-200 bg-white/95 px-3 py-2 text-xs font-bold text-stone-700 shadow-sm backdrop-blur hover:bg-stone-50"
+      >
+        <Activity className="size-4" />
+        Tree diagnostics
+      </button>
+
+      {show ? (
+        <div className="w-72 rounded-2xl border border-stone-200 bg-white/95 p-4 text-xs text-stone-700 shadow-xl backdrop-blur">
+          <div className="mb-3 font-bold text-stone-900">
+            Vietnamese tree diagnostics
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <DiagnosticItem label="Total persons" value={diagnostics.totalPersons} />
+            <DiagnosticItem label="Families" value={diagnostics.totalFamilies} />
+            <DiagnosticItem label="Visible nodes" value={diagnostics.visibleNodes} />
+            <DiagnosticItem label="Visible people" value={diagnostics.visiblePeople} />
+            <DiagnosticItem label="Family groups" value={diagnostics.visibleFamilyGroups} />
+            <DiagnosticItem label="Expanded" value={diagnostics.expandedGroups} />
+            <DiagnosticItem label="Collapsed" value={diagnostics.collapsedGroups} />
+            <DiagnosticItem label="Max depth" value={diagnostics.maxDepth} />
+            <DiagnosticItem label="Spouse nodes" value={diagnostics.spouseNodes} />
+            <DiagnosticItem label="Multi-spouse" value={diagnostics.multiSpousePeople} />
+            <DiagnosticItem label="Width" value={Math.round(diagnostics.width)} />
+            <DiagnosticItem label="Height" value={Math.round(diagnostics.height)} />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DiagnosticItem({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl bg-stone-50 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-stone-400">
+        {label}
+      </div>
+      <div className="mt-0.5 text-sm font-black text-stone-900">{value}</div>
+    </div>
+  );
+}
+
+function collectTreeDiagnostics({
+  rootBlock,
+  personsMap,
+  families,
+  familyParents,
+}: {
+  rootBlock: TreeBlock;
+  personsMap: Map<string, Person>;
+  families: FamilyRow[];
+  familyParents: FamilyParentRow[];
+}): TreeDiagnostics {
+  const visiblePeopleIds = new Set<string>();
+  const multiSpousePeopleIds = new Set<string>();
+
+  let visibleNodes = 0;
+  let visibleFamilyGroups = 0;
+  let expandedGroups = 0;
+  let collapsedGroups = 0;
+  let spouseNodes = 0;
+  let maxDepth = 0;
+
+  const spouseCountByPersonId = new Map<string, number>();
+
+  for (const parent of familyParents) {
+    spouseCountByPersonId.set(
+      parent.person_id,
+      (spouseCountByPersonId.get(parent.person_id) ?? 0) + 1,
+    );
+  }
+
+  for (const [personId, count] of spouseCountByPersonId.entries()) {
+    if (count > 1) multiSpousePeopleIds.add(personId);
+  }
+
+  function visit(block: TreeBlock, depth: number) {
+    maxDepth = Math.max(maxDepth, depth);
+    visibleNodes += block.nodes.length;
+
+    for (const node of block.nodes) {
+      visiblePeopleIds.add(node.person.id);
+      if (node.role === "spouse") spouseNodes += 1;
+    }
+
+    visibleFamilyGroups += block.groups.length;
+
+    for (const group of block.groups) {
+      if (group.expanded) {
+        expandedGroups += 1;
+      } else if (group.hasChildren) {
+        collapsedGroups += 1;
+      }
+
+      if (group.expanded) {
+        for (const child of group.visibleChildren) {
+          visit(child.block, depth + 1);
+        }
+      }
+    }
+  }
+
+  visit(rootBlock, 1);
+
+  return {
+    totalPersons: personsMap.size,
+    totalFamilies: families.filter((family) => !family.deleted_at).length,
+    visibleNodes,
+    visiblePeople: visiblePeopleIds.size,
+    visibleFamilyGroups,
+    expandedGroups,
+    collapsedGroups,
+    maxDepth,
+    spouseNodes,
+    multiSpousePeople: multiSpousePeopleIds.size,
+    width: rootBlock.width,
+    height: rootBlock.height,
+  };
 }
 
 function RenderTreeBlock({
