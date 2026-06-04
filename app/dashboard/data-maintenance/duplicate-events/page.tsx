@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, CalendarDays, Eye } from "lucide-react";
 import { getSupabase } from "@/utils/supabase/queries";
 import { buildDuplicateEventGroups } from "@/services/data-maintenance/duplicateEvents.service";
+import SoftDeleteDuplicateEventsButton from "@/components/SoftDeleteDuplicateEventsButton";
 
 export const metadata = {
   title: "Duplicate events maintenance",
@@ -76,7 +77,7 @@ export default async function DuplicateEventsPage() {
 
             <CalendarDays className="size-7 text-stone-400" />
           </div>
-
+<SoftDeleteDuplicateEventsButton groupCount={groups.length} />
           {groups.length > 0 ? (
             <div className="mt-5 space-y-3">
               {groups.map((group) => (

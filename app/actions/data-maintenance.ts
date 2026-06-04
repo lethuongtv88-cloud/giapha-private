@@ -48,3 +48,28 @@ export async function softDeleteEmptyFamilies() {
     result: data,
   };
 }
+export async function softDeleteDuplicateBirthDeathEvents() {
+  const supabase = await getSupabase();
+
+  const { data, error } = await supabase.rpc(
+    "soft_delete_duplicate_birth_death_events",
+  );
+
+  if (error) {
+    return {
+      ok: false as const,
+      error: error.message,
+    };
+  }
+
+  revalidatePath("/dashboard/data-maintenance");
+  revalidatePath("/dashboard/data-maintenance/duplicate-events");
+  revalidatePath("/dashboard/events");
+  revalidatePath("/dashboard/data-quality");
+  revalidatePath("/dashboard/stats");
+
+  return {
+    ok: true as const,
+    result: data,
+  };
+}
