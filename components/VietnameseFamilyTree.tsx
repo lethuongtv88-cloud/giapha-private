@@ -2,7 +2,7 @@
 
 import { Person, Relationship } from "@/types";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Activity, Minus, Plus } from "lucide-react";
+import { Activity, Check, Clipboard, Minus, Plus } from "lucide-react";
 import { usePanZoom } from "@/hooks/usePanZoom";
 import { useMemberListView } from "@/context/MemberListContext";
 import TreeToolbar from "@/components/TreeToolbar";
@@ -529,6 +529,35 @@ function TreeDiagnosticsPanel({
   setShow: (value: boolean) => void;
 }) {
   const health = getTreeHealthStatus(diagnostics);
+  const [copied, setCopied] = useState(false);
+
+  async function copySnapshot() {
+    const snapshot = {
+      kind: "vietnamese-tree-diagnostics",
+      version: "v2.3.7",
+      capturedAt: new Date().toISOString(),
+      url:
+        typeof window !== "undefined"
+          ? window.location.pathname + window.location.search
+          : "",
+      health: {
+        level: health.level,
+        label: health.label,
+      },
+      diagnostics,
+    };
+
+    const text = JSON.stringify(snapshot, null, 2);
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+      console.log("Vietnamese tree diagnostics snapshot:", snapshot);
+    }
+  }
 
   return (
     <div className="absolute right-4 top-4 z-30 flex flex-col items-end gap-2">
@@ -555,6 +584,15 @@ function TreeDiagnosticsPanel({
               {health.message}
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={copySnapshot}
+            className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-3 py-2 text-xs font-bold text-white hover:bg-stone-800"
+          >
+            {copied ? <Check className="size-4" /> : <Clipboard className="size-4" />}
+            {copied ? "Copied snapshot" : "Copy snapshot"}
+          </button>
 
           <div className="grid grid-cols-2 gap-2">
             <DiagnosticItem label="Total persons" value={diagnostics.totalPersons} />
