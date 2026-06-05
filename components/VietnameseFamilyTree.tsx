@@ -82,6 +82,7 @@ type FamilyGroup = {
   x: number;
   width: number;
   anchorX: number;
+  childAnchorX: number;
   orderX: number;
   childrenWidth: number;
 };
@@ -832,9 +833,9 @@ function RenderTreeBlock({
               (slot) => x + group.x + slot.x + slot.childTopCenterX,
             );
 
-            const firstChildCenter = childCenters[0];
-            const lastChildCenter = childCenters[childCenters.length - 1];
-            const anchorX = x + group.anchorX;
+            const firstChildCenter = Math.min(...childCenters);
+            const lastChildCenter = Math.max(...childCenters);
+            const anchorX = x + group.childAnchorX;
 
             return (
               <g key={`group-lines-${group.groupId}`}>
@@ -906,7 +907,7 @@ function RenderTreeBlock({
               .map((group) => (
                 <g
                   key={`toggle-${group.groupId}`}
-                  transform={`translate(${x + group.anchorX - 12}, ${
+                  transform={`translate(${x + group.childAnchorX - 12}, ${
                     unitCenterY + 18
                   })`}
                   onClick={(event) => {
@@ -1079,7 +1080,7 @@ function PersonNode({
   setHoveredNodeId: (id: string | null) => void;
   onOpenPerson: (personId: string | null) => void;
 }) {
-  const palette = getGenderPalette(node.person.gender);
+  const palette = getGenderPalette(node.person);
   const dateParts = getPersonDateParts(node.person);
   const nameLines = splitNameIntoLines(node.person.full_name ?? "", 13);
   const avatarHref = getAvatarHref(node.person);
@@ -1110,9 +1111,9 @@ function PersonNode({
           width={NODE_WIDTH}
           height={NODE_HEIGHT}
           rx={16}
-          fill={isHovered ? "#fff" : "rgba(255,255,255,0.72)"}
-          stroke={isHovered ? "#fcd34d" : "rgba(231,229,228,0.80)"}
-          strokeWidth={isHovered ? 1.8 : 1.2}
+          fill={getPersonCardFill(node.person, isHovered)}
+          stroke={isHovered ? "#f59e0b" : "#d6d3d1"}
+          strokeWidth={isHovered ? 2 : 1.35}
           filter={
             isHovered
               ? "url(#viet-node-hover-shadow)"
@@ -1529,6 +1530,16 @@ function buildTreeBlock({
       ? slot.anchorX + shiftX
       : personCenterX;
 
+    // Marriage/ring anchor and child-connector anchor are intentionally separated.
+    // For visible couples, the child connector stays at the family slot anchor,
+    // which is also the center between the parent pair and the biological-child row.
+    // When spouses are hidden/merged by filters, the same slot anchor remains based
+    // on the visible biological children's own node centers, not on in-law/spouse blocks.
+    const childAnchorX =
+      group.expanded && group.childrenWidth > 0
+        ? slot.anchorX + shiftX
+        : anchorX;
+
     const groupX = slot.x + shiftX;
     const visibleChildren: ChildSlot[] = [];
 
@@ -1556,7 +1567,8 @@ function buildTreeBlock({
       x: groupX,
       width: slot.width,
       anchorX,
-      orderX: anchorX,
+      childAnchorX,
+      orderX: childAnchorX,
       childrenWidth: group.childrenWidth,
     };
   });
@@ -1901,21 +1913,43 @@ function compareNullableNumber(a?: number | null, b?: number | null) {
   return 0;
 }
 
-function getGenderPalette(gender?: string | null) {
+function getPersonCardFill(person: Person, isHovered: boolean) {
+  if (isHovered) return "#ffffff";
+
+  if (person.is_deceased) {
+    if (person.gender === "male") return "#eff6ff";
+    if (person.gender === "female") return "#fff1f2";
+    return "#f5f5f4";
+  }
+
+  if (person.gender === "male") return "#f0f9ff";
+  if (person.gender === "female") return "#fff7ed";
+
+  return "#fafaf9";
+}
+
+function getGenderPalette(personOrGender?: Person | string | null) {
+  const gender =
+    typeof personOrGender === "object"
+      ? personOrGender?.gender
+      : personOrGender;
+  const isDeceased =
+    typeof personOrGender === "object" ? personOrGender?.is_deceased : false;
+
   if (gender === "male") {
     return {
-      avatarBg: "#38bdf8",
+      avatarBg: isDeceased ? "#bae6fd" : "#38bdf8",
     };
   }
 
   if (gender === "female") {
     return {
-      avatarBg: "#fb7185",
+      avatarBg: isDeceased ? "#fecdd3" : "#fb7185",
     };
   }
 
   return {
-    avatarBg: "#a8a29e",
+    avatarBg: isDeceased ? "#e7e5e4" : "#a8a29e",
   };
 }
 

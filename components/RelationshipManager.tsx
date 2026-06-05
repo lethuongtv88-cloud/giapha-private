@@ -558,7 +558,25 @@ export default function RelationshipManager({
             note: newRelNote ? newRelNote : null,
           });
         } catch (familyModelError) {
-          console.error("Created legacy spouse relationship but failed to create Family Model marriage:", familyModelError);
+          console.error(
+            "Created legacy spouse relationship but failed to create Family Model marriage:",
+            familyModelError,
+          );
+          throw familyModelError;
+        }
+      } else if (type === "biological_child" || type === "adopted_child") {
+        try {
+          await ensureFamilyModelChild({
+            supabase,
+            parentAId: personA,
+            childId: personB,
+            parentBId: null,
+          });
+        } catch (familyModelError) {
+          console.error(
+            "Created legacy child relationship but failed to create Family Model child:",
+            familyModelError,
+          );
           throw familyModelError;
         }
       }
@@ -717,15 +735,16 @@ export default function RelationshipManager({
         }
 
 
-          await ensureFamilyModelChild({
-            supabase,
-            parentAId: personId,
-            parentBId:
-              selectedSpouseId && selectedSpouseId !== "unknown"
-                ? selectedSpouseId
-                : null,
-            childId: newChildId,
-          });
+        await ensureFamilyModelChild({
+          supabase,
+          parentAId: personId,
+          parentBId:
+            selectedSpouseId && selectedSpouseId !== "unknown"
+              ? selectedSpouseId
+              : null,
+          childId: newChildId,
+        });
+
         successCount++;
       }
 
@@ -822,11 +841,11 @@ export default function RelationshipManager({
 
       if (relError) throw relError;
 
-        await ensureFamilyModelMarriage({
-          supabase,
-          personId,
-          targetPersonId: newSpouseId,
-        });
+      await ensureFamilyModelMarriage({
+        supabase,
+        personId,
+        targetPersonId: newSpouseId,
+      });
 
       setIsAddingSpouse(false);
       setNewSpouseName("");
