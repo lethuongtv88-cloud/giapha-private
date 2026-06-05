@@ -40,7 +40,7 @@ export default function DataImportExport() {
     fetchPersons();
   }, []);
 
-  const handleExport = async (format: "json" | "gedcom" | "csv") => {
+  const handleExport = async (format: "json" | "gedcom" | "gedcom-familygem" | "csv") => {
     try {
       setIsExporting(true);
       setExportWarnings([]);
@@ -86,7 +86,7 @@ export default function DataImportExport() {
       }
 
       const blobType =
-       format === 'gedcom'
+       format === 'gedcom' || format === 'gedcom-familygem'
         ? 'text/plain;charset=utf-8'
         : 'application/json;charset=utf-8';
 
@@ -94,7 +94,10 @@ export default function DataImportExport() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `giapha-export-${new Date().toISOString().split("T")[0]}.${extension}`;
+      a.download =
+        format === "gedcom-familygem"
+          ? `giapha-familygem-export-${new Date().toISOString().split("T")[0]}.${extension}`
+          : `giapha-export-${new Date().toISOString().split("T")[0]}.${extension}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -257,7 +260,7 @@ export default function DataImportExport() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <button
               onClick={() => handleExport("json")}
               disabled={isExporting}
@@ -269,8 +272,18 @@ export default function DataImportExport() {
               onClick={() => handleExport("gedcom")}
               disabled={isExporting}
               className="btn w-full bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium"
+              title="GEDCOM chuẩn 5.5.1, phù hợp Gramps/webtrees"
             >
-              {isExporting ? "Đang xử lý..." : "Xuất GEDCOM"}
+              {isExporting ? "Đang xử lý..." : "GEDCOM chuẩn"}
+            </button>
+
+            <button
+              onClick={() => handleExport("gedcom-familygem")}
+              disabled={isExporting}
+              className="btn w-full bg-orange-100 hover:bg-orange-200 text-orange-800 font-medium"
+              title="GEDCOM dành cho FamilyGem, giữ thứ tự họ tên tiếng Việt"
+            >
+              {isExporting ? "Đang xử lý..." : "GEDCOM FamilyGem"}
             </button>
             <button
               onClick={() => handleExport("csv")}
