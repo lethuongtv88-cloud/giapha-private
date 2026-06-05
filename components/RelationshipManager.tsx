@@ -534,14 +534,28 @@ export default function RelationshipManager({
       if (newRelDirection === "spouse") type = "marriage";
       else if (newRelType === "adopted_child") type = "adopted_child";
 
-      const { error } = await supabase.from("relationships").insert({
-        person_a: personA,
-        person_b: personB,
-        type: type,
-        note: newRelNote ? newRelNote : null,
-      });
+      const { data: insertedRelationship, error } = await supabase
+        .from("relationships")
+        .insert({
+          person_a: personA,
+          person_b: personB,
+          type: type,
+          note: newRelNote ? newRelNote : null,
+        })
+        .select("id")
+        .single();
 
       if (error) throw error;
+
+      if (newRelDirection === "spouse") {
+        await ensureFamilyModelMarriage({
+          supabase,
+          personId,
+          targetPersonId: selectedTargetId,
+          legacyRelationshipId: insertedRelationship?.id ?? null,
+          note: newRelNote ? newRelNote : null,
+        });
+      }
 
       // Auto-update target person generation and is_in_law if currently missing
       try {
@@ -597,6 +611,90 @@ export default function RelationshipManager({
     } finally {
       setProcessing(false);
     }
+  };
+
+  const ensureFamilyModelMarriage = async ({
+    supabase,
+    personId,
+    targetPersonId,
+    legacyRelationshipId,
+    note,
+  }: {
+    supabase: any;
+    personId: string;
+    targetPersonId: string;
+    legacyRelationshipId: string | null;
+    note: string | null;
+  }) => {
+    const ids = [personId, targetPersonId].sort();
+
+    const { data: candidateParentRows, error: candidateParentError } = await supabase
+      .from("family_parents")
+      .select("family_id, person_id")
+      .in("person_id", ids);
+
+    if (candidateParentError) throw candidateParentError;
+
+    const familyToParentIds = new Map<string, Set<string>>();
+
+    candidateParentRows?.forEach((row: any) => {
+      if (!familyToParentIds.has(row.family_id)) {
+        familyToParentIds.set(row.family_id, new Set());
+      }
+
+      familyToParentIds.get(row.family_id)!.add(row.person_id);
+    });
+
+    const existingFamilyId = Array.from(familyToParentIds.entries()).find(
+      ([, parentIds]) => ids.every((id) => parentIds.has(id)),
+    )?.[0];
+
+    if (existingFamilyId) {
+      return existingFamilyId;
+    }
+
+    const { data: family, error: familyError } = await supabase
+      .from("families")
+      .insert({
+        type: "marriage",
+        status: "active",
+        note,
+        legacy_relationship_id: legacyRelationshipId,
+      })
+      .select("id")
+      .single();
+
+    if (familyError) throw familyError;
+    if (!family?.id) throw new Error("Không tạo được family hôn nhân.");
+
+    const { data: people, error: peopleError } = await supabase
+      .from("persons")
+      .select("id, gender")
+      .in("id", ids);
+
+    if (peopleError) throw peopleError;
+
+    const genderById = new Map<string, string | null>(
+      (people ?? []).map((person: any) => [person.id, person.gender ?? null]),
+    );
+
+    const parentRows = ids.map((id, index) => ({
+      family_id: family.id,
+      person_id: id,
+      role: getFamilyParentRole(genderById.get(id)),
+      sort_order: index,
+    }));
+
+    const { error: parentError } = await supabase
+      .from("family_parents")
+      .upsert(parentRows, {
+        onConflict: "family_id,person_id",
+        ignoreDuplicates: true,
+      });
+
+    if (parentError) throw parentError;
+
+    return family.id;
   };
 
   const handleBulkAdd = async () => {
@@ -858,6 +956,12 @@ export default function RelationshipManager({
     } finally {
       setProcessing(false);
     }
+  };
+
+  const getFamilyParentRole = (gender: string | null | undefined) => {
+    if (gender === "male") return "husband";
+    if (gender === "female") return "wife";
+    return "partner";
   };
 
   const groupByType = (type: string) =>
