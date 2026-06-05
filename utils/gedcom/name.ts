@@ -30,7 +30,15 @@ export function formatGedcomNameStandard(
 
 export function formatGedcomNameFamilyGem(fullName: string) {
   const clean = fullName.trim().replace(/\s+/g, " ");
-  return clean || "Unknown";
+  const value = clean || "Unknown";
+
+  // Match FamilyGem's own Vietnamese-style export more closely:
+  //   1 NAME 2 /Nguyễn Văn A/
+  //
+  // FamilyGem applies Western given/surname display rules. Giving it a small
+  // non-empty prefix before the surname block makes it keep the full Vietnamese
+  // name inside /.../ instead of displaying "given + surname" incorrectly.
+  return `2 /${value}/`;
 }
 
 export function formatGedcomName(

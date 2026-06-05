@@ -202,9 +202,9 @@ it("exports Vietnamese names in FamilyGem display order when requested", () => {
     { nameFormat: "familygem" },
   );
 
-  expect(out).toContain("1 NAME Nguyễn Văn A");
-  expect(out).toContain("2 SURN Nguyễn");
-  expect(out).toContain("2 GIVN Văn A");
+  expect(out).toContain("1 NAME 2 /Nguyễn Văn A/");
+  expect(out).not.toContain("2 SURN Nguyễn Văn A");
+  expect(out).not.toContain("2 GIVN Văn A");
   expect(out).not.toContain("1 NAME Văn A /Nguyễn/");
 });
 

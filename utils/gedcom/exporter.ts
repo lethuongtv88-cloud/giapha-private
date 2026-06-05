@@ -124,8 +124,10 @@ export function exportToGedcomWithWarnings(data: ExportData, options?: GedcomExp
       primaryName.given_name,
     );
 
-    if (n.surname) w.add(2, "SURN", n.surname);
-    if (n.givenName) w.add(2, "GIVN", n.givenName);
+    if (nameFormat !== "familygem") {
+      if (n.surname) w.add(2, "SURN", n.surname);
+      if (n.givenName) w.add(2, "GIVN", n.givenName);
+    }
 
     const alternateNames = getAlternatePersonNames(person.id, personNames);
     for (const alt of alternateNames) {
