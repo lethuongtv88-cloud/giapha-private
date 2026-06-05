@@ -9,6 +9,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useContext, useEffect, useState } from "react";
 import DefaultAvatar from "./DefaultAvatar";
+import { ensureFamilyModelChild } from "@/utils/family/ensureFamilyModelChild";
 
 interface RelationshipManagerProps {
   person: Person;
@@ -548,13 +549,18 @@ export default function RelationshipManager({
       if (error) throw error;
 
       if (newRelDirection === "spouse") {
-        await ensureFamilyModelMarriage({
-          supabase,
-          personId,
-          targetPersonId: selectedTargetId,
-          legacyRelationshipId: insertedRelationship?.id ?? null,
-          note: newRelNote ? newRelNote : null,
-        });
+        try {
+          await ensureFamilyModelMarriage({
+            supabase,
+            personId,
+            targetPersonId: selectedTargetId,
+            legacyRelationshipId: insertedRelationship?.id ?? null,
+            note: newRelNote ? newRelNote : null,
+          });
+        } catch (familyModelError) {
+          console.error("Created legacy spouse relationship but failed to create Family Model marriage:", familyModelError);
+          throw familyModelError;
+        }
       }
 
       // Auto-update target person generation and is_in_law if currently missing
@@ -617,84 +623,24 @@ export default function RelationshipManager({
     supabase,
     personId,
     targetPersonId,
-    legacyRelationshipId,
-    note,
   }: {
     supabase: any;
     personId: string;
     targetPersonId: string;
-    legacyRelationshipId: string | null;
-    note: string | null;
+    legacyRelationshipId?: string | null;
+    note?: string | null;
   }) => {
-    const ids = [personId, targetPersonId].sort();
-
-    const { data: candidateParentRows, error: candidateParentError } = await supabase
-      .from("family_parents")
-      .select("family_id, person_id")
-      .in("person_id", ids);
-
-    if (candidateParentError) throw candidateParentError;
-
-    const familyToParentIds = new Map<string, Set<string>>();
-
-    candidateParentRows?.forEach((row: any) => {
-      if (!familyToParentIds.has(row.family_id)) {
-        familyToParentIds.set(row.family_id, new Set());
-      }
-
-      familyToParentIds.get(row.family_id)!.add(row.person_id);
+    const { data, error } = await supabase.rpc("ensure_family_model_marriage", {
+      p_person_a: personId,
+      p_person_b: targetPersonId,
     });
 
-    const existingFamilyId = Array.from(familyToParentIds.entries()).find(
-      ([, parentIds]) => ids.every((id) => parentIds.has(id)),
-    )?.[0];
-
-    if (existingFamilyId) {
-      return existingFamilyId;
+    if (error) {
+      console.error("Failed to create Family Model marriage via RPC:", error);
+      throw error;
     }
 
-    const { data: family, error: familyError } = await supabase
-      .from("families")
-      .insert({
-        type: "marriage",
-        status: "active",
-        note,
-        legacy_relationship_id: legacyRelationshipId,
-      })
-      .select("id")
-      .single();
-
-    if (familyError) throw familyError;
-    if (!family?.id) throw new Error("Không tạo được family hôn nhân.");
-
-    const { data: people, error: peopleError } = await supabase
-      .from("persons")
-      .select("id, gender")
-      .in("id", ids);
-
-    if (peopleError) throw peopleError;
-
-    const genderById = new Map<string, string | null>(
-      (people ?? []).map((person: any) => [person.id, person.gender ?? null]),
-    );
-
-    const parentRows = ids.map((id, index) => ({
-      family_id: family.id,
-      person_id: id,
-      role: getFamilyParentRole(genderById.get(id)),
-      sort_order: index,
-    }));
-
-    const { error: parentError } = await supabase
-      .from("family_parents")
-      .upsert(parentRows, {
-        onConflict: "family_id,person_id",
-        ignoreDuplicates: true,
-      });
-
-    if (parentError) throw parentError;
-
-    return family.id;
+    return data as string;
   };
 
   const handleBulkAdd = async () => {
@@ -770,6 +716,16 @@ export default function RelationshipManager({
           });
         }
 
+
+          await ensureFamilyModelChild({
+            supabase,
+            parentAId: personId,
+            parentBId:
+              selectedSpouseId && selectedSpouseId !== "unknown"
+                ? selectedSpouseId
+                : null,
+            childId: newChildId,
+          });
         successCount++;
       }
 
@@ -785,6 +741,7 @@ export default function RelationshipManager({
           },
         ]);
         setSelectedSpouseId("");
+
         fetchRelationships();
         router.refresh();
       } else {
@@ -864,6 +821,12 @@ export default function RelationshipManager({
       });
 
       if (relError) throw relError;
+
+        await ensureFamilyModelMarriage({
+          supabase,
+          personId,
+          targetPersonId: newSpouseId,
+        });
 
       setIsAddingSpouse(false);
       setNewSpouseName("");
