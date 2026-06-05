@@ -54,3 +54,63 @@ select {
 .title {
   @apply text-2xl sm:text-3xl font-serif font-bold text-stone-800;
 }
+
+/* Force Gia Pha UI to stay readable when browser/OS is in dark mode.
+   Current design system is light-first; without this, some browsers/extensions
+   can auto-darken inputs/modals and make text unreadable. */
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  color-scheme: light;
+  background: #fafaf9;
+  color: #1c1917;
+}
+
+input,
+textarea,
+select,
+button {
+  color-scheme: light;
+}
+
+input,
+textarea,
+select {
+  background-color: #ffffff;
+  color: #1c1917;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #78716c;
+}
+
+/* Prevent SVG tree labels from being auto-darkened or inherited incorrectly. */
+svg text,
+svg tspan {
+  color-scheme: light;
+}
+
+/* Defensive override for browser dark-mode auto styling. */
+@media (prefers-color-scheme: dark) {
+  html,
+  body {
+    background: #fafaf9;
+    color: #1c1917;
+  }
+
+  input,
+  textarea,
+  select {
+    background-color: #ffffff;
+    color: #1c1917;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #78716c;
+  }
+}
