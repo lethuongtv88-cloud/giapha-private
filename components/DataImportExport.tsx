@@ -78,7 +78,9 @@ export default function DataImportExport() {
         extension = "json";
       } else {
         const { exportToGedcomWithWarnings } = await import("@/utils/gedcom");
-        const result = exportToGedcomWithWarnings(data as any);
+        const result = exportToGedcomWithWarnings(data as any, {
+          nameFormat: format === "gedcom-familygem" ? "familygem" : "standard",
+        });
         content = result.content;
         setExportWarnings(result.warnings);
         type = "text/plain";
