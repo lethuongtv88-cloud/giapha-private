@@ -1,17 +1,3 @@
-Tiếp theo làm **Tree Hardening Runbook + final checklist v2.3.7**, rồi chuẩn bị merge phase này về `main`.
-
-## 1. Tạo runbook
-
-```bash
-cd /opt/giapha-os
-
-mkdir -p docs/runbooks
-nano docs/runbooks/vietnamese-tree-hardening-runbook-v237.md
-```
-
-Dán nội dung:
-
-````md
 # Vietnamese Tree Hardening Runbook v2.3.7
 
 ## 1. Mục tiêu
@@ -24,6 +10,7 @@ v2.3.7 tập trung hardening cây gia phả tiếng Việt:
 - Copy diagnostics snapshot để debug.
 - Thêm large tree guard: auto-collapse to 4 generations.
 - Bổ sung invariant tests cho Vietnamese tree layout.
+- Giảm rủi ro khi render cây lớn và đa phu/đa thê.
 
 Không thay đổi schema DB.
 
@@ -33,15 +20,49 @@ Không thay đổi schema DB.
 
 ```text
 components/VietnameseFamilyTree.tsx
+components/MembersViews.tsx
 utils/tree/vietnameseTreeLayout.ts
 tests/tree/vietnameseTreeLayout.test.ts
-components/MembersViews.tsx
 app/dashboard/vietnamese-tree-test/page.tsx
-````
+```
 
 ---
 
-## 3. Diagnostics Panel
+## 3. Feature flag
+
+Production nên bật:
+
+```env
+NEXT_PUBLIC_FF_VIETNAMESE_TREE_LAYOUT=true
+```
+
+Với cây mới đã hardening, nên dùng cây mới làm mặc định.
+
+---
+
+## 4. Client-side render
+
+`VietnameseFamilyTree` nên render client-side qua dynamic import:
+
+```ts
+const VietnameseFamilyTree = dynamic(
+  () => import("@/components/VietnameseFamilyTree"),
+  {
+    ssr: false,
+  },
+);
+```
+
+Lý do:
+
+- Cây SVG lớn, tương tác nhiều.
+- Tuổi phụ thuộc thời điểm render và timezone.
+- SSR có thể gây hydration mismatch, ví dụ server render 39 tuổi nhưng client render 40 tuổi.
+- Client-only hợp lý hơn cho tree view.
+
+---
+
+## 5. Diagnostics Panel
 
 Trong cây gia phả, bấm:
 
@@ -70,20 +91,24 @@ Measured
 
 Ý nghĩa:
 
-* `Total persons`: tổng số person được load vào cây.
-* `Visible nodes`: số node đang render thật.
-* `Visible people`: số người duy nhất đang hiển thị.
-* `Family groups`: số group gia đình visible.
-* `Expanded`: số group đang mở.
-* `Collapsed`: số group có con nhưng đang thu gọn.
-* `Max depth`: độ sâu thế hệ visible.
-* `Spouse nodes`: số node spouse đang render.
-* `Multi-spouse`: số người có nhiều quan hệ spouse.
-* `Layout ms`: thời gian build layout gần nhất.
+- `Total persons`: tổng số person được load vào cây.
+- `Families`: tổng số family active được load.
+- `Visible nodes`: số node đang render thật.
+- `Visible people`: số người duy nhất đang hiển thị.
+- `Family groups`: số group gia đình visible.
+- `Expanded`: số group đang mở.
+- `Collapsed`: số group có con nhưng đang thu gọn.
+- `Max depth`: độ sâu thế hệ visible.
+- `Spouse nodes`: số node spouse đang render.
+- `Multi-spouse`: số người có nhiều quan hệ spouse.
+- `Width`: chiều rộng layout hiện tại.
+- `Height`: chiều cao layout hiện tại.
+- `Layout ms`: thời gian build layout gần nhất.
+- `Measured`: thời điểm đo gần nhất.
 
 ---
 
-## 4. Health status
+## 6. Health status
 
 Diagnostics có 3 trạng thái:
 
@@ -110,7 +135,7 @@ Nút này chỉ đổi `autoCollapseLevel`, không sửa DB.
 
 ---
 
-## 5. Copy snapshot
+## 7. Copy snapshot
 
 Bấm:
 
@@ -149,11 +174,12 @@ Khi báo lỗi cây, gửi kèm:
 - Snapshot JSON
 - Root person đang chọn
 - Các filter đang bật/tắt
+- Mô tả thao tác ngay trước khi lỗi
 ```
 
 ---
 
-## 6. Layout invariant tests
+## 8. Layout invariant tests
 
 Test file:
 
@@ -163,13 +189,13 @@ tests/tree/vietnameseTreeLayout.test.ts
 
 Đã kiểm tra:
 
-* Parent/spouse horizontal alignment.
-* Children nằm dưới family center.
-* Child-down line đi đúng tâm node con.
-* Spouse line đi đúng tâm child ↔ spouse.
-* Layout đủ rộng khi child có expanded spouses.
-* Requested child unit width được tôn trọng.
-* Children sort theo birth_order rồi birth_year.
+- Parent/spouse horizontal alignment.
+- Children nằm dưới family center.
+- Child-down line đi đúng tâm node con.
+- Spouse line đi đúng tâm child ↔ spouse.
+- Layout đủ rộng khi child có expanded spouses.
+- Requested child unit width được tôn trọng.
+- Children sort theo birth_order rồi birth_year.
 
 Chạy:
 
@@ -179,7 +205,7 @@ bun run test
 
 ---
 
-## 7. Test UI thủ công
+## 9. Test UI thủ công
 
 Mở:
 
@@ -200,6 +226,8 @@ Kiểm tra:
 □ Expand/collapse vẫn hoạt động.
 □ Filter nam/nữ/dâu/rể/con trai/con gái vẫn hoạt động.
 □ Đường nối spouse/child không lệch rõ rệt.
+□ Đa phu/đa thê không làm giao tuyến sai nghiêm trọng.
+□ Bấm person mở bảng quan hệ đúng.
 ```
 
 Test route phụ:
@@ -210,7 +238,49 @@ Test route phụ:
 
 ---
 
-## 8. SQL/DB
+## 10. Vấn đề đã phát hiện sau v2.3.7
+
+### 10.1. Hydration mismatch tuổi
+
+Triệu chứng:
+
+```text
+Hydration failed because the server rendered text didn't match the client.
+server rendered age: 39
+client rendered age: 40
+```
+
+Nguyên nhân:
+
+- Tuổi tính theo `new Date()`.
+- Server/client lệch timezone hoặc thời điểm render.
+- SVG text của tuổi khác nhau giữa SSR và client.
+
+Cách xử lý đã chọn:
+
+```text
+Render VietnameseFamilyTree client-only bằng dynamic import ssr:false.
+```
+
+Không nên chỉ suppress warning trong `<tspan>` vì SVG tree lớn vẫn có thể rehydrate mismatch.
+
+### 10.2. Tuổi bị mất sau khi thử isMounted
+
+Nếu từng thêm điều kiện:
+
+```tsx
+{isMounted && dateParts.age ? (...)}
+```
+
+và tuổi không hiện, nên bỏ điều kiện này sau khi đã chuyển cả tree sang client-only:
+
+```tsx
+{dateParts.age ? (...)}
+```
+
+---
+
+## 11. SQL/DB
 
 Phase này không có migration DB.
 
@@ -218,7 +288,7 @@ Không cần chạy SQL.
 
 ---
 
-## 9. Không được làm
+## 12. Không được làm
 
 Không làm trong phase này:
 
@@ -232,7 +302,7 @@ Không làm trong phase này:
 
 ---
 
-## 10. Checklist hoàn thành v2.3.7
+## 13. Checklist hoàn thành v2.3.7
 
 Hoàn thành khi:
 
@@ -243,55 +313,35 @@ Hoàn thành khi:
 - Large tree warning hoạt động.
 - Auto-collapse guard hoạt động.
 - Vietnamese tree invariant tests pass.
+- Cây render client-only, không còn hydration mismatch tuổi.
 - bun run test pass.
 - bun run build pass.
 - Runbook được commit.
 ```
 
-````
-
 ---
 
-## 2. Chạy test/build
+## 14. Deploy/restart production
 
 ```bash
-bun run test
-bun run build
-````
+cd /opt/giapha-os
 
-## 3. Commit runbook
-
-```bash
-git status
-
-git add docs/runbooks/vietnamese-tree-hardening-runbook-v237.md
-
-git commit -m "docs(tree): add Vietnamese tree hardening runbook"
-
-git push
-```
-
----
-
-## 4. Merge v2.3.7 về main
-
-Khi working tree clean:
-
-```bash
 git checkout main
 git pull origin main
 
-git merge upgrade-v2.3.7-tree-hardening
+bun run release:check
 
-bun run test
+sudo rm -rf .next
 bun run build
 
-git push origin main
-
-git tag -a v2.3.7-tree-hardening -m "v2.3.7 Vietnamese Tree hardening"
-git push origin v2.3.7-tree-hardening
+sudo pm2 restart giapha --update-env
+sudo pm2 save
 ```
 
----
+Kiểm tra:
 
-Sau khi xong v2.3.7, bước tiếp theo nên là **v2.4.0 Release Cleanup**: tổng hợp changelog, kiểm tra toàn bộ route, dọn branch, và chuẩn bị một bản release ổn định.
+```bash
+sudo pm2 list
+sudo ss -ltnp | grep ':3000'
+curl -I http://127.0.0.1:3000
+```

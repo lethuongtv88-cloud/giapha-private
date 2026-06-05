@@ -2,292 +2,178 @@
 
 ## 1. Mục tiêu
 
-Quy trình GEDCOM v2.3.4 dùng để:
+GEDCOM Import/Merge v2.3.4 tạo luồng import an toàn cho dữ liệu gia phả:
 
-- Export GEDCOM UTF-8 từ Gia Phả.
-- Import GEDCOM vào staging trước, không ghi thẳng vào dữ liệu chính.
-- Chống tạo trùng person bằng stable UUID XREF.
-- Review person match / possible match.
-- Kiểm tra round-trip export → import.
-- Tạo merge suggestions cho dữ liệu GEDCOM nguồn ngoài.
-- Commit chỉ các merge suggestions đã được approve.
+- Parse GEDCOM vào staging trước.
+- Không ghi trực tiếp vào dữ liệu chính.
+- Matching người đã tồn tại.
+- Review duplicate/possible match.
+- Merge Plan preview.
+- Merge Suggestions review.
+- Commit chỉ các suggestion đã approved.
+- Audit sau import/merge.
+- Hỗ trợ GEDCOM round-trip từ chính app.
 
-Nguyên tắc chính:
+Nguyên tắc:
 
-> Không import trực tiếp vào dữ liệu chính nếu chưa qua staging, review, dry-run và audit.
+> Không commit khi chưa review. Round-trip từ file export của chính app phải match 100%, không tạo person mới.
 
 ---
 
-## 2. Các màn hình liên quan
-
-### 2.1. Import chính
+## 2. Các route chính
 
 ```text
 /dashboard/import
-````
-
-Dùng để:
-
-* Upload GEDCOM.
-* Xem danh sách import sessions.
-* Mở preview session.
-* Xóa staging session chưa commit.
-
-### 2.2. Import preview
-
-```text
 /dashboard/import/<SESSION_ID>
-```
-
-Dùng để:
-
-* Xem summary parse.
-* Xem GEDCOM round-trip report.
-* Xem import safety gate.
-* Mở Match Review.
-* Mở Merge Plan.
-* Mở Audit.
-* Kiểm tra commit plan.
-* Commit staging vào dữ liệu chính nếu thật sự cần.
-
-### 2.3. Match Review
-
-```text
 /dashboard/import/<SESSION_ID>/matches
-```
-
-Dùng để:
-
-* Xem strong matches.
-* Xem possible matches.
-* Xem create candidates.
-* Xem unknown candidates.
-* Skip possible matches nếu đúng là dữ liệu đã có.
-* Chuyển một possible match thành create nếu xác nhận là người mới.
-
-### 2.4. Merge Plan
-
-```text
 /dashboard/import/<SESSION_ID>/merge
-```
-
-Dùng để:
-
-* Xem GEDCOM event nào có thể bổ sung cho matched persons.
-* Tạo merge suggestions từ nhóm `can_create`.
-* Approve / skip / reject từng suggestion.
-* Commit approved suggestions vào `events` và `person_events`.
-
-### 2.5. Audit
-
-```text
 /dashboard/import/<SESSION_ID>/audit
 ```
 
-Dùng để kiểm tra sau import/merge:
+Ý nghĩa:
 
-* Active unknown persons.
-* Orphan active events.
-* Duplicate birth/death events.
-* Events without person_events link.
-* Active empty families.
-* GEDCOM merge events.
-* Committed merge suggestions.
+- `/dashboard/import`: Upload file GEDCOM và tạo staging session.
+- `/dashboard/import/<SESSION_ID>`: Tổng quan session.
+- `/matches`: Review person duplicate/possible match.
+- `/merge`: Xem Merge Plan và suggestion.
+- `/audit`: Kiểm tra sau import/merge.
 
 ---
 
-## 3. Round-trip test từ chính app
+## 3. Feature flag
 
-Dùng khi muốn kiểm tra:
+Production nên bật:
 
-```text
-Export GEDCOM từ Gia Phả → Import lại staging → Không tạo duplicate
+```env
+NEXT_PUBLIC_FF_GEDCOM_IMPORT_STAGING=true
 ```
 
-### 3.1. Quy trình
+Không nên dùng import trực tiếp không qua staging.
 
-1. Vào trang export GEDCOM.
-2. Export file GEDCOM full mới.
-3. Vào:
+---
+
+## 4. Luồng import chuẩn
+
+### 4.1. Upload GEDCOM
+
+Vào:
 
 ```text
 /dashboard/import
 ```
 
-4. Upload file GEDCOM vừa export.
-5. Mở import preview session.
+Upload file `.ged`.
 
-### 3.2. Kết quả đúng
+Sau khi parse thành công, hệ thống tạo staging session với summary:
 
-Round-trip đúng khi summary có dạng:
+```text
+Persons
+Names
+Families
+Family parents
+Family children
+Events
+Person events
+Matches
+Possible matches
+Warnings
+Errors
+Session ID
+```
+
+Nếu `Errors > 0`, không commit.
+
+---
+
+### 4.2. Kiểm tra summary
+
+Các trường hợp thường gặp:
+
+#### Round-trip từ chính app
+
+Kỳ vọng:
 
 ```text
 persons = matches
 possibleMatches = 0
 errors = 0
-person create candidates = 0
+person create pending = 0
 ```
 
-Ví dụ tốt:
+Không commit round-trip session.
+
+#### File GEDCOM từ nguồn ngoài
+
+Có thể có:
 
 ```text
-persons: 453
-matches: 453
-possibleMatches: 0
-errors: 0
+person create pending
+person match pending
+possible matches
+warnings
 ```
 
-Khi đó trang preview phải hiện:
-
-```text
-GEDCOM round-trip safe
-```
-
-và safety gate phải nhắc:
-
-```text
-Đây là session kiểm tra export/import, không cần COMMIT.
-```
-
-### 3.3. Không commit round-trip session
-
-Với session round-trip từ chính app:
-
-```text
-KHÔNG bấm COMMIT.
-```
-
-Lý do:
-
-* Dữ liệu đã có trong DB.
-* Mục tiêu chỉ là chứng minh không duplicate.
-* Nếu commit thì không có dữ liệu mới cần thêm.
-
-Có thể xóa staging session sau khi kiểm tra:
-
-```sql
-DELETE FROM public.import_sessions
-WHERE id = '<SESSION_ID>'
-  AND status <> 'committed';
-```
+Phải review trước khi commit.
 
 ---
 
-## 4. Nếu round-trip không đạt
+## 5. Match Review
 
-### 4.1. Có person create candidates
-
-Nếu file export từ chính app mà có:
-
-```text
-person action=create
-```
-
-thì kiểm tra:
-
-```sql
-SELECT id, full_name
-FROM public.persons
-WHERE id = '<external_id_bị_create>';
-```
-
-Nếu không có dòng nào, có thể file GEDCOM được export từ phiên bản cũ chưa dùng stable UUID XREF.
-
-Cần:
-
-1. Export lại file GEDCOM mới.
-2. Import staging lại.
-3. Không dùng file GEDCOM cũ để đánh giá round-trip.
-
-### 4.2. Có possible matches
-
-Nếu có:
-
-```text
-person action=match status=pending
-```
-
-thì mở:
+Route:
 
 ```text
 /dashboard/import/<SESSION_ID>/matches
 ```
 
-Nếu đây là file export từ chính app và các possible matches đúng là người đã có:
+Dùng để xử lý:
+
+- Strong duplicate.
+- Weak duplicate.
+- Unknown / Chưa rõ tên.
+- Person có external id trùng.
+- Person có tên giống nhưng thiếu ngày sinh.
+
+Quy tắc:
 
 ```text
-Skip tất cả possible matches
+certain match -> skipped
+review match -> user review
+create certain -> có thể tạo nếu thật sự mới
+create review -> phải kiểm tra kỹ
 ```
 
-Sau đó chạy lại kiểm tra commit plan hoặc refresh preview.
+Không approve bừa các person `Unknown/Chưa rõ tên`.
 
 ---
 
-## 5. Import GEDCOM nguồn ngoài
+## 6. Merge Plan
 
-GEDCOM nguồn ngoài là file không xuất từ app hiện tại, ví dụ:
+Route:
 
-* File từ phần mềm gia phả khác.
-* File cũ.
-* File do người khác gửi.
-* File đã chỉnh tay.
+```text
+/dashboard/import/<SESSION_ID>/merge
+```
 
-Không được coi là round-trip safe.
+Mục tiêu:
 
-### 5.1. Quy trình an toàn
+- Xem dữ liệu GEDCOM có thể bổ sung cho matched persons.
+- Chỉ preview.
+- Không ghi DB nếu chưa approve suggestion.
 
-1. Upload GEDCOM vào staging.
-2. Xem preview summary.
-3. Mở Match Review.
-4. Xử lý từng nhóm:
+Merge Plan dùng cho các trường hợp:
 
-   * Strong matches: thường để skipped.
-   * Possible matches: review kỹ.
-   * Create candidates: chỉ approve nếu chắc là người mới.
-   * Unknown: không approve nếu chưa rõ.
-5. Mở Merge Plan.
-6. Nếu có `can_create`, tạo merge suggestions.
-7. Review từng merge suggestion.
-8. Approve suggestion thật sự muốn merge.
-9. Commit approved merge suggestions.
-10. Mở Audit.
+```text
+- Người đã tồn tại nhưng thiếu ngày sinh/ngày mất.
+- Tên phụ/other_names có thể bổ sung.
+- Event có thể bổ sung.
+- Relationship/family có thể bổ sung.
+```
 
 ---
 
-## 6. Merge suggestions
+## 7. Merge Suggestions
 
-Merge suggestions là lớp review giữa GEDCOM staging và dữ liệu chính.
-
-### 6.1. Tạo suggestions
-
-Trong Merge Plan:
-
-```text
-Tạo suggestions
-```
-
-Hệ thống chỉ tạo suggestion cho các event có trạng thái:
-
-```text
-can_create
-```
-
-Hiện tại hỗ trợ:
-
-```text
-create_event
-```
-
-cho:
-
-```text
-birth
-death
-```
-
-### 6.2. Duyệt suggestions
-
-Trạng thái:
+Merge suggestions có status:
 
 ```text
 pending
@@ -297,111 +183,161 @@ rejected
 committed
 ```
 
-Ý nghĩa:
+Quy tắc:
 
-* `pending`: mới tạo, chưa quyết định.
-* `approved`: sẽ được commit nếu bấm commit approved suggestions.
-* `skipped`: bỏ qua.
-* `rejected`: từ chối.
-* `committed`: đã ghi vào dữ liệu chính.
+- Chỉ `approved` mới được commit.
+- `pending` là chưa quyết định.
+- `skipped` là bỏ qua an toàn.
+- `rejected` là xác định không đúng.
+- `committed` là đã ghi vào DB chính.
 
-### 6.3. Commit suggestions
-
-Chỉ bấm:
-
-```text
-Commit approved suggestions
-```
-
-sau khi đã kiểm tra kỹ.
-
-RPC commit sẽ:
-
-* Insert vào `events`.
-* Insert vào `person_events`.
-* Không tạo duplicate nếu event cùng person/type/date đã tồn tại.
-* Đổi suggestion thành `committed`.
+Không commit nếu còn approved suggestion chưa hiểu payload.
 
 ---
 
-## 7. Audit sau import/merge
+## 8. Commit approved merge suggestions
 
-Sau khi commit merge suggestions, mở:
+RPC liên quan:
+
+```text
+commit_gedcom_merge_suggestions()
+```
+
+Quy tắc commit:
+
+- Chỉ commit suggestion `approved`.
+- Có transaction.
+- Có report inserted/skipped/errors.
+- Sau commit phải refresh audit.
+
+Nếu commit lỗi:
+
+1. Không retry bừa.
+2. Đọc error code.
+3. Kiểm tra payload suggestion.
+4. Sửa RPC/code nếu do schema mismatch.
+5. Chạy lại test/build trước khi commit lại.
+
+---
+
+## 9. Commit staging import
+
+Luồng commit staging chỉ dùng cho file từ nguồn ngoài sau khi review.
+
+Commit plan cần hợp lệ:
+
+```text
+Persons
+Person names
+Families
+Family parents
+Family children
+Events
+Person events
+Unsupported
+```
+
+Các lỗi từng gặp và cách hiểu:
+
+```text
+column gender is of type gender_enum but expression is of type text
+-> cần cast enum.
+
+column status is of type family_status_enum but expression is of type text
+-> cần cast enum.
+
+type public.family_parent_role_enum does not exist
+-> schema thực tế không có enum tên đó, phải dùng enum/cột thật.
+
+column sort_order of relation person_events does not exist
+-> schema thật không có sort_order, bỏ khỏi insert.
+
+column full_name of relation person_names does not exist
+-> schema person_names thật khác thiết kế, phải map đúng cột.
+```
+
+---
+
+## 10. GEDCOM round-trip validation
+
+Round-trip nghĩa là:
+
+```text
+Export GEDCOM từ app -> import lại chính file đó
+```
+
+Kỳ vọng:
+
+```text
+persons = matches
+possibleMatches = 0
+errors = 0
+families create = 0
+family_parents create = 0
+family_children create = 0 hoặc chỉ những dữ liệu mới thật sự thiếu
+```
+
+Không commit round-trip session vì mục tiêu chỉ là kiểm tra export/import.
+
+Quan trọng:
+
+- GEDCOM exporter phải dùng stable UUID XREF.
+- GEDCOM parser phải giữ UUID XREF nếu XREF là UUID.
+- Unknown/Chưa rõ tên vẫn phải match được bằng external id, không tạo mới.
+
+---
+
+## 11. Stable UUID XREF
+
+Khi export GEDCOM từ app, XREF phải giữ định danh ổn định:
+
+```text
+0 @<person_uuid>@ INDI
+```
+
+Khi import lại, parser phải preserve UUID XREF thành external id/person id để matching chính xác.
+
+Mục tiêu:
+
+```text
+Người tên Unknown/Chưa rõ tên vẫn match được nếu XREF là UUID của person hiện có.
+```
+
+---
+
+## 12. Post-import audit
+
+Route:
 
 ```text
 /dashboard/import/<SESSION_ID>/audit
 ```
 
-Audit tốt khi:
+Kiểm tra:
 
-```text
-Orphan active events = 0
-Duplicate birth/death events = 0
-Events without person_events link = 0
-Active empty families = 0
-```
+- Unknown persons.
+- Duplicate events.
+- Missing person event links.
+- Empty families.
+- Pending/approved merge suggestions.
+- Staging records chưa xử lý.
 
-`Active unknown persons` có thể > 0 nếu đây là những người được nhập thủ công chưa biết tên. Trường hợp này là info, không nhất thiết là lỗi.
+Nếu audit còn lỗi blocking, không xem import là hoàn tất.
 
 ---
 
-## 8. SQL kiểm tra nhanh
+## 13. SQL kiểm tra session
 
-### 8.1. Unknown active persons
-
-```sql
-SELECT COUNT(*) AS active_unknown_left
-FROM public.persons
-WHERE full_name IN ('Unknown', 'Chưa rõ tên')
-  AND deleted_at IS NULL;
-```
-
-### 8.2. Orphan active events
+Danh sách session:
 
 ```sql
-SELECT COUNT(*) AS orphan_active_events
-FROM public.events e
-WHERE e.deleted_at IS NULL
-  AND e.family_id IS NULL
-  AND e.legacy_person_id IS NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM public.person_events pe
-    WHERE pe.event_id = e.id
-  );
+SELECT id, file_name, status, created_at
+FROM public.import_sessions
+ORDER BY created_at DESC
+LIMIT 20;
 ```
 
-### 8.3. Events missing person_events link
-
-```sql
-SELECT COUNT(*) AS events_without_person_events
-FROM public.events e
-WHERE e.deleted_at IS NULL
-  AND e.legacy_person_id IS NOT NULL
-  AND e.type IN ('birth', 'death')
-  AND NOT EXISTS (
-    SELECT 1 FROM public.person_events pe
-    WHERE pe.event_id = e.id
-      AND pe.person_id = e.legacy_person_id
-  );
-```
-
-### 8.4. Empty active families
-
-```sql
-SELECT COUNT(*) AS active_empty_families
-FROM public.families f
-WHERE f.deleted_at IS NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM public.family_parents fp
-    WHERE fp.family_id = f.id
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM public.family_children fc
-    WHERE fc.family_id = f.id
-  );
-```
-
-### 8.5. Staging summary
+Đếm staging records:
 
 ```sql
 SELECT record_type, action, status, confidence, COUNT(*)
@@ -411,103 +347,124 @@ GROUP BY record_type, action, status, confidence
 ORDER BY record_type, action, status, confidence;
 ```
 
-### 8.6. Merge suggestions summary
+Pending merge suggestions:
 
 ```sql
-SELECT suggestion_type, status, COUNT(*)
+SELECT status, COUNT(*)
 FROM public.import_merge_suggestions
 WHERE session_id = '<SESSION_ID>'
-GROUP BY suggestion_type, status
-ORDER BY suggestion_type, status;
+GROUP BY status
+ORDER BY status;
 ```
 
 ---
 
-## 9. Những việc không được làm
+## 14. Dọn session test
+
+Chỉ xóa session chưa committed:
+
+```sql
+DELETE FROM public.import_sessions
+WHERE id = '<SESSION_ID>'
+  AND status <> 'committed';
+```
+
+Không xóa session đã committed nếu chưa có backup/audit rõ ràng.
+
+---
+
+## 15. Các migration/RPC liên quan
+
+Các file migration liên quan phase GEDCOM Import/Merge:
+
+```text
+022_gedcom_staging_import_v234.sql
+024_gedcom_merge_suggestions_v234.sql
+025_commit_gedcom_merge_suggestions_v234.sql
+026_import_audit_rpcs_v234.sql
+```
+
+Các RPC/audit thường dùng:
+
+```text
+commit_gedcom_merge_suggestions()
+count_events_without_person_events()
+count_active_empty_families()
+count_duplicate_birth_death_events()
+```
+
+---
+
+## 16. Không được làm
 
 Không làm:
 
 ```text
-- Không hard delete events.
-- Không hard delete persons thật.
+- Không import trực tiếp vào DB chính nếu chưa staging.
 - Không commit round-trip session.
-- Không approve tất cả nếu còn possible matches chưa hiểu rõ.
-- Không commit file GEDCOM nguồn ngoài nếu chưa mở Match Review.
-- Không commit merge suggestions khi chưa chạy Audit hoặc chưa hiểu can_create.
-- Không tắt trigger safety.
+- Không approve merge suggestion nếu chưa hiểu payload.
+- Không hard delete dữ liệu import đã committed.
+- Không sửa staging bằng tay nếu chưa backup.
+- Không tắt RLS/trigger safety để ép commit.
 ```
 
 ---
 
-## 10. Quy ước commit code
-
-Sau mỗi mốc pass:
-
-```bash
-bun run test
-bun run build
-git status
-git add <files>
-git commit -m "<message>"
-git push
-```
-
-Gợi ý commit messages:
-
-```text
-fix(gedcom): use stable UUID XREFs for round-trip import
-feat(import): add GEDCOM round-trip validation report
-feat(import): add preview-only GEDCOM merge plan
-feat(import): add GEDCOM merge suggestions review layer
-feat(import): commit approved GEDCOM merge suggestions
-feat(import): add GEDCOM post-import audit report
-feat(import): add import safety gate
-docs(import): add GEDCOM import merge runbook
-```
-
----
-
-## 11. Trạng thái hoàn thành v2.3.4 GEDCOM Import/Merge
+## 17. Checklist hoàn thành v2.3.4
 
 Đạt khi:
 
 ```text
-- GEDCOM export dùng person.id làm INDI XREF.
-- GEDCOM parser giữ UUID XREF.
-- Import staging match 100% với file export từ app.
-- Match Review hoạt động.
-- Round-trip report hoạt động.
-- Merge Plan hoạt động.
-- Merge Suggestions hoạt động.
-- Commit approved merge suggestions hoạt động.
-- Audit report hoạt động.
-- Safety Gate hoạt động.
-- Runbook được commit vào repo.
+- GEDCOM upload tạo staging session.
+- Round-trip export/import match sạch.
+- Match Review mở được.
+- Merge Plan mở được.
+- Merge Suggestions approve/skip/reject được.
+- Commit approved suggestions chạy được.
+- Import audit mở được.
+- test pass.
+- build pass.
+- route audit pass.
 ```
-
-````
 
 ---
 
-## 2. Chạy test/build
+## 18. Quy trình kiểm tra nhanh
 
 ```bash
 bun run test
 bun run build
-````
+bun run audit:routes
+```
 
-## 3. Commit
+Nếu đã có release check:
 
 ```bash
-git status
-
-git add docs/runbooks/gedcom-import-merge-runbook-v234.md
-
-git commit -m "docs(import): add GEDCOM import merge runbook"
-
-git push
+bun run release:check
 ```
 
 ---
 
-Sau bước này, mảng **GEDCOM Import/Merge v2.3.4** xem như đã khóa mốc. Tiếp theo nên chuyển sang **cleanup/hardening cuối phase**: rà lại migration files, gộp docs, kiểm tra route import, và chuẩn bị merge branch về main.
+## 19. Deploy sau khi sửa GEDCOM import
+
+```bash
+cd /opt/giapha-os
+
+git checkout main
+git pull origin main
+
+bun run release:check
+
+sudo rm -rf .next
+bun run build
+
+sudo pm2 restart giapha --update-env
+sudo pm2 save
+```
+
+Kiểm tra:
+
+```bash
+curl -I http://127.0.0.1:3000
+sudo pm2 list
+```
