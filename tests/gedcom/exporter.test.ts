@@ -156,6 +156,7 @@ describe("GEDCOM exporter v2.3.4 Family/Event", () => {
     expect(out).not.toContain("1 NAME Legacy /Tên/");
   });
 });
+
 it("uses stable person id as GEDCOM INDI XREF", () => {
   const personId = "72304db3-6e08-44f5-965e-9eba363e4c31";
 
@@ -179,3 +180,31 @@ it("uses stable person id as GEDCOM INDI XREF", () => {
 
   expect(result.content).toContain(`0 @${personId}@ INDI`);
 });
+
+it("exports Vietnamese names in FamilyGem display order when requested", () => {
+  const out = exportToGedcom(
+    {
+      persons: [
+        {
+          id: "p1",
+          full_name: "Nguyễn Văn A",
+          gender: "male",
+        } as any,
+      ],
+      relationships: [],
+      personNames: [],
+      events: [],
+      personEvents: [],
+      families: [],
+      familyParents: [],
+      familyChildren: [],
+    } as any,
+    { nameFormat: "familygem" },
+  );
+
+  expect(out).toContain("1 NAME Nguyễn Văn A");
+  expect(out).toContain("2 SURN Nguyễn");
+  expect(out).toContain("2 GIVN Văn A");
+  expect(out).not.toContain("1 NAME Văn A /Nguyễn/");
+});
+

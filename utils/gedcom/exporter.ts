@@ -10,8 +10,16 @@ import type {
   GedcomRelationship,
 } from "./types";
 import { GedcomWriter } from "./writer";
-import { formatGedcomName, splitVietnameseName } from "./name";
+import { formatGedcomName, splitVietnameseName, type GedcomNameFormat } from "./name";
 import { formatGedcomDate } from "./date";
+
+export type GedcomExportOptions = {
+  /**
+   * standard: GEDCOM slash surname, best for Gramps/webtrees.
+   * familygem: visible Vietnamese full name, best for FamilyGem.
+   */
+  nameFormat?: GedcomNameFormat;
+};
 
 type ExportData = {
   persons: GedcomPerson[];
@@ -41,12 +49,13 @@ type PersonEventBundle = {
   deathEvents: GedcomEvent[];
 };
 
-export function exportToGedcom(data: ExportData): string {
-  return exportToGedcomWithWarnings(data).content;
+export function exportToGedcom(data: ExportData, options?: GedcomExportOptions): string {
+  return exportToGedcomWithWarnings(data, options).content;
 }
 
-export function exportToGedcomWithWarnings(data: ExportData): GedcomExportResult {
+export function exportToGedcomWithWarnings(data: ExportData, options?: GedcomExportOptions): GedcomExportResult {
   const warnings: string[] = [];
+  const nameFormat = options?.nameFormat ?? "standard";
   const w = new GedcomWriter();
 
   const persons = data.persons ?? [];
@@ -106,7 +115,7 @@ export function exportToGedcomWithWarnings(data: ExportData): GedcomExportResult
     w.add(
       1,
       "NAME",
-      formatGedcomName(fullName, primaryName.surname, primaryName.given_name),
+      formatGedcomName(fullName, primaryName.surname, primaryName.given_name, nameFormat),
     );
 
     const n = splitVietnameseName(
@@ -123,7 +132,7 @@ export function exportToGedcomWithWarnings(data: ExportData): GedcomExportResult
       const altFullName = alt.full_name?.trim();
       if (!altFullName || altFullName === fullName) continue;
 
-      w.add(1, "NAME", formatGedcomName(altFullName, alt.surname, alt.given_name));
+      w.add(1, "NAME", formatGedcomName(altFullName, alt.surname, alt.given_name, nameFormat));
       w.add(2, "TYPE", alt.name_type || "also_known_as");
     }
 
