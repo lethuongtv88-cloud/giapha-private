@@ -1378,7 +1378,7 @@ function buildTreeBlock({
         x: rightMostHusbandRight + SPOUSE_GAP,
       });
     } else {
-      const center = centerOfGroupSlots(groupSlots);
+      const center = centerOfGroupAnchors(groupSlots);
       positionedPeople.set(person.id, {
         person,
         x: center - NODE_WIDTH / 2,
@@ -1435,7 +1435,7 @@ function buildTreeBlock({
         x: leftMostWifeLeft - SPOUSE_GAP - NODE_WIDTH,
       });
     } else {
-      const center = centerOfGroupSlots(groupSlots);
+      const center = centerOfGroupAnchors(groupSlots);
       positionedPeople.set(person.id, {
         person,
         x: center - NODE_WIDTH / 2,
@@ -1465,7 +1465,7 @@ function buildTreeBlock({
   }
 
   if (!positionedPeople.has(person.id)) {
-    const center = centerOfGroupSlots(groupSlots);
+    const center = centerOfGroupAnchors(groupSlots);
     positionedPeople.set(person.id, {
       person,
       x: center - NODE_WIDTH / 2,
@@ -1750,6 +1750,15 @@ function centerOfGroupSlots(slots: GroupSlot[]) {
   const maxX = Math.max(...slots.map((slot) => slot.x + slot.width));
 
   return (minX + maxX) / 2;
+}
+
+function centerOfGroupAnchors(slots: GroupSlot[]) {
+  if (slots.length === 0) return NODE_WIDTH / 2;
+
+  const minAnchorX = Math.min(...slots.map((slot) => slot.anchorX));
+  const maxAnchorX = Math.max(...slots.map((slot) => slot.anchorX));
+
+  return (minAnchorX + maxAnchorX) / 2;
 }
 
 function pickMaleSpouse(spouses: Person[]) {
