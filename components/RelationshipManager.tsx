@@ -997,6 +997,99 @@ export default function RelationshipManager({
     }
   };
 
+  const handleRestoreMarriage = async (rel: EnrichedRelationship) => {
+    if (rel.type !== "marriage" || rel.direction !== "spouse") return;
+
+    if (rel.status !== "divorced") {
+      setError("Quan hệ này chưa ở trạng thái ly hôn.");
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+
+    const ok = confirm(
+      `Khôi phục hôn nhân giữa ${person.full_name} và ${rel.targetPerson.full_name}?\n\nThao tác này sẽ đổi quan hệ về trạng thái đang kết hôn và đường nối trên cây sẽ trở lại nét liền.`,
+    );
+
+    if (!ok) return;
+
+    setProcessing(true);
+    setError(null);
+
+    try {
+      const now = new Date();
+
+      const relationshipUpdatePayload: Record<string, string | null> = {
+        status: "active",
+        ended_at: null,
+      };
+
+      if ("divorce_note" in rel) {
+        relationshipUpdatePayload.divorce_note = null;
+      }
+
+      const { error: relError } = await supabase
+        .from("relationships")
+        .update(relationshipUpdatePayload)
+        .eq("id", rel.id)
+        .eq("type", "marriage")
+        .is("deleted_at", null);
+
+      if (relError) throw relError;
+
+      const familyUpdatePayload = {
+        status: "active",
+        end_year: null,
+        updated_at: now.toISOString(),
+      };
+
+      // 1) Đồng bộ Family Model theo legacy_relationship_id nếu có.
+      const { error: legacyFamilyError } = await supabase
+        .from("families")
+        .update(familyUpdatePayload)
+        .eq("legacy_relationship_id", rel.id)
+        .is("deleted_at", null);
+
+      if (legacyFamilyError) throw legacyFamilyError;
+
+      // 2) Đồng bộ theo cặp parent trong family_parents.
+      let sharedFamilyIds = await findSharedMarriageFamilyIds(
+        personId,
+        rel.targetPerson.id,
+      );
+
+      if (sharedFamilyIds.length === 0) {
+        const ensuredFamilyId = await ensureFamilyModelMarriage({
+          supabase,
+          personId,
+          targetPersonId: rel.targetPerson.id,
+        });
+
+        if (ensuredFamilyId) {
+          sharedFamilyIds = [ensuredFamilyId];
+        }
+      }
+
+      if (sharedFamilyIds.length > 0) {
+        const { error: sharedFamilyError } = await supabase
+          .from("families")
+          .update(familyUpdatePayload)
+          .in("id", Array.from(new Set(sharedFamilyIds)))
+          .is("deleted_at", null);
+
+        if (sharedFamilyError) throw sharedFamilyError;
+      }
+
+      fetchRelationships();
+      router.refresh();
+    } catch (err: unknown) {
+      const e = err as Error;
+      setError("Không thể khôi phục hôn nhân: " + e.message);
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const getFamilyParentRole = (gender: string | null | undefined) => {
     if (gender === "male") return "husband";
     if (gender === "female") return "wife";
@@ -1119,6 +1212,32 @@ export default function RelationshipManager({
                               <path d="M12 21C7 17 3 13.5 3 8.8A4.8 4.8 0 0 1 11.1 5.4L12 6.4l.9-1A4.8 4.8 0 0 1 21 8.8c0 1.9-.7 3.6-1.9 5.2" />
                               <path d="M12 21l3.2-3.1" />
                               <path d="M15 14l-3 4h4l-3 4" />
+                            </svg>
+                          </button>
+                        )}
+
+                        {rel.type === "marriage" && rel.direction === "spouse" && rel.status === "divorced" && (
+                          <button
+                            onClick={() => handleRestoreMarriage(rel)}
+                            disabled={processing}
+                            className="text-stone-300 hover:text-emerald-600 hover:bg-emerald-50 p-2 sm:p-2.5 rounded-lg transition-colors flex items-center justify-center disabled:opacity-50"
+                            title="Khôi phục hôn nhân"
+                            aria-label="Khôi phục hôn nhân"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M20 8A5 5 0 0 0 12 4.5A5 5 0 0 0 4 8c0 5 8 11 8 11s2.4-1.8 4.6-4.2" />
+                              <path d="M16 19h6" />
+                              <path d="M19 16v6" />
                             </svg>
                           </button>
                         )}
