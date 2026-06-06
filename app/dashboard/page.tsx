@@ -15,6 +15,7 @@ import {
  DatabaseZap,
 Activity,
   Image as ImageIcon,
+  Settings,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -108,6 +109,16 @@ export default async function DashboardLaunchpad() {
       bgColor: "bg-pink-50",
       borderColor: "border-pink-200/60",
       hoverColor: "hover:border-pink-400 hover:shadow-pink-100",
+    },
+    {
+      title: "Cài đặt tài khoản",
+      description:
+        "Chọn người gốc mặc định cho Cây gia phả, Nội / Ngoại, Sui gia, Mindmap, Bong bóng và Thống kê",
+      icon: <Settings className="size-8 text-stone-600" />,
+      href: "/dashboard/account-settings",
+      bgColor: "bg-stone-50",
+      borderColor: "border-stone-200/60",
+      hoverColor: "hover:border-stone-400 hover:shadow-stone-100",
     },
     // {
     //   title: "Giới thiệu & Liên hệ",
