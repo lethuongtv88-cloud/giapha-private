@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Database, RotateCcw, Save } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, KeyRound, RotateCcw, Save } from "lucide-react";
 import type { Person } from "@/types";
 import PersonSelector from "@/components/PersonSelector";
+import { createClient } from "@/utils/supabase/client";
 import { useUser } from "@/components/UserProvider";
 import {
   ROOT_PREFERENCE_KINDS,
@@ -48,6 +49,9 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
   const [loaded, setLoaded] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -108,6 +112,51 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
       setSavedMessage(null);
       setSaveWarning(null);
     }, 6000);
+  };
+
+  const changePassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPasswordMessage(null);
+    setPasswordError(null);
+
+    const formData = new FormData(event.currentTarget);
+    const password = formData.get("password")?.toString() ?? "";
+    const confirmPassword = formData.get("confirm_password")?.toString() ?? "";
+
+    if (password.length < 6) {
+      setPasswordError("Mật khẩu mới phải có ít nhất 6 ký tự.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setPasswordError("Mật khẩu nhập lại không khớp.");
+      return;
+    }
+
+    setIsChangingPassword(true);
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({ password });
+
+      if (error) {
+        setPasswordError(error.message);
+        return;
+      }
+
+      event.currentTarget.reset();
+      setPasswordMessage("Đã cập nhật mật khẩu của bạn.");
+      window.setTimeout(() => {
+        setPasswordMessage(null);
+        setPasswordError(null);
+      }, 6000);
+    } catch (err: unknown) {
+      setPasswordError(
+        err instanceof Error ? err.message : "Không thể cập nhật mật khẩu.",
+      );
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   const resetPreferences = async () => {
@@ -216,6 +265,73 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-stone-200 bg-white/90 p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-stone-100 p-2 text-stone-600">
+            <KeyRound className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-stone-900">Đổi mật khẩu</h2>
+            <p className="mt-1 text-sm text-stone-500">
+              Thành viên có thể tự đổi mật khẩu đăng nhập của mình tại đây.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={changePassword} className="mt-5 grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-stone-700">
+              Mật khẩu mới
+            </label>
+            <input
+              type="password"
+              name="password"
+              required
+              minLength={6}
+              className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition-colors focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+              placeholder="Ít nhất 6 ký tự"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-stone-700">
+              Nhập lại mật khẩu mới
+            </label>
+            <input
+              type="password"
+              name="confirm_password"
+              required
+              minLength={6}
+              className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition-colors focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+            />
+          </div>
+
+          <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-2">
+              {passwordMessage ? (
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+                  {passwordMessage}
+                </p>
+              ) : null}
+              {passwordError ? (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                  {passwordError}
+                </p>
+              ) : null}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isChangingPassword}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-stone-800 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-stone-900 disabled:opacity-50"
+            >
+              <KeyRound className="size-4" />
+              {isChangingPassword ? "Đang cập nhật..." : "Cập nhật mật khẩu"}
+            </button>
+          </div>
+        </form>
       </div>
 
       <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-4 text-sm text-sky-900">

@@ -16,9 +16,12 @@ export interface Profile {
 export interface AdminUserData {
   id: string;
   email: string;
+  full_name?: string | null;
+  name?: string | null;
   role: UserRole;
   is_active: boolean;
   created_at: string;
+  default_tree_root_id?: string | null;
 }
 
 export interface Person {
