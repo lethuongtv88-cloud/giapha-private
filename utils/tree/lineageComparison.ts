@@ -4,6 +4,10 @@ import type {
   FamilyParentRow,
   FamilyRow,
 } from "@/services/statistics/globalStats.service";
+import {
+  getInLawAddressSuggestion,
+  type KinshipAddressRegion,
+} from "@/utils/kinship/inLawAddressing";
 
 export type LineageBranch = "paternal" | "maternal";
 export type InLawSide = "root" | "spouse";
@@ -15,6 +19,8 @@ export interface LineageDisplayOptions {
   hideDaughtersInLaw: boolean;
   /** Ẩn nam phối ngẫu đi vào dòng họ qua hôn nhân: chồng/con rể/anh em rể/dượng... */
   hideSonsInLaw: boolean;
+  /** Vùng miền dùng để gợi ý cách xưng hô trong bảng Sui gia. */
+  addressRegion: KinshipAddressRegion;
 }
 
 export interface LineagePersonItem {
@@ -115,6 +121,7 @@ const DEFAULT_DISPLAY_OPTIONS: LineageDisplayOptions = {
   includeClan: false,
   hideDaughtersInLaw: false,
   hideSonsInLaw: false,
+  addressRegion: "south",
 };
 
 function normalizeDisplayOptions(options?: Partial<LineageDisplayOptions>): LineageDisplayOptions {
@@ -205,6 +212,28 @@ function addressHint(item: { branch: LineageBranch | "couple" | "descendant"; ge
   if (item.branch === "descendant") return "Hậu duệ chung, xưng theo đời con/cháu";
   if (item.generation < 0) return `Thường gọi: ${item.relationLabel.toLowerCase()}`;
   return item.relationLabel;
+}
+
+function applyInLawAddressHints(
+  items: InLawPersonItem[],
+  root: Person | null,
+  spouse: Person | null,
+  region: KinshipAddressRegion,
+): InLawPersonItem[] {
+  return items.map((item) => ({
+    ...item,
+    addressHint: getInLawAddressSuggestion({
+      person: item.person,
+      root,
+      spouse,
+      side: item.side,
+      branch: item.branch,
+      generation: item.generation,
+      relationLabel: item.relationLabel,
+      isInLaw: item.isInLaw,
+      region,
+    }),
+  }));
 }
 
 function shouldShowInLaw(person: Person, options: LineageDisplayOptions): boolean {
@@ -446,6 +475,13 @@ export function buildInLawComparison(input: InLawInput): InLawComparisonResult {
     }
   }
 
+  const addressRegion = displayOptions.addressRegion;
+  const rootPaternal = applyInLawAddressHints(rootLineage.paternal, root, selectedSpouse, addressRegion);
+  const rootMaternal = applyInLawAddressHints(rootLineage.maternal, root, selectedSpouse, addressRegion);
+  const couple = applyInLawAddressHints(coupleItems, root, selectedSpouse, addressRegion);
+  const spousePaternal = applyInLawAddressHints(spouseLineage.paternal, root, selectedSpouse, addressRegion);
+  const spouseMaternal = applyInLawAddressHints(spouseLineage.maternal, root, selectedSpouse, addressRegion);
+
   return {
     root,
     spouses,
@@ -453,11 +489,11 @@ export function buildInLawComparison(input: InLawInput): InLawComparisonResult {
     rows: createInLawRows(
       generationsUp,
       generationsDown,
-      rootLineage.paternal,
-      rootLineage.maternal,
-      coupleItems,
-      spouseLineage.paternal,
-      spouseLineage.maternal,
+      rootPaternal,
+      rootMaternal,
+      couple,
+      spousePaternal,
+      spouseMaternal,
     ),
     warnings,
   };

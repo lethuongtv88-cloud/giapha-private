@@ -55,7 +55,9 @@ export default function LineagePersonCard({
       </div>
 
       {!compact && addressHint ? (
-        <p className="mt-1 text-xs leading-snug text-stone-500">{addressHint}</p>
+        <p className="mt-1 rounded-lg bg-white/65 px-2 py-1 text-xs leading-snug text-stone-600 ring-1 ring-white/70">
+          {addressHint}
+        </p>
       ) : null}
 
       {!compact && note ? (
