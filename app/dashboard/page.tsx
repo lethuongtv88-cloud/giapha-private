@@ -12,8 +12,8 @@ import {
   Network,
   Star,
   Users,
- DatabaseZap,
-Activity,
+  DatabaseZap,
+  Activity,
   Image as ImageIcon,
   Settings,
 } from "lucide-react";
@@ -150,22 +150,26 @@ export default async function DashboardLaunchpad() {
       borderColor: "border-indigo-200/60",
       hoverColor: "hover:border-indigo-400 hover:shadow-indigo-100",
     },
-{
-  title: "Bảo trì dữ liệu",
-  description:
-    "Kiểm tra và sửa dữ liệu sau migration/import: Unknown persons, duplicate events, missing links, empty families.",
-  href: "/dashboard/data-maintenance",
-  icon: <DatabaseZap className="size-7" />,
-  color: "from-slate-500 to-stone-600",
-},
-{
-  title: "Admin Health",
-  description:
-    "Tổng quan nhanh trạng thái hệ thống: dữ liệu bất thường, import sessions, merge suggestions và maintenance.",
-  href: "/dashboard/admin-health",
-  icon: <Activity className="size-7" />,
-  color: "from-emerald-500 to-teal-600",
-},
+    {
+      title: "Bảo trì dữ liệu",
+      description:
+        "Kiểm tra và sửa dữ liệu sau migration/import: Unknown persons, duplicate events, missing links, empty families.",
+      icon: <DatabaseZap className="size-8 text-slate-600" />,
+      href: "/dashboard/data-maintenance",
+      bgColor: "bg-slate-50",
+      borderColor: "border-slate-200/60",
+      hoverColor: "hover:border-slate-400 hover:shadow-slate-100",
+    },
+    {
+      title: "Admin Health",
+      description:
+        "Tổng quan nhanh trạng thái hệ thống: dữ liệu bất thường, import sessions, merge suggestions và maintenance.",
+      icon: <Activity className="size-8 text-emerald-600" />,
+      href: "/dashboard/admin-health",
+      bgColor: "bg-emerald-50",
+      borderColor: "border-emerald-200/60",
+      hoverColor: "hover:border-emerald-400 hover:shadow-emerald-100",
+    },
     {
       title: "Sao lưu & Phục hồi",
       description: "Xuất/Nhập dữ liệu toàn hệ thống",
