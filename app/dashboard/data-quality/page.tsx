@@ -225,6 +225,20 @@ export default async function DataQualityPage() {
     >
       Tổng quan maintenance
     </Link>
+
+    <Link
+      href="/dashboard/data-quality/family-model"
+      className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-800"
+    >
+      Family Model nâng cao
+    </Link>
+
+    <Link
+      href="/dashboard/data-maintenance/family-model"
+      className="rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800"
+    >
+      Repair Family Model
+    </Link>
 <Link
   href="/dashboard/admin-health"
   className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"

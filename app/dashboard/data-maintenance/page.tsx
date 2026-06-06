@@ -5,6 +5,7 @@ import {
   Link2Off,
   ShieldCheck,
   UserRoundX,
+  Wrench,
 } from "lucide-react";
 import { getSupabase } from "@/utils/supabase/queries";
 
@@ -151,6 +152,14 @@ export default async function DataMaintenancePage() {
             icon={<DatabaseZap className="size-6" />}
             count={emptyFamiliesCount}
             tone={emptyFamiliesCount > 0 ? "amber" : "emerald"}
+          />
+
+          <ToolCard
+            title="Family Model nâng cao"
+            description="Audit và repair missing marriage/child Family Model, duplicate parent/child và cấu trúc family bất thường."
+            href="/dashboard/data-maintenance/family-model"
+            icon={<Wrench className="size-6" />}
+            tone="indigo"
           />
         </section>
         <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
