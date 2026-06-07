@@ -28,7 +28,7 @@ export async function getPersonTimelineEvents(
     .from('events_active')
     .select('id, type, title, start_date, end_date, date_precision, place_text, description, sort_date')
     .in('id', eventIds)
-    .order('sort_date', { ascending: true });
+    .order('sort_date', { ascending: false });
 
   if (eventsError) {
     console.warn('Failed to load person timeline events:', eventsError);

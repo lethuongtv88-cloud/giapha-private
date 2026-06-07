@@ -2,6 +2,7 @@
 
 import DefaultAvatar from "@/components/DefaultAvatar";
 import RelationshipManager from "@/components/RelationshipManager";
+import { PersonTimelineClient } from "@/components/PersonTimelineClient";
 import { Person } from "@/types";
 import {
   calculateAge,
@@ -22,6 +23,7 @@ import {
   Phone,
   UserPlus,
   Users,
+  CalendarDays,
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useState } from "react";
@@ -578,6 +580,16 @@ export default function MemberDetailContent({
                   allowedPersonIds={allowedPersonIds}
                   onStatsLoaded={handleStatsLoaded}
                 />
+              </div>
+            </motion.section>
+
+            <motion.section layout variants={itemVariants}>
+              <h2 className="text-base sm:text-lg font-bold text-stone-800 mb-4 flex items-center gap-2">
+                <CalendarDays className="size-5 text-amber-600" />
+                Sự kiện
+              </h2>
+              <div className="bg-white/80 backdrop-blur-sm p-4 sm:p-6 rounded-2xl border border-stone-200/60 shadow-sm">
+                <PersonTimelineClient personId={person.id} />
               </div>
             </motion.section>
           </div>
