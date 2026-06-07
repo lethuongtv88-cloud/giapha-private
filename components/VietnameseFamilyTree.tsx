@@ -148,11 +148,21 @@ const DEFAULT_AUTO_COLLAPSE_LEVEL = 4;
 const NODE_WIDTH = VIET_NODE_WIDTH;
 const NODE_HEIGHT = VIET_NODE_HEIGHT;
 const AVATAR_SIZE = VIET_AVATAR_SIZE;
-const SPOUSE_GAP = VIET_SPOUSE_GAP;
-const SIBLING_GAP = VIET_SIBLING_GAP;
-const MARRIAGE_GROUP_GAP = VIET_MARRIAGE_GROUP_GAP;
-const GENERATION_GAP = VIET_GENERATION_GAP;
-const CHILD_BAR_OFFSET = VIET_CHILD_BAR_OFFSET;
+let SPOUSE_GAP = VIET_SPOUSE_GAP;
+let SIBLING_GAP = VIET_SIBLING_GAP;
+let MARRIAGE_GROUP_GAP = VIET_MARRIAGE_GROUP_GAP;
+let GENERATION_GAP = VIET_GENERATION_GAP;
+let CHILD_BAR_OFFSET = VIET_CHILD_BAR_OFFSET;
+
+function applyTreeSpacing(compact: boolean) {
+  const scale = compact ? 0.5 : 1;
+
+  SPOUSE_GAP = Math.round(VIET_SPOUSE_GAP * scale);
+  SIBLING_GAP = Math.round(VIET_SIBLING_GAP * scale);
+  MARRIAGE_GROUP_GAP = Math.round(VIET_MARRIAGE_GROUP_GAP * scale);
+  GENERATION_GAP = Math.round(VIET_GENERATION_GAP * scale);
+  CHILD_BAR_OFFSET = Math.round(VIET_CHILD_BAR_OFFSET * scale);
+}
 
 const LINE_COLOR = "#a8a29e";
 
@@ -187,9 +197,12 @@ export default function VietnameseFamilyTree({
   const [hideMales, setHideMales] = useState(false);
   const [hideFemales, setHideFemales] = useState(false);
   const [hideExpandButtons, setHideExpandButtons] = useState(false);
+  const [compactTree, setCompactTree] = useState(false);
   const [autoCollapseLevel, setAutoCollapseLevel] = useState(
     DEFAULT_AUTO_COLLAPSE_LEVEL,
   );
+
+  applyTreeSpacing(compactTree);
 
   const { showAvatar, setMemberModalId } = useMemberListView();
 
@@ -274,6 +287,7 @@ export default function VietnameseFamilyTree({
     hideSons,
     hideMales,
     hideFemales,
+    compactTree,
   ]);
 
   const diagnostics = useMemo(() => {
@@ -364,6 +378,8 @@ export default function VietnameseFamilyTree({
         handleCenter={centerTree}
         hideExpandButtons={hideExpandButtons}
         setHideExpandButtons={setHideExpandButtons}
+        compactTree={compactTree}
+        setCompactTree={setCompactTree}
         autoCollapseLevel={autoCollapseLevel}
         setAutoCollapseLevel={setAutoCollapseLevel}
         hideDaughtersInLaw={hideDaughtersInLaw}
