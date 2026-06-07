@@ -79,6 +79,7 @@ type MembersViewsProps = {
   familyParents?: FamilyParentRow[];
   familyChildren?: FamilyChildRow[];
   canEdit?: boolean;
+  allowedPersonIds?: string[] | null;
 };
 
 export default function MembersViews({
@@ -88,6 +89,7 @@ export default function MembersViews({
   familyParents = [],
   familyChildren = [],
   canEdit,
+  allowedPersonIds = null,
 }: MembersViewsProps) {
   const { view: currentView, rootId, setView, setRootId } = useMemberListView();
   const searchParams = useSearchParams();
@@ -97,6 +99,10 @@ export default function MembersViews({
     email: user?.email,
   });
   const hasRestored = useRef(false);
+  const allowedPersonIdSet = useMemo(
+    () => (allowedPersonIds ? new Set(allowedPersonIds) : null),
+    [allowedPersonIds],
+  );
 
   // Prepare map and roots for tree views
   const { personsMap, roots, defaultRootId } = useMemo(() => {
@@ -164,7 +170,12 @@ export default function MembersViews({
           readRootPreference(currentRootPreferenceKind, accountKey) ||
           localStorage.getItem("members_rootId");
 
-        if (savedRootId && savedRootId !== rootId) {
+        if (
+          savedRootId &&
+          savedRootId !== rootId &&
+          persons.some((person) => person.id === savedRootId) &&
+          (!allowedPersonIdSet || allowedPersonIdSet.has(savedRootId))
+        ) {
           setRootId(savedRootId);
         }
       } catch (e) {

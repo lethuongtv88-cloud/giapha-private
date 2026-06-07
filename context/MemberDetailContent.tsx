@@ -32,6 +32,7 @@ interface MemberDetailContentProps {
   privateData: Record<string, unknown> | null;
   isAdmin: boolean;
   canEdit?: boolean;
+  allowedPersonIds?: string[] | null;
 }
 
 export default function MemberDetailContent({
@@ -39,6 +40,7 @@ export default function MemberDetailContent({
   privateData,
   isAdmin,
   canEdit = false,
+  allowedPersonIds = null,
 }: MemberDetailContentProps) {
   const [isNoteExpanded, setIsNoteExpanded] = useState(false);
   const [relStats, setRelStats] = useState<{
@@ -573,6 +575,7 @@ export default function MemberDetailContent({
                   person={person}
                   isAdmin={isAdmin}
                   canEdit={canEdit}
+                  allowedPersonIds={allowedPersonIds}
                   onStatsLoaded={handleStatsLoaded}
                 />
               </div>

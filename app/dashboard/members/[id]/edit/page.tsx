@@ -1,11 +1,38 @@
 import MemberForm from "@/components/MemberForm";
 import { getProfile, getSupabase } from "@/utils/supabase/queries";
+import {
+  buildVisiblePersonSetForProfile,
+  isAdminProfile,
+} from "@/utils/permissions/applyPersonVisibility";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 interface PageProps {
   params: Promise<{ id: string }>;
+}
+
+function AccessDenied({
+  message,
+}: {
+  message: string;
+}) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-stone-50 px-4">
+      <div className="max-w-xl rounded-2xl border border-red-200/70 bg-red-50/80 p-6 text-center shadow-sm">
+        <h1 className="text-2xl font-bold text-stone-800">
+          Truy cập bị từ chối
+        </h1>
+        <p className="text-stone-600 mt-2">{message}</p>
+        <Link
+          href="/dashboard/members"
+          className="mt-5 inline-flex rounded-lg bg-stone-800 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700"
+        >
+          Quay lại danh sách
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 export default async function EditMemberPage({ params }: PageProps) {
@@ -16,20 +43,42 @@ export default async function EditMemberPage({ params }: PageProps) {
   const isEditor = profile?.role === "editor";
   if (!isAdmin && !isEditor) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-50">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-stone-800">
-            Truy cập bị từ chối
-          </h1>
-          <p className="text-stone-600 mt-2">
-            Bạn không có quyền chỉnh sửa thành viên.
-          </p>
-        </div>
-      </div>
+      <AccessDenied message="Bạn không có quyền chỉnh sửa thành viên." />
     );
   }
 
   const supabase = await getSupabase();
+
+  if (!isAdminProfile(profile)) {
+    const [
+      personsRes,
+      relsRes,
+      familiesRes,
+      familyParentsRes,
+      familyChildrenRes,
+    ] = await Promise.all([
+      supabase.from("persons_active").select("id"),
+      supabase.from("relationships_active").select("*"),
+      supabase.from("families").select("*").is("deleted_at", null),
+      supabase.from("family_parents").select("*"),
+      supabase.from("family_children").select("*"),
+    ]);
+
+    const permission = buildVisiblePersonSetForProfile({
+      profile,
+      persons: personsRes.data ?? [],
+      relationships: relsRes.data ?? [],
+      families: familiesRes.data ?? [],
+      familyParents: familyParentsRes.data ?? [],
+      familyChildren: familyChildrenRes.data ?? [],
+    });
+
+    if (!permission.visiblePersonIds.has(id)) {
+      return (
+        <AccessDenied message="Thành viên này nằm ngoài nhánh gia phả mà tài khoản của bạn được phép chỉnh sửa." />
+      );
+    }
+  }
 
   // Fetch Public Data
   const { data: person, error } = await supabase
@@ -48,19 +97,15 @@ export default async function EditMemberPage({ params }: PageProps) {
     const { data } = await supabase
       .from("person_details_private")
       .select("*")
-      .eq("person_id", id)  
+      .eq("person_id", id)
       .single();
     privateData = data;
   }
 
-  const initialData = isAdmin  ? { ...person, ...privateData }  : { ...person };
+  const initialData = isAdmin ? { ...person, ...privateData } : { ...person };
 
   return (
     <div className="flex-1 w-full relative flex flex-col pb-8">
-      {/* Decorative background blurs */}
-      {/* <div className="absolute -top-[20%] -left-[10%] w-[500px] h-[500px] bg-amber-200/20 rounded-full blur-[120px] pointer-events-none" /> */}
-      {/* <div className="absolute top-[40%] -right-[10%] w-[400px] h-[400px] bg-stone-300/20 rounded-full blur-[100px] pointer-events-none" /> */}
-
       <div className="w-full relative z-20 py-4 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link

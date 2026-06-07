@@ -5,9 +5,30 @@ import ViewToggle from "@/components/ViewToggle";
 import { getProfile, getSupabase } from "@/utils/supabase/queries";
 import { hydratePersonsWithDateEvents } from "@/compat/dateHydration.compat";
 import { ViewMode } from "@/components/ViewToggle";
+import {
+  filterGenealogyDataForProfile,
+  resolvePermittedRootId,
+} from "@/utils/permissions/applyPersonVisibility";
 
 interface PageProps {
   searchParams: Promise<{ view?: string; rootId?: string; avatar?: string }>;
+}
+
+function PermissionEmptyState({
+  title,
+  message,
+}: {
+  title: string;
+  message: string;
+}) {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center px-4">
+      <div className="max-w-xl rounded-2xl border border-amber-200/70 bg-amber-50/80 p-6 text-center shadow-sm">
+        <h1 className="text-xl font-bold text-stone-800">{title}</h1>
+        <p className="mt-3 text-sm leading-6 text-stone-600">{message}</p>
+      </div>
+    </div>
+  );
 }
 
 export default async function FamilyTreePage({ searchParams }: PageProps) {
@@ -53,12 +74,55 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
   ]);
 
   const rawPersons = personsRes.data || [];
-  const persons = await hydratePersonsWithDateEvents(supabase, rawPersons);
-  const relationships = relsRes.data || [];
+  const relationshipsAll = relsRes.data || [];
+  const familiesAll = familiesRes.data || [];
+  const familyParentsAll = familyParentsRes.data || [];
+  const familyChildrenAll = familyChildrenRes.data || [];
 
-  const families = familiesRes.data || [];
-  const familyParents = familyParentsRes.data || [];
-  const familyChildren = familyChildrenRes.data || [];
+  const permissionFiltered = filterGenealogyDataForProfile({
+    profile,
+    persons: rawPersons,
+    relationships: relationshipsAll,
+    families: familiesAll,
+    familyParents: familyParentsAll,
+    familyChildren: familyChildrenAll,
+  });
+
+  if (
+    permissionFiltered.isRestricted &&
+    !permissionFiltered.viewerPersonId
+  ) {
+    return (
+      <PermissionEmptyState
+        title="Tài khoản chưa được gắn với người trong gia phả"
+        message="Vui lòng liên hệ quản trị viên để gắn tài khoản của bạn với một hồ sơ thành viên. Sau đó bạn sẽ xem được nhánh nội ngoại và sui gia trực tiếp của mình."
+      />
+    );
+  }
+
+  if (
+    permissionFiltered.isRestricted &&
+    permissionFiltered.visiblePersonIds.size === 0
+  ) {
+    return (
+      <PermissionEmptyState
+        title="Không có dữ liệu được phép xem"
+        message={
+          permissionFiltered.warnings[0] ||
+          "Tài khoản của bạn chưa có phạm vi gia phả hợp lệ để hiển thị."
+        }
+      />
+    );
+  }
+
+  const persons = await hydratePersonsWithDateEvents(
+    supabase,
+    permissionFiltered.persons,
+  );
+  const relationships = permissionFiltered.relationships;
+  const families = permissionFiltered.families;
+  const familyParents = permissionFiltered.familyParents;
+  const familyChildren = permissionFiltered.familyChildren;
 
   const personsMap = new Map();
   persons.forEach((p) => personsMap.set(p.id, p));
@@ -71,7 +135,14 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
       .map((r) => r.person_b),
   );
 
-  let finalRootId = rootId;
+  let finalRootId = permissionFiltered.isRestricted
+    ? resolvePermittedRootId({
+        requestedRootId: rootId,
+        fallbackRootId: permissionFiltered.viewerPersonId,
+        visiblePersonIds: permissionFiltered.visiblePersonIds,
+        persons,
+      })
+    : rootId;
 
   if (!finalRootId || !personsMap.has(finalRootId)) {
     const rootsFallback = persons.filter((p) => !childIds.has(p.id));
@@ -98,6 +169,11 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
         familyParents={familyParents}
         familyChildren={familyChildren}
         canEdit={canEdit}
+        allowedPersonIds={
+          permissionFiltered.isRestricted
+            ? Array.from(permissionFiltered.visiblePersonIds)
+            : null
+        }
       />
 
       <MemberDetailModal />

@@ -7,7 +7,7 @@ import { getAvatarBg } from "@/utils/styleHelprs";
 import { createClient } from "@/utils/supabase/client";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import DefaultAvatar from "./DefaultAvatar";
 import { ensureFamilyModelChild } from "@/utils/family/ensureFamilyModelChild";
 
@@ -15,6 +15,7 @@ interface RelationshipManagerProps {
   person: Person;
   isAdmin: boolean;
   canEdit?: boolean;
+  allowedPersonIds?: string[] | null;
   onStatsLoaded?: (stats: {
     biologicalChildren: number;
     maleBiologicalChildren: number;
@@ -41,6 +42,7 @@ export default function RelationshipManager({
   person,
   isAdmin,
   canEdit = false,
+  allowedPersonIds = null,
   onStatsLoaded,
 }: RelationshipManagerProps) {
   const supabase = createClient();
@@ -50,6 +52,15 @@ export default function RelationshipManager({
 
   const personId = person.id;
   const personGender = person.gender;
+  const allowedPersonIdSet = useMemo(
+    () => (allowedPersonIds ? new Set(allowedPersonIds) : null),
+    [allowedPersonIds],
+  );
+  const isAllowedPerson = useCallback(
+    (id: string | null | undefined) =>
+      !allowedPersonIdSet || Boolean(id && allowedPersonIdSet.has(id)),
+    [allowedPersonIdSet],
+  );
 
   // If inside DashboardProvider → open modal; otherwise → navigate to full page
   const handlePersonClick = (id: string) => {
@@ -130,6 +141,7 @@ export default function RelationshipManager({
 
       // Process Rels where I am Person A
       relsA?.forEach((r) => {
+        if (!isAllowedPerson(r.target?.id)) return;
         let direction: "parent" | "child" | "spouse" = "spouse";
         if (r.type === "marriage") direction = "spouse";
         else if (r.type === "biological_child" || r.type === "adopted_child")
@@ -149,6 +161,7 @@ export default function RelationshipManager({
 
       // Process Rels where I am Person B
       relsB?.forEach((r) => {
+        if (!isAllowedPerson(r.target?.id)) return;
         let direction: "parent" | "child" | "spouse" = "spouse";
         if (r.type === "marriage") direction = "spouse";
         else if (r.type === "biological_child" || r.type === "adopted_child")
@@ -188,7 +201,11 @@ export default function RelationshipManager({
         if (familyParentError) throw familyParentError;
 
         const parentIds = Array.from(
-          new Set((familyParentRows ?? []).map((row: any) => row.person_id).filter(Boolean)),
+          new Set(
+            (familyParentRows ?? [])
+              .map((row: any) => row.person_id)
+              .filter((id: string | null) => Boolean(id) && isAllowedPerson(id)),
+          ),
         );
 
         const { data: parentPeople, error: parentPeopleError } =
@@ -277,7 +294,10 @@ export default function RelationshipManager({
           new Set(
             (familyChildRows ?? [])
               .map((row: any) => row.person_id)
-              .filter((id: string | null) => Boolean(id) && id !== personId),
+              .filter(
+                (id: string | null) =>
+                  Boolean(id) && id !== personId && isAllowedPerson(id),
+              ),
           ),
         );
 
@@ -360,7 +380,7 @@ export default function RelationshipManager({
             const childPerson = isAChild ? m.person_a_data : m.person_b_data;
             const spousePerson = isAChild ? m.person_b_data : m.person_a_data;
 
-            if (spousePerson && childPerson) {
+            if (spousePerson && childPerson && isAllowedPerson(spousePerson.id)) {
               const spouseGender = spousePerson.gender;
               let noteLabel = `Vợ/chồng của ${childPerson.full_name}`;
               if (spouseGender === "female")
@@ -453,13 +473,15 @@ export default function RelationshipManager({
         });
       }
 
-      setRelationships(formattedRels);
+      setRelationships(
+        formattedRels.filter((rel) => isAllowedPerson(rel.targetPerson?.id)),
+      );
     } catch (err) {
       console.error("Error fetching relationships:", err);
     } finally {
       setLoading(false);
     }
-  }, [personId, supabase, onStatsLoaded]);
+  }, [personId, supabase, onStatsLoaded, isAllowedPerson]);
 
   useEffect(() => {
     fetchRelationships();
@@ -480,12 +502,14 @@ export default function RelationshipManager({
         .neq("id", personId) // Exclude self
         .limit(5);
 
-      if (data) setSearchResults(data);
+      if (data) {
+        setSearchResults(data.filter((candidate) => isAllowedPerson(candidate.id)));
+      }
     };
 
     const timeoutId = setTimeout(searchPeople, 300);
     return () => clearTimeout(timeoutId);
-  }, [searchTerm, personId, supabase]);
+  }, [searchTerm, personId, supabase, isAllowedPerson]);
 
   // Fetch recent members when opening Add form
   useEffect(() => {
@@ -497,14 +521,21 @@ export default function RelationshipManager({
           .neq("id", personId)
           .order("created_at", { ascending: false })
           .limit(10);
-        if (data) setRecentMembers(data);
+        if (data) {
+          setRecentMembers(data.filter((candidate) => isAllowedPerson(candidate.id)));
+        }
       };
       fetchRecent();
     }
-  }, [isAdding, personId, supabase, recentMembers.length]);
+  }, [isAdding, personId, supabase, recentMembers.length, isAllowedPerson]);
 
   const handleAddRelationship = async () => {
     if (!selectedTargetId) return;
+    if (!isAllowedPerson(selectedTargetId)) {
+      setError("Bạn không có quyền tạo quan hệ với người ngoài nhánh được phép xem.");
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
     setProcessing(true);
     setError(null);
 
