@@ -2,7 +2,7 @@
 
 import DefaultAvatar from "@/components/DefaultAvatar";
 import RelationshipManager from "@/components/RelationshipManager";
-import { PersonTimelineClient } from "@/components/PersonTimelineClient";
+import PersonEventsPanel from "@/components/PersonEventsPanel";
 import { Person } from "@/types";
 import {
   calculateAge,
@@ -45,6 +45,7 @@ export default function MemberDetailContent({
   allowedPersonIds = null,
 }: MemberDetailContentProps) {
   const [isNoteExpanded, setIsNoteExpanded] = useState(false);
+  const [activeDetailTab, setActiveDetailTab] = useState<"note" | "family" | "events">("note");
   const [relStats, setRelStats] = useState<{
     biologicalChildren: number;
     maleBiologicalChildren: number;
@@ -510,7 +511,37 @@ export default function MemberDetailContent({
 
         <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
           {/* Main Info */}
-          <div className="lg:col-span-2 space-y-8">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="rounded-2xl border border-stone-200/70 bg-white/80 p-1 shadow-sm backdrop-blur-sm">
+              <div className="grid grid-cols-3 gap-1">
+                {[
+                  { key: "note", label: "Thông tin", icon: Info },
+                  { key: "family", label: "Quan hệ", icon: Users },
+                  { key: "events", label: "Sự kiện", icon: CalendarDays },
+                ].map((tab) => {
+                  const Icon = tab.icon;
+                  const active = activeDetailTab === tab.key;
+
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setActiveDetailTab(tab.key as "note" | "family" | "events")}
+                      className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
+                        active
+                          ? "bg-amber-700 text-white shadow-sm"
+                          : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+                      }`}
+                    >
+                      <Icon className="size-4" />
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {activeDetailTab === "note" && (
             <motion.section layout variants={itemVariants}>
               <h2 className="text-base sm:text-lg font-bold text-stone-800 mb-4 flex items-center gap-2">
                 <Info className="size-5 text-amber-600" />
@@ -566,7 +597,9 @@ export default function MemberDetailContent({
                 )}
               </div>
             </motion.section>
+            )}
 
+            {activeDetailTab === "family" && (
             <motion.section layout variants={itemVariants}>
               <h2 className="text-base sm:text-lg font-bold text-stone-800 mb-4 flex items-center gap-2">
                 <Users className="size-5 text-amber-600" />
@@ -582,16 +615,19 @@ export default function MemberDetailContent({
                 />
               </div>
             </motion.section>
+            )}
 
+            {activeDetailTab === "events" && (
             <motion.section layout variants={itemVariants}>
               <h2 className="text-base sm:text-lg font-bold text-stone-800 mb-4 flex items-center gap-2">
                 <CalendarDays className="size-5 text-amber-600" />
                 Sự kiện
               </h2>
               <div className="bg-white/80 backdrop-blur-sm p-4 sm:p-6 rounded-2xl border border-stone-200/60 shadow-sm">
-                <PersonTimelineClient personId={person.id} />
+                <PersonEventsPanel personId={person.id} canEdit={canEdit} />
               </div>
             </motion.section>
+            )}
           </div>
 
           {/* Sidebar / Private Info */}
