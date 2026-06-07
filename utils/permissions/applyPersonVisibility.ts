@@ -175,18 +175,45 @@ export function resolvePermittedRootId(input: {
 
 export function filterPersonEventsForVisiblePersons<
   TPersonEvent extends { person_id: string; event_id: string; [key: string]: unknown },
-  TEvent extends { id: string; [key: string]: unknown },
+  TEvent extends {
+    id: string;
+    legacy_person_id?: string | null;
+    family_id?: string | null;
+    deleted_at?: string | null;
+    [key: string]: unknown;
+  },
 >(input: {
   personEvents: TPersonEvent[];
   events: TEvent[];
   visiblePersonIds: Set<string>;
+  visibleFamilyIds?: Set<string>;
 }) {
   const personEvents = input.personEvents.filter((personEvent) =>
     input.visiblePersonIds.has(personEvent.person_id),
   );
 
   const visibleEventIds = new Set(personEvents.map((personEvent) => personEvent.event_id));
-  const events = input.events.filter((event) => visibleEventIds.has(event.id));
 
-  return { personEvents, events };
+  const events = input.events.filter((event) => {
+    if (event.deleted_at) return false;
+
+    if (visibleEventIds.has(event.id)) return true;
+
+    if (event.legacy_person_id && input.visiblePersonIds.has(event.legacy_person_id)) {
+      return true;
+    }
+
+    if (event.family_id && input.visibleFamilyIds?.has(event.family_id)) {
+      return true;
+    }
+
+    return false;
+  });
+
+  const finalEventIds = new Set(events.map((event) => event.id));
+  const finalPersonEvents = personEvents.filter((personEvent) =>
+    finalEventIds.has(personEvent.event_id),
+  );
+
+  return { personEvents: finalPersonEvents, events };
 }

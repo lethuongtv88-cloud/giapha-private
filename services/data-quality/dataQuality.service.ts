@@ -331,6 +331,39 @@ function checkEventQuality(input: {
   personEvents: DataQualityPersonEvent[];
   activePersons: DataQualityPerson[];
 }) {
+  for (const personEvent of input.personEvents) {
+    const personEventId =
+      personEvent.id ?? `${personEvent.person_id}:${personEvent.event_id}`;
+
+    if (!input.activeEventIds.has(personEvent.event_id)) {
+      input.issues.push({
+        id: `person_event:${personEventId}:missing-event`,
+        category: "event",
+        severity: "error",
+        title: "Person event trỏ tới event không tồn tại hoặc đã bị xóa",
+        description: `person_events ${personEventId} trỏ tới event ${personEvent.event_id}, nhưng event này không active.`,
+        entityType: "event",
+        entityId: personEvent.event_id,
+        relatedIds: [personEvent.person_id],
+        suggestion: "Xóa liên kết person_events sai hoặc khôi phục event.",
+      });
+    }
+
+    if (!input.activePersonIds.has(personEvent.person_id)) {
+      input.issues.push({
+        id: `person_event:${personEventId}:missing-person`,
+        category: "event",
+        severity: "error",
+        title: "Person event trỏ tới person không tồn tại hoặc đã bị xóa",
+        description: `person_events ${personEventId} trỏ tới person ${personEvent.person_id}, nhưng person này không active.`,
+        entityType: "person",
+        entityId: personEvent.person_id,
+        relatedIds: [personEvent.event_id],
+        suggestion: "Xóa liên kết person_events sai hoặc khôi phục person.",
+      });
+    }
+  }
+
   for (const event of input.activeEvents) {
     if (event.start_date && event.end_date && event.end_date < event.start_date) {
       input.issues.push({
