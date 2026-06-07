@@ -1,6 +1,7 @@
 import { getTodayLunar } from "@/utils/dateHelpers";
 import { computeEvents } from "@/utils/eventHelpers";
-import { getIsAdmin, getSupabase } from "@/utils/supabase/queries";
+import { getIsAdmin, getProfile, getSupabase } from "@/utils/supabase/queries";
+import { buildVisiblePersonSetForProfile } from "@/utils/permissions/applyPersonVisibility";
 import {
   ArrowRight,
   BarChart2,
@@ -41,22 +42,112 @@ const eventTypeConfig = {
   },
 };
 
+type DashboardEventPerson = {
+  id: string;
+  full_name: string;
+  birth_year: number | null;
+  birth_month: number | null;
+  birth_day: number | null;
+  death_year: number | null;
+  death_month: number | null;
+  death_day: number | null;
+  death_lunar_year: number | null;
+  death_lunar_month: number | null;
+  death_lunar_day: number | null;
+  is_deceased: boolean;
+};
+
+type DashboardCustomEvent = {
+  id: string;
+  name: string;
+  content: string | null;
+  event_date: string;
+  location: string | null;
+  created_by: string | null;
+};
+
+type PermissionRelationship = {
+  id?: string;
+  type?: string | null;
+  person_a?: string | null;
+  person_b?: string | null;
+  deleted_at?: string | null;
+  [key: string]: unknown;
+};
+
+type PermissionFamily = {
+  id: string;
+  [key: string]: unknown;
+};
+
+type PermissionFamilyParent = {
+  family_id: string;
+  person_id: string;
+  [key: string]: unknown;
+};
+
+type PermissionFamilyChild = {
+  family_id: string;
+  person_id: string;
+  [key: string]: unknown;
+};
+
 export default async function DashboardLaunchpad() {
   const isAdmin = await getIsAdmin();
   const supabase = await getSupabase();
+  const profile = await getProfile();
 
   /* ── Fetch events data ────────────────────────────────────────── */
-  const { data: persons } = await supabase
-    .from("persons_active")
-    .select(
-      "id, full_name, birth_year, birth_month, birth_day, death_year, death_month, death_day, death_lunar_year, death_lunar_month, death_lunar_day, is_deceased",
-    );
+  const [
+    personsRes,
+    customEventsRes,
+    relationshipsRes,
+    familiesRes,
+    familyParentsRes,
+    familyChildrenRes,
+  ] = await Promise.all([
+    supabase
+      .from("persons_active")
+      .select(
+        "id, full_name, birth_year, birth_month, birth_day, death_year, death_month, death_day, death_lunar_year, death_lunar_month, death_lunar_day, is_deceased",
+      ),
+    supabase
+      .from("custom_events")
+      .select("id, name, content, event_date, location, created_by"),
+    supabase.from("relationships_active").select("*"),
+    supabase.from("families").select("*").is("deleted_at", null),
+    supabase.from("family_parents").select("*"),
+    supabase.from("family_children").select("*"),
+  ]);
 
-  const { data: customEvents } = await supabase
-    .from("custom_events")
-    .select("id, name, content, event_date, location, created_by");
+  const allPersons = (personsRes.data ?? []) as DashboardEventPerson[];
+  const allCustomEvents = (customEventsRes.data ?? []) as DashboardCustomEvent[];
+  const allRelationships = (relationshipsRes.data ?? []) as PermissionRelationship[];
+  const allFamilies = (familiesRes.data ?? []) as PermissionFamily[];
+  const allFamilyParents = (familyParentsRes.data ?? []) as PermissionFamilyParent[];
+  const allFamilyChildren = (familyChildrenRes.data ?? []) as PermissionFamilyChild[];
 
-  const allEvents = computeEvents(persons ?? [], customEvents ?? []);
+  const permission = buildVisiblePersonSetForProfile({
+    profile,
+    persons: allPersons,
+    relationships: allRelationships,
+    families: allFamilies,
+    familyParents: allFamilyParents,
+    familyChildren: allFamilyChildren,
+  });
+
+  const dashboardPersons =
+    permission.isRestricted && permission.viewerPersonId
+      ? allPersons.filter((person) => permission.visiblePersonIds.has(person.id))
+      : permission.isRestricted
+        ? []
+        : allPersons;
+
+  // custom_events hiện là sự kiện chung, chưa gắn person_events.
+  // User thường không thấy custom_events để tránh rò rỉ sự kiện ngoài nhánh.
+  const dashboardCustomEvents = permission.isRestricted ? [] : allCustomEvents;
+
+  const allEvents = computeEvents(dashboardPersons, dashboardCustomEvents);
   const upcomingEvents = allEvents.filter(
     (e) => e.daysUntil >= 0 && e.daysUntil <= 30,
   );
@@ -221,7 +312,12 @@ export default async function DashboardLaunchpad() {
 
           {/* Events summary */}
           <div className="md:w-[65%] w-full flex-1">
-            {upcomingEvents.length > 0 ? (
+            {permission.isRestricted && !permission.viewerPersonId ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+                Tài khoản chưa được gắn với người trong gia phả, nên chưa thể
+                hiển thị sự kiện theo nhánh được phép.
+              </div>
+            ) : upcomingEvents.length > 0 ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold text-stone-500 uppercase tracking-widest flex items-center gap-2.5">
