@@ -15,6 +15,7 @@ export type AuditAction =
   | "data_maintenance.repair_events_missing_links"
   | "data_maintenance.soft_delete_empty_families"
   | "data_maintenance.soft_delete_duplicate_events"
+  | "data_maintenance.repair_broken_person_events"
   | "gedcom.parse_staging"
   | "gedcom.commit_staging_session"
   | "family_model.repair"

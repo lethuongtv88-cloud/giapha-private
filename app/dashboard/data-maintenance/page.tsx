@@ -67,26 +67,53 @@ function ToolCard({
   );
 }
 
+
+async function countBrokenPersonEvents(supabase: Awaited<ReturnType<typeof getSupabase>>) {
+  const [personEventsRes, personsRes, eventsRes] = await Promise.all([
+    supabase.from("person_events").select("id, person_id, event_id").limit(100000),
+    supabase.from("persons").select("id").is("deleted_at", null).limit(100000),
+    supabase.from("events").select("id").is("deleted_at", null).limit(100000),
+  ]);
+
+  if (personEventsRes.error || personsRes.error || eventsRes.error) {
+    return { count: 0, error: true };
+  }
+
+  const activePersonIds = new Set((personsRes.data ?? []).map((row) => row.id));
+  const activeEventIds = new Set((eventsRes.data ?? []).map((row) => row.id));
+
+  return {
+    count: (personEventsRes.data ?? []).filter((row) => {
+      return !activePersonIds.has(row.person_id) || !activeEventIds.has(row.event_id);
+    }).length,
+    error: false,
+  };
+}
+
 export default async function DataMaintenancePage() {
   const supabase = await getSupabase();
 
-  const [unknownRes, missingLinksRes, emptyFamiliesRes] = await Promise.all([
-    supabase
-      .from("persons")
-      .select("*", { count: "exact", head: true })
-      .is("deleted_at", null)
-      .in("full_name", ["Unknown", "Chưa rõ tên"]),
+  const [unknownRes, missingLinksRes, emptyFamiliesRes, brokenPersonEventsRes] =
+    await Promise.all([
+      supabase
+        .from("persons")
+        .select("*", { count: "exact", head: true })
+        .is("deleted_at", null)
+        .in("full_name", ["Unknown", "Chưa rõ tên"]),
 
-    supabase.rpc("count_events_without_person_events"),
+      supabase.rpc("count_events_without_person_events"),
 
-    supabase.rpc("count_active_empty_families"),
-  ]);
+      supabase.rpc("count_active_empty_families"),
+
+      countBrokenPersonEvents(supabase),
+    ]);
 
   const unknownCount = unknownRes.count ?? 0;
   const missingLinksCount =
     typeof missingLinksRes.data?.count === "number" ? missingLinksRes.data.count : 0;
   const emptyFamiliesCount =
     typeof emptyFamiliesRes.data?.count === "number" ? emptyFamiliesRes.data.count : 0;
+  const brokenPersonEventsCount = brokenPersonEventsRes.count;
 
   return (
     <div className="flex-1 w-full relative flex flex-col pb-12">
@@ -112,7 +139,7 @@ export default async function DataMaintenancePage() {
           </div>
         </section>
 
-        {(unknownRes.error || missingLinksRes.error || emptyFamiliesRes.error) ? (
+        {(unknownRes.error || missingLinksRes.error || emptyFamiliesRes.error || brokenPersonEventsRes.error) ? (
           <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
             Một số chỉ số chưa tải được. Nếu mới tạo RPC audit, hãy chắc chắn đã
             chạy migration audit RPCs trong Supabase.
@@ -144,6 +171,15 @@ export default async function DataMaintenancePage() {
             icon={<Link2Off className="size-6" />}
             count={missingLinksCount}
             tone={missingLinksCount > 0 ? "amber" : "emerald"}
+          />
+
+          <ToolCard
+            title="Broken person_events"
+            description="Xóa liên kết person_events trỏ tới person/event không active và soft-delete event mồ côi."
+            href="/dashboard/data-maintenance/broken-person-events"
+            icon={<Link2Off className="size-6" />}
+            count={brokenPersonEventsCount}
+            tone={brokenPersonEventsCount > 0 ? "red" : "emerald"}
           />
 
           <ToolCard
