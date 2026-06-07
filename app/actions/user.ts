@@ -91,6 +91,7 @@ export async function adminCreateUser(formData: FormData) {
   const defaultTreeRootId = normalizeOptionalUuid(
     formData.get("default_tree_root_id"),
   );
+  const linkedPersonId = normalizeOptionalUuid(formData.get("person_id"));
 
   if (!role) {
     return { error: "Vai trò không hợp lệ." };
@@ -183,6 +184,22 @@ export async function adminCreateUser(formData: FormData) {
         };
       }
     }
+
+    if (linkedPersonId) {
+      const { error: profileError } = await admin
+        .from("profiles")
+        .update({ person_id: linkedPersonId })
+        .eq("id", createdUser.id);
+
+      if (profileError) {
+        console.error("Created user but failed to link person:", profileError);
+        return {
+          error:
+            "Đã tạo người dùng, nhưng chưa gán được người trong gia phả: " +
+            profileError.message,
+        };
+      }
+    }
   }
 
   await recordAuditLog({
@@ -197,6 +214,7 @@ export async function adminCreateUser(formData: FormData) {
       role,
       isActive,
       defaultTreeRootId,
+      linkedPersonId,
     },
   });
 
@@ -213,6 +231,7 @@ export async function adminUpdateUser(formData: FormData) {
   const defaultTreeRootId = normalizeOptionalUuid(
     formData.get("default_tree_root_id"),
   );
+  const linkedPersonId = normalizeOptionalUuid(formData.get("person_id"));
 
   if (!userId) return { error: "Thiếu ID người dùng." };
   if (!email) return { error: "Email là bắt buộc." };
@@ -269,6 +288,16 @@ export async function adminUpdateUser(formData: FormData) {
     return { error: preferenceError.message };
   }
 
+  const { error: profileError } = await admin
+    .from("profiles")
+    .update({ person_id: linkedPersonId })
+    .eq("id", userId);
+
+  if (profileError) {
+    console.error("Failed to update linked person:", profileError);
+    return { error: profileError.message };
+  }
+
   await recordAuditLog({
     action: "user.updated",
     entityType: "user",
@@ -281,6 +310,7 @@ export async function adminUpdateUser(formData: FormData) {
       role,
       isActive,
       defaultTreeRootId,
+      linkedPersonId,
     },
   });
 

@@ -52,6 +52,8 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [linkedPersonId, setLinkedPersonId] = useState<string | null>(null);
+  const [linkedPersonLoaded, setLinkedPersonLoaded] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -82,6 +84,44 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
       ignore = true;
     };
   }, [accountKey, user?.id, user?.email, validPersonIds]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadLinkedPerson() {
+      setLinkedPersonLoaded(false);
+
+      if (!user?.id) {
+        setLinkedPersonId(null);
+        setLinkedPersonLoaded(true);
+        return;
+      }
+
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("person_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (ignore) return;
+
+      if (error) {
+        console.error("Không tải được người gắn với tài khoản:", error);
+        setLinkedPersonId(null);
+      } else {
+        setLinkedPersonId(data?.person_id ?? null);
+      }
+
+      setLinkedPersonLoaded(true);
+    }
+
+    loadLinkedPerson();
+
+    return () => {
+      ignore = true;
+    };
+  }, [user?.id]);
 
   const setPreference = (kind: RootPreferenceKind, personId: string | null) => {
     setPreferences((current) => ({
@@ -199,6 +239,23 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
           Admin có thể chọn gốc sơ đồ mặc định khi tạo người dùng. Sau khi đăng nhập,
           mỗi thành viên có thể tự đổi gốc mặc định của mình tại đây. Nếu database chưa sẵn sàng,
           hệ thống sẽ lưu tạm trên trình duyệt.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-4 text-sm text-sky-900">
+        <p className="font-semibold">Người trong gia phả gắn với tài khoản</p>
+        <p className="mt-1 text-sky-800/80">
+          {linkedPersonLoaded
+            ? linkedPersonId
+              ? `Tài khoản của bạn đang được gắn với: ${
+                  sortedPersons.find((person) => person.id === linkedPersonId)?.full_name ??
+                  linkedPersonId
+                }`
+              : "Tài khoản của bạn chưa được quản trị viên gắn với người trong gia phả."
+            : "Đang tải thông tin người được gắn với tài khoản..."}
+        </p>
+        <p className="mt-1 text-xs text-sky-700/80">
+          Chỉ quản trị viên được thay đổi mục này vì đây là khóa phân quyền dữ liệu.
         </p>
       </div>
 
