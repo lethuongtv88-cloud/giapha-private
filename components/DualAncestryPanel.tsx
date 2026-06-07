@@ -28,6 +28,9 @@ interface DualAncestryPanelProps {
   families?: FamilyRow[];
   familyParents?: FamilyParentRow[];
   familyChildren?: FamilyChildRow[];
+  isRestricted?: boolean;
+  viewerPersonId?: string | null;
+  permissionWarnings?: string[];
 }
 
 function getDisplayName(person: Person): string {
@@ -128,6 +131,9 @@ export default function DualAncestryPanel({
   families = [],
   familyParents = [],
   familyChildren = [],
+  isRestricted = false,
+  viewerPersonId = null,
+  permissionWarnings = [],
 }: DualAncestryPanelProps) {
   const { user } = useUser();
   const sortedPersons = useMemo(() => {
@@ -141,9 +147,15 @@ export default function DualAncestryPanel({
     email: user?.email,
   });
 
-  const [rootPersonId, setRootPersonId] = useState<string>(
-    sortedPersons[0]?.id ?? "",
-  );
+  const fallbackRootId = useMemo(() => {
+    if (viewerPersonId && sortedPersons.some((person) => person.id === viewerPersonId)) {
+      return viewerPersonId;
+    }
+
+    return sortedPersons[0]?.id ?? "";
+  }, [sortedPersons, viewerPersonId]);
+
+  const [rootPersonId, setRootPersonId] = useState<string>(fallbackRootId);
   const [rootPreferenceLoaded, setRootPreferenceLoaded] = useState(false);
   const [generationsUp, setGenerationsUp] = useState(4);
   const [generationsDown, setGenerationsDown] = useState(4);
@@ -154,17 +166,26 @@ export default function DualAncestryPanel({
   useEffect(() => {
     if (sortedPersons.length === 0) return;
 
+    const isValidRoot = (id: string | null | undefined) =>
+      Boolean(id && sortedPersons.some((person) => person.id === id));
+
     const savedRootId = readRootPreference("dualAncestry", accountKey);
-    if (savedRootId && sortedPersons.some((person) => person.id === savedRootId)) {
-      setRootPersonId(savedRootId);
-    } else if (!rootPersonId || !sortedPersons.some((person) => person.id === rootPersonId)) {
-      setRootPersonId(sortedPersons[0].id);
+
+    if (isValidRoot(rootPersonId)) {
+      setRootPreferenceLoaded(true);
+      return;
+    }
+
+    if (isValidRoot(savedRootId)) {
+      setRootPersonId(savedRootId!);
+    } else {
+      setRootPersonId(fallbackRootId);
     }
 
     setRootPreferenceLoaded(true);
     // Chỉ load lại khi đổi tài khoản hoặc dữ liệu persons đổi.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountKey, sortedPersons]);
+  }, [accountKey, sortedPersons, fallbackRootId]);
 
   useEffect(() => {
     if (!rootPreferenceLoaded || !rootPersonId) return;
@@ -199,6 +220,24 @@ export default function DualAncestryPanel({
 
   return (
     <div className="space-y-5">
+      {isRestricted ? (
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
+          <p className="font-semibold">Đang áp dụng phạm vi xem theo tài khoản.</p>
+          <p className="mt-1">Bạn chỉ thấy các thành viên thuộc nhánh nội/ngoại, vợ/chồng trong nhánh và nhánh bên vợ/chồng trực tiếp của mình.</p>
+        </div>
+      ) : null}
+
+      {permissionWarnings.length > 0 ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <p className="font-semibold">Lưu ý phân quyền</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {permissionWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="rounded-2xl border border-stone-200 bg-white/90 p-5 shadow-sm">
         <div className="grid gap-4 xl:grid-cols-[1.6fr_0.8fr_0.8fr]">
           <PersonSelector

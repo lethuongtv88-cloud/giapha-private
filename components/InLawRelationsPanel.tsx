@@ -27,6 +27,9 @@ interface InLawRelationsPanelProps {
   families?: FamilyRow[];
   familyParents?: FamilyParentRow[];
   familyChildren?: FamilyChildRow[];
+  isRestricted?: boolean;
+  viewerPersonId?: string | null;
+  permissionWarnings?: string[];
 }
 
 function getDisplayName(person: Person): string {
@@ -126,6 +129,9 @@ export default function InLawRelationsPanel({
   families = [],
   familyParents = [],
   familyChildren = [],
+  isRestricted = false,
+  viewerPersonId = null,
+  permissionWarnings = [],
 }: InLawRelationsPanelProps) {
   const { user } = useUser();
   const sortedPersons = useMemo(() => {
@@ -139,9 +145,17 @@ export default function InLawRelationsPanel({
     email: user?.email,
   });
 
-  const [rootPersonId, setRootPersonId] = useState<string>(
-    sortedPersons[0]?.id ?? "",
-  );
+  const restrictedRootId = useMemo(() => {
+    if (isRestricted && viewerPersonId && sortedPersons.some((person) => person.id === viewerPersonId)) {
+      return viewerPersonId;
+    }
+
+    return null;
+  }, [isRestricted, sortedPersons, viewerPersonId]);
+
+  const fallbackRootId = restrictedRootId ?? sortedPersons[0]?.id ?? "";
+
+  const [rootPersonId, setRootPersonId] = useState<string>(fallbackRootId);
   const [rootPreferenceLoaded, setRootPreferenceLoaded] = useState(false);
   const [selectedSpouseId, setSelectedSpouseId] = useState<string>("");
   const [generationsUp, setGenerationsUp] = useState(3);
@@ -154,21 +168,35 @@ export default function InLawRelationsPanel({
   useEffect(() => {
     if (sortedPersons.length === 0) return;
 
+    if (restrictedRootId) {
+      setRootPersonId(restrictedRootId);
+      setRootPreferenceLoaded(true);
+      return;
+    }
+
+    const isValidRoot = (id: string | null | undefined) =>
+      Boolean(id && sortedPersons.some((person) => person.id === id));
+
     const savedRootId = readRootPreference("inLaw", accountKey);
-    if (savedRootId && sortedPersons.some((person) => person.id === savedRootId)) {
-      setRootPersonId(savedRootId);
-    } else if (!rootPersonId || !sortedPersons.some((person) => person.id === rootPersonId)) {
-      setRootPersonId(sortedPersons[0].id);
+    if (isValidRoot(rootPersonId)) {
+      setRootPreferenceLoaded(true);
+      return;
+    }
+
+    if (isValidRoot(savedRootId)) {
+      setRootPersonId(savedRootId!);
+    } else {
+      setRootPersonId(fallbackRootId);
     }
 
     setRootPreferenceLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountKey, sortedPersons]);
+  }, [accountKey, sortedPersons, restrictedRootId, fallbackRootId]);
 
   useEffect(() => {
-    if (!rootPreferenceLoaded || !rootPersonId) return;
+    if (!rootPreferenceLoaded || !rootPersonId || isRestricted) return;
     writeRootPreference("inLaw", accountKey, rootPersonId);
-  }, [rootPersonId, accountKey, rootPreferenceLoaded]);
+  }, [rootPersonId, accountKey, rootPreferenceLoaded, isRestricted]);
 
   const graph = useMemo(() => {
     return buildInLawComparison({
@@ -211,21 +239,51 @@ export default function InLawRelationsPanel({
 
   return (
     <div className="space-y-5">
+      {isRestricted ? (
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
+          <p className="font-semibold">Đang áp dụng phạm vi xem theo tài khoản.</p>
+          <p className="mt-1">Trang này chỉ hiển thị sui gia trực tiếp của chính người được gắn với tài khoản, không mở rộng sang sui gia của người khác trong nhánh.</p>
+        </div>
+      ) : null}
+
+      {permissionWarnings.length > 0 ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <p className="font-semibold">Lưu ý phân quyền</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {permissionWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="rounded-2xl border border-stone-200 bg-white/90 p-5 shadow-sm">
         <div className="grid gap-4 xl:grid-cols-[1.4fr_1.2fr_0.8fr_0.8fr]">
-          <PersonSelector
-            persons={sortedPersons}
-            selectedId={rootPersonId}
-            onSelect={(id) => {
-              if (id) {
-                setRootPersonId(id);
-                setSelectedSpouseId("");
-              }
-            }}
-            label="Người gốc"
-            placeholder="Tìm người gốc..."
-            className="w-full"
-          />
+          {isRestricted ? (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+              <p className="text-xs font-bold uppercase tracking-wider text-sky-700">Sui gia của tôi</p>
+              <p className="mt-1 font-semibold">
+                {sortedPersons.find((person) => person.id === rootPersonId)?.full_name ?? "Người được gắn với tài khoản"}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-sky-700">
+                Tài khoản thường chỉ được xem sui gia trực tiếp của chính mình.
+              </p>
+            </div>
+          ) : (
+            <PersonSelector
+              persons={sortedPersons}
+              selectedId={rootPersonId}
+              onSelect={(id) => {
+                if (id) {
+                  setRootPersonId(id);
+                  setSelectedSpouseId("");
+                }
+              }}
+              label="Người gốc"
+              placeholder="Tìm người gốc..."
+              className="w-full"
+            />
+          )}
 
           <SpousePicker
             graph={graph}
