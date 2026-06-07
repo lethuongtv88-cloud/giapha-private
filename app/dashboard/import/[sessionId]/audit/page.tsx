@@ -1,6 +1,7 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Info, ShieldAlert, TriangleAlert, XCircle } from "lucide-react";
-import { getSupabase } from "@/utils/supabase/queries";
+import { getProfile, getSupabase } from "@/utils/supabase/queries";
 import { buildImportAuditResult } from "@/services/import/gedcomImportAudit.service";
 
 type PageProps = {
@@ -105,6 +106,11 @@ function SmallTable({
 
 export default async function ImportAuditPage({ params }: PageProps) {
   const { sessionId } = await params;
+  const profile = await getProfile();
+  if (profile?.role !== "admin") {
+    redirect("/dashboard");
+  }
+
   const supabase = await getSupabase();
 
   const [

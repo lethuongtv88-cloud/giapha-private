@@ -1,7 +1,8 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import GedcomStagingUploader from "@/components/GedcomStagingUploader";
 import ImportSessionActions from "@/components/ImportSessionActions";
-import { getSupabase } from "@/utils/supabase/queries";
+import { getProfile, getSupabase } from "@/utils/supabase/queries";
 import { Eye, FileText } from "lucide-react";
 
 export const metadata = {
@@ -129,6 +130,11 @@ function Summary({ label, value }: { label: string; value: number }) {
 }
 
 export default async function ImportPage() {
+  const profile = await getProfile();
+  if (profile?.role !== "admin") {
+    redirect("/dashboard");
+  }
+
   const supabase = await getSupabase();
 
   const { data, error } = await supabase

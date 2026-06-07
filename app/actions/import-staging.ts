@@ -13,7 +13,28 @@ export async function createGedcomStagingSession(input: {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-    const { data: existingPersons, error: existingPersonsError } = await supabase
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { ok: false as const, error: "Bạn cần đăng nhập để import GEDCOM." };
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.role !== "admin") {
+    return {
+      ok: false as const,
+      error: "Chỉ quản trị viên mới được import GEDCOM.",
+    };
+  }
+
+  const { data: existingPersons, error: existingPersonsError } = await supabase
     .from("persons")
     .select(
       "id, full_name, gender, birth_year, birth_month, birth_day, death_year, death_month, death_day",
@@ -33,10 +54,6 @@ export async function createGedcomStagingSession(input: {
     existingPersons: existingPersons ?? [],
   });
   const fileHash = createHash("sha256").update(input.content).digest("hex");
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   const { data: session, error: sessionError } = await supabase
     .from("import_sessions")

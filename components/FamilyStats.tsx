@@ -46,6 +46,8 @@ interface FamilyStatsProps {
   familyParents?: FamilyParentRow[];
   familyChildren?: FamilyChildRow[];
   events?: EventRow[];
+  restrictedMode?: boolean;
+  fallbackRootId?: string | null;
 }
 
 interface StatCardProps {
@@ -232,12 +234,16 @@ function RootStatsSection({
   families,
   familyParents,
   familyChildren,
+  restrictedMode = false,
+  fallbackRootId = null,
 }: {
   persons: Person[];
   relationships: Relationship[];
   families: FamilyRow[];
   familyParents: FamilyParentRow[];
   familyChildren: FamilyChildRow[];
+  restrictedMode?: boolean;
+  fallbackRootId?: string | null;
 }) {
   const sortedPersons = useMemo(() => {
     return [...persons].sort((a, b) =>
@@ -275,7 +281,7 @@ function RootStatsSection({
     if (nextRootId !== rootPersonId) {
       setRootPersonId(nextRootId);
     }
-  }, [accountKey, rootPersonId, sortedPersons]);
+  }, [accountKey, fallbackRootId, rootPersonId, sortedPersons]);
 
   const handleRootSelect = (id: string | null) => {
     if (!id) return;
@@ -323,10 +329,12 @@ function RootStatsSection({
         <div>
           <h2 className="text-base font-bold text-stone-800 flex items-center gap-2">
             <GitBranch className="size-4 text-emerald-600" />
-            Thống kê theo gốc gia phả
+            {restrictedMode ? "Thống kê nhánh được phép xem" : "Thống kê theo gốc gia phả"}
           </h2>
           <p className="text-sm text-stone-500 mt-1">
-            Dâu/rễ, họ nội, họ ngoại được tính lại theo người gốc đang chọn.
+            {restrictedMode
+              ? "Số liệu chỉ tính trong vùng gia phả tài khoản này được phép xem."
+              : "Dâu/rễ, họ nội, họ ngoại được tính lại theo người gốc đang chọn."}
           </p>
         </div>
 
@@ -459,6 +467,8 @@ export default function FamilyStats({
   familyParents = [],
   familyChildren = [],
   events = [],
+  restrictedMode = false,
+  fallbackRootId = null,
 }: FamilyStatsProps) {
   const globalStats = useMemo(() => {
     return calculateGlobalStats({
@@ -723,6 +733,8 @@ export default function FamilyStats({
         families={families}
         familyParents={familyParents}
         familyChildren={familyChildren}
+        restrictedMode={restrictedMode}
+        fallbackRootId={fallbackRootId}
       />
 
     </div>

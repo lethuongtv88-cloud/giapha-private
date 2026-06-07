@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Database, FileText, Search, GitCompareArrows } from "lucide-react";
-import { getSupabase } from "@/utils/supabase/queries";
+import { getProfile, getSupabase } from "@/utils/supabase/queries";
 import {
   StagingRecordActions,
   StagingSessionBulkActions,
@@ -317,6 +317,11 @@ function RecordCard({
 
 export default async function ImportSessionPreviewPage({ params }: PageProps) {
   const { sessionId } = await params;
+  const profile = await getProfile();
+  if (profile?.role !== "admin") {
+    redirect("/dashboard");
+  }
+
   const supabase = await getSupabase();
 
   const [sessionRes, recordsRes] = await Promise.all([

@@ -38,6 +38,7 @@ interface RelEdge {
 interface Props {
   persons: PersonNode[];
   relationships: RelEdge[];
+  restrictedNotice?: string | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -82,6 +83,7 @@ function PersonSelector({
         {label}
       </p>
       <button
+        type="button"
         onClick={() => setOpen((v) => !v)}
         className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${selected
           ? "bg-amber-50 border-amber-300 text-stone-800"
@@ -162,6 +164,7 @@ function PersonSelector({
               ) : (
                 filtered.map((p) => (
                   <button
+                    type="button"
                     key={p.id}
                     onClick={() => {
                       onSelect(p);
@@ -290,7 +293,7 @@ const REGIONAL_TERMS: RegionalTerm[] = [
 ];
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function KinshipFinder({ persons, relationships }: Props) {
+export default function KinshipFinder({ persons, relationships, restrictedNotice }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -315,6 +318,27 @@ export default function KinshipFinder({ persons, relationships }: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+
+  useEffect(() => {
+    const validIds = new Set(persons.map((person) => person.id));
+    if ((p1Id && !validIds.has(p1Id)) || (p2Id && !validIds.has(p2Id))) {
+      const params = new URLSearchParams(searchParams.toString());
+      if (p1Id && !validIds.has(p1Id)) {
+        params.delete("p1");
+        try {
+          localStorage.removeItem("kinship_p1");
+        } catch {}
+      }
+      if (p2Id && !validIds.has(p2Id)) {
+        params.delete("p2");
+        try {
+          localStorage.removeItem("kinship_p2");
+        } catch {}
+      }
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    }
+  }, [p1Id, p2Id, pathname, persons, router, searchParams]);
 
   useEffect(() => {
     try {
@@ -363,6 +387,11 @@ export default function KinshipFinder({ persons, relationships }: Props) {
 
   return (
     <div className="space-y-6">
+      {restrictedNotice ? (
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+          {restrictedNotice}
+        </div>
+      ) : null}
       {/* ── Selector row ── */}
       <div className="bg-white/80 border border-stone-200/60 rounded-2xl p-4 sm:p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row items-center sm:items-end gap-3 sm:gap-4">
@@ -374,6 +403,7 @@ export default function KinshipFinder({ persons, relationships }: Props) {
             disabledId={personB?.id}
           />
           <button
+            type="button"
             onClick={swap}
             title="Đổi chỗ"
             className="size-10 shrink-0 sm:mb-0.5 flex items-center justify-center rounded-xl bg-stone-100 hover:bg-amber-100 hover:text-amber-600 text-stone-500 transition-all border border-stone-200"

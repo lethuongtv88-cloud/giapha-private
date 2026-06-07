@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, AlertTriangle, CheckCircle2, Search, UserPlus } from "lucide-react";
-import { getSupabase } from "@/utils/supabase/queries";
+import { getProfile, getSupabase } from "@/utils/supabase/queries";
 import { StagingRecordActions } from "@/components/ImportStagingRecordActions";
 import ImportMatchReviewBulkActions from "@/components/ImportMatchReviewBulkActions";
 
@@ -326,6 +326,11 @@ function Section({
 
 export default async function ImportMatchReviewPage({ params }: PageProps) {
   const { sessionId } = await params;
+  const profile = await getProfile();
+  if (profile?.role !== "admin") {
+    redirect("/dashboard");
+  }
+
   const supabase = await getSupabase();
 
   const [sessionRes, recordsRes] = await Promise.all([

@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -6,7 +7,7 @@ import {
   Info,
   TriangleAlert,
 } from "lucide-react";
-import { getSupabase } from "@/utils/supabase/queries";
+import { getProfile, getSupabase } from "@/utils/supabase/queries";
 import {
   buildGedcomMergePlan,
   type MergePlanRecord,
@@ -203,6 +204,11 @@ function SuggestionCard({
 
 export default async function GedcomMergePlanPage({ params }: PageProps) {
   const { sessionId } = await params;
+  const profile = await getProfile();
+  if (profile?.role !== "admin") {
+    redirect("/dashboard");
+  }
+
   const supabase = await getSupabase();
 
   const [sessionRes, recordsRes, eventsRes, suggestionsRes] = await Promise.all([
