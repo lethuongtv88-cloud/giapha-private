@@ -36,9 +36,30 @@ const actionLabels: Record<string, string> = {
   "data_maintenance.repair_events_missing_links": "Repair event links",
   "data_maintenance.soft_delete_empty_families": "Xóa mềm family rỗng",
   "data_maintenance.soft_delete_duplicate_events": "Xóa event trùng",
+  "data_maintenance.repair_broken_person_events": "Repair person_events lỗi",
+  "gedcom.parse_staging": "Parse GEDCOM staging",
   "gedcom.commit_staging_session": "Commit GEDCOM import",
   "family_model.repair": "Repair Family Model",
   "account.preferences_updated": "Cập nhật cài đặt tài khoản",
+  "event.created": "Tạo sự kiện",
+  "event.updated": "Sửa sự kiện",
+  "event.deleted": "Xóa sự kiện",
+  "event.marriage_saved": "Lưu sự kiện kết hôn",
+  "event.divorce_saved": "Lưu sự kiện ly hôn",
+  "permission.denied": "Từ chối quyền",
+};
+
+const entityLabels: Record<string, string> = {
+  user: "Người dùng",
+  person: "Thành viên",
+  relationship: "Quan hệ",
+  family: "Family Model",
+  event: "Sự kiện",
+  gedcom_session: "GEDCOM session",
+  data_maintenance: "Data Maintenance",
+  account: "Tài khoản",
+  system: "Hệ thống",
+  unknown: "Không rõ",
 };
 
 function formatDate(value: string) {
@@ -61,6 +82,25 @@ function severityClass(severity: AuditLogRecord["severity"]) {
 function compactJson(value: Record<string, unknown> | null) {
   if (!value || Object.keys(value).length === 0) return null;
   return JSON.stringify(value, null, 2);
+}
+
+function metadataSummary(value: Record<string, unknown> | null) {
+  if (!value) return null;
+
+  const parts: string[] = [];
+
+  const type = typeof value.type === "string" ? value.type : null;
+  const source = typeof value.source === "string" ? value.source : null;
+  const requestedAction =
+    typeof value.requestedAction === "string" ? value.requestedAction : null;
+  const reason = typeof value.reason === "string" ? value.reason : null;
+
+  if (type) parts.push(`Loại: ${type}`);
+  if (source) parts.push(`Nguồn: ${source}`);
+  if (requestedAction) parts.push(`Yêu cầu: ${requestedAction}`);
+  if (reason) parts.push(`Lý do: ${reason}`);
+
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function FilterSelect({
@@ -136,6 +176,7 @@ export default async function AuditLogPage({
     { value: "person", label: "Thành viên" },
     { value: "relationship", label: "Quan hệ" },
     { value: "family", label: "Family Model" },
+    { value: "event", label: "Sự kiện" },
     { value: "gedcom_session", label: "GEDCOM session" },
     { value: "data_maintenance", label: "Data maintenance" },
     { value: "account", label: "Tài khoản" },
@@ -249,6 +290,8 @@ export default async function AuditLogPage({
             <div className="divide-y divide-stone-100">
               {logs.map((log) => {
                 const metadata = compactJson(log.metadata);
+                const summary = metadataSummary(log.metadata);
+                const entityLabel = entityLabels[log.entity_type] ?? log.entity_type;
                 return (
                   <article key={log.id} className="p-5 hover:bg-stone-50/70">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -281,10 +324,14 @@ export default async function AuditLogPage({
                           <span className="font-medium text-stone-700">
                             Đối tượng:
                           </span>{" "}
-                          {log.entity_type}
+                          {entityLabel}
                           {log.entity_label ? ` — ${log.entity_label}` : ""}
                           {log.entity_id ? ` (${log.entity_id})` : ""}
                         </div>
+
+                        {summary ? (
+                          <p className="mt-2 text-sm text-stone-500">{summary}</p>
+                        ) : null}
 
                         {metadata ? (
                           <details className="mt-3">

@@ -20,6 +20,11 @@ export type AuditAction =
   | "gedcom.commit_staging_session"
   | "family_model.repair"
   | "account.preferences_updated"
+  | "event.created"
+  | "event.updated"
+  | "event.deleted"
+  | "event.marriage_saved"
+  | "event.divorce_saved"
   | "permission.denied";
 
 export type AuditEntityType =
@@ -50,6 +55,14 @@ export type AuditLogInput = {
 
   severity?: AuditSeverity | null;
   metadata?: Record<string, unknown> | null;
+
+  // Cho các trường hợp chạy bằng service role/RPC mà không có cookie user
+  actorUserId?: string | null;
+  actorEmail?: string | null;
+  actorRole?: string | null;
+  actor_user_id?: string | null;
+  actor_email?: string | null;
+  actor_role?: string | null;
 };
 
 export type AuditLogRecord = {
@@ -108,9 +121,9 @@ export async function recordAuditLog(input: AuditLogInput) {
     const [user, profile] = await Promise.all([getUser(), getProfile()]);
 
     const payload = {
-      actor_user_id: user?.id ?? null,
-      actor_email: user?.email ?? null,
-      actor_role: profile?.role ?? null,
+      actor_user_id: input.actorUserId ?? input.actor_user_id ?? user?.id ?? null,
+      actor_email: input.actorEmail ?? input.actor_email ?? user?.email ?? null,
+      actor_role: input.actorRole ?? input.actor_role ?? profile?.role ?? null,
       action: input.action || "unknown",
       entity_type: input.entityType || input.entity_type || "system",
       entity_id: input.entityId ?? input.entity_id ?? null,
