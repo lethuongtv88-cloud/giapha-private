@@ -616,7 +616,7 @@ export async function createAdminEvent(formData: FormData) {
       }
     }
 
-    await recordAuditLog({
+    const auditResult = await recordAuditLog({
       action: "event.created",
       entityType: "event",
       entityId: eventRow.id,
@@ -637,7 +637,12 @@ export async function createAdminEvent(formData: FormData) {
     if (brideId) revalidatePath(`/dashboard/members/${brideId}`);
     if (groomId) revalidatePath(`/dashboard/members/${groomId}`);
 
-    return { success: true, eventId: eventRow.id };
+    return {
+      success: true,
+      eventId: eventRow.id,
+      auditOk: auditResult.ok,
+      auditError: auditResult.ok ? null : auditResult.error,
+    };
   } catch (error) {
     return {
       error:

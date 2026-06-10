@@ -1,4 +1,5 @@
 import { getProfile, getSupabase, getUser } from "@/utils/supabase/queries";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 export type AuditAction =
   | "user.created"
@@ -112,6 +113,24 @@ function isUuid(value: string | null | undefined) {
   return !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function getAuditSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE ||
+    process.env.SUPABASE_SERVICE_ROLE_SECRET;
+
+  if (!url || !serviceRoleKey) return null;
+
+  return createSupabaseClient(url, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
+
 /**
  * Ghi audit log.
  *
@@ -121,47 +140,62 @@ function isUuid(value: string | null | undefined) {
  * - Nếu insert audit thất bại thì chỉ console.error và return { ok: false }, không throw.
  */
 export async function recordAuditLog(input: AuditLogInput) {
+  const fallbackError = "Không ghi được audit log.";
+
   try {
-    const supabase = await getSupabase();
     const [user, profile] = await Promise.all([getUser(), getProfile()]);
 
     const actorUserId = input.actorUserId ?? input.actor_user_id ?? user?.id ?? null;
-    const action = input.action || "unknown";
-    const entityType = input.entityType || input.entity_type || "system";
+    const actorEmail = input.actorEmail ?? input.actor_email ?? user?.email ?? null;
+    const actorRole = input.actorRole ?? input.actor_role ?? profile?.role ?? null;
+    const action = String(input.action || "unknown");
+    const entityType = String(input.entityType || input.entity_type || "system");
     const entityId = input.entityId ?? input.entity_id ?? null;
+    const entityLabel = input.entityLabel ?? input.entity_label ?? null;
     const metadata = normalizeMetadata(input.metadata);
+    const recordId = isUuid(entityId) ? entityId : crypto.randomUUID();
 
     const payload = {
-      // Các cột legacy còn tồn tại trong một số DB cũ.
-      // Vẫn truyền đủ để tránh lỗi NOT NULL khi audit_logs từng được tạo bởi trigger generic.
-      table_name: String(entityType),
-      record_id: isUuid(entityId) ? entityId : crypto.randomUUID(),
+      // Cột legacy: một số DB đã từng tạo audit_logs theo trigger generic.
+      // Luôn truyền đủ để không bị lỗi NOT NULL hoặc schema cache cũ.
+      table_name: entityType,
+      record_id: recordId,
       changed_by: actorUserId,
       old_data: null,
       new_data: metadata,
       source: "app",
       changed_at: new Date().toISOString(),
 
+      // Cột audit app hiện tại.
       actor_user_id: actorUserId,
-      actor_email: input.actorEmail ?? input.actor_email ?? user?.email ?? null,
-      actor_role: input.actorRole ?? input.actor_role ?? profile?.role ?? null,
+      actor_email: actorEmail,
+      actor_role: actorRole,
       action,
       entity_type: entityType,
       entity_id: entityId,
-      entity_label: input.entityLabel ?? input.entity_label ?? null,
+      entity_label: entityLabel,
       severity: normalizeSeverity(input.severity),
       metadata,
     };
+
+    // Ưu tiên service-role để audit không phụ thuộc RLS/cookie của Server Action.
+    // Nếu thiếu service key thì fallback về user client để vẫn chạy được môi trường dev.
+    const serviceClient = getAuditSupabaseClient();
+    const supabase = serviceClient ?? (await getSupabase());
 
     const { error } = await supabase.from("audit_logs").insert(payload);
 
     if (error) {
       console.error("Failed to record audit log:", {
-        error,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+        usedServiceRole: Boolean(serviceClient),
         payload,
       });
 
-      return { ok: false as const, error: error.message };
+      return { ok: false as const, error: error.message || fallbackError };
     }
 
     return { ok: true as const };
@@ -170,7 +204,7 @@ export async function recordAuditLog(input: AuditLogInput) {
 
     return {
       ok: false as const,
-      error: error instanceof Error ? error.message : "Unknown audit log error",
+      error: error instanceof Error ? error.message : fallbackError,
     };
   }
 }

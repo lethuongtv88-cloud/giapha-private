@@ -48,12 +48,24 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
       void (async () => {
         const result = await createAdminEvent(formData);
 
-        if (result?.error) {
+        if (!result) {
+          setError("Không nhận được phản hồi sau khi tạo sự kiện.");
+          return;
+        }
+
+        if ("error" in result && result.error) {
           setError(result.error);
           return;
         }
 
-        setMessage("Đã thêm sự kiện.");
+        const auditOk = "auditOk" in result ? result.auditOk : true;
+        const auditError = "auditError" in result ? result.auditError : null;
+
+        setMessage(
+          auditOk === false
+            ? `Đã thêm sự kiện, nhưng audit log chưa ghi được: ${auditError ?? "không rõ lỗi"}`
+            : "Đã thêm sự kiện.",
+        );
         setIsOpen(false);
       })();
     });
