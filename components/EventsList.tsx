@@ -377,6 +377,9 @@ function EventCard({
   const isToday = event.daysUntil === 0;
   const isPast = event.daysUntil < 0;
   const isSoon = event.daysUntil > 0 && event.daysUntil <= 7;
+  const shouldShowEventMessage =
+    (event.daysUntil >= 0 && event.daysUntil < 5) ||
+    (event.type === "death_recent" && event.daysUntil >= -5);
   const canDeleteEventModel = Boolean(event.eventModelId && event.eventModelRootPersonId);
 
   const { setMemberModalId } = useMemberListView();
@@ -528,10 +531,12 @@ function EventCard({
             {yearsInfo && <span className="text-stone-400">· {yearsInfo}</span>}
           </p>
 
-          <p className="mt-1 rounded-xl border border-stone-100 bg-white/70 px-3 py-2 text-[13px] leading-5 text-stone-600">
-            <span className="mr-1">{eventMessage.emoji}</span>
-            {eventMessage.message}
-          </p>
+          {shouldShowEventMessage && (
+            <p className="mt-1 rounded-xl border border-stone-100 bg-white/70 px-3 py-2 text-[13px] leading-5 text-stone-600">
+              <span className="mr-1">{eventMessage.emoji}</span>
+              {eventMessage.message}
+            </p>
+          )}
 
           {event.location && (
             <p className="text-[13px] sm:text-sm text-stone-500 flex items-center gap-1.5 leading-snug">
