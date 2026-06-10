@@ -52,6 +52,7 @@ export default function LineagePersonCard({
   return (
     <Link
       href={`/dashboard/members/${person.id}`}
+      title={[person.full_name, yearsAndAge, kinshipLabel, secondaryLabel, note].filter(Boolean).join(" · ")}
       className={`block rounded-xl border px-2.5 py-2 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${getCardClass(person)}`}
     >
       <p className="truncate text-[13px] font-bold leading-tight">{person.full_name}</p>

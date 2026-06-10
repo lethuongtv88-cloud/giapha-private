@@ -1,10 +1,12 @@
 import type { Person, Relationship } from "@/types";
+import { computeKinship } from "@/utils/kinshipHelpers";
 import type {
   FamilyChildRow,
   FamilyParentRow,
   FamilyRow,
 } from "@/services/statistics/globalStats.service";
 import {
+  getInLawAddressDetail,
   getInLawAddressSuggestion,
   type KinshipAddressRegion,
 } from "@/utils/kinship/inLawAddressing";
@@ -144,6 +146,92 @@ function sortPersons<T extends { person: Person; generation: number }>(items: T[
   });
 }
 
+
+function relationFromRoot(input: {
+  root: Person | null;
+  target: Person;
+  persons: Person[];
+  relationships?: Relationship[];
+  fallback: string;
+}): string {
+  if (!input.root || input.root.id === input.target.id) return input.fallback;
+
+  const result = computeKinship(
+    {
+      id: input.root.id,
+      full_name: input.root.full_name,
+      gender: input.root.gender,
+      birth_year: input.root.birth_year,
+      birth_order: input.root.birth_order,
+      generation: input.root.generation,
+      is_in_law: input.root.is_in_law,
+    },
+    {
+      id: input.target.id,
+      full_name: input.target.full_name,
+      gender: input.target.gender,
+      birth_year: input.target.birth_year,
+      birth_order: input.target.birth_order,
+      generation: input.target.generation,
+      is_in_law: input.target.is_in_law,
+    },
+    input.persons.map((person) => ({
+      id: person.id,
+      full_name: person.full_name,
+      gender: person.gender,
+      birth_year: person.birth_year,
+      birth_order: person.birth_order,
+      generation: person.generation,
+      is_in_law: person.is_in_law,
+    })),
+    (input.relationships ?? []).map((relationship) => ({
+      type: relationship.type,
+      person_a: relationship.person_a,
+      person_b: relationship.person_b,
+    })),
+  );
+
+  const term = result?.aCallsB?.trim();
+  if (!term || term === "chưa xác định" || term === "họ hàng cùng nhánh") return input.fallback;
+  return term.charAt(0).toUpperCase() + term.slice(1);
+}
+
+function applyRootKinshipLabels(input: {
+  root: Person | null;
+  persons: Person[];
+  relationships?: Relationship[];
+  items: LineagePersonItem[];
+}): LineagePersonItem[] {
+  return input.items.map((item) => ({
+    ...item,
+    relationLabel: relationFromRoot({
+      root: input.root,
+      target: item.person,
+      persons: input.persons,
+      relationships: input.relationships,
+      fallback: item.relationLabel,
+    }),
+  }));
+}
+
+function applyRootKinshipLabelsForInLaw(input: {
+  root: Person | null;
+  persons: Person[];
+  relationships?: Relationship[];
+  items: InLawPersonItem[];
+}): InLawPersonItem[] {
+  return input.items.map((item) => ({
+    ...item,
+    relationLabel: relationFromRoot({
+      root: input.root,
+      target: item.person,
+      persons: input.persons,
+      relationships: input.relationships,
+      fallback: item.relationLabel,
+    }),
+  }));
+}
+
 function generationLabel(generation: number): string {
   if (generation < 0) {
     if (generation === -1) return "-1 · Cha mẹ / cùng hàng cha mẹ";
@@ -220,9 +308,8 @@ function applyInLawAddressHints(
   spouse: Person | null,
   region: KinshipAddressRegion,
 ): InLawPersonItem[] {
-  return items.map((item) => ({
-    ...item,
-    addressHint: getInLawAddressSuggestion({
+  return items.map((item) => {
+    const addressInput = {
       person: item.person,
       root,
       spouse,
@@ -232,8 +319,14 @@ function applyInLawAddressHints(
       relationLabel: item.relationLabel,
       isInLaw: item.isInLaw,
       region,
-    }),
-  }));
+    } as const;
+
+    return {
+      ...item,
+      addressHint: getInLawAddressSuggestion(addressInput),
+      note: item.note ?? getInLawAddressDetail(addressInput),
+    };
+  });
 }
 
 function shouldShowInLaw(person: Person, options: LineageDisplayOptions): boolean {
@@ -374,11 +467,24 @@ export function buildLineageComparison(input: LineageInput): LineageComparisonRe
     }
   }
 
+  const labeledPaternal = applyRootKinshipLabels({
+    root,
+    persons: input.persons,
+    relationships: input.relationships,
+    items: paternal,
+  });
+  const labeledMaternal = applyRootKinshipLabels({
+    root,
+    persons: input.persons,
+    relationships: input.relationships,
+    items: maternal,
+  });
+
   return {
     root,
     father,
     mother,
-    rows: createLineageRows(generationsUp, generationsDown, paternal, center, maternal),
+    rows: createLineageRows(generationsUp, generationsDown, labeledPaternal, center, labeledMaternal),
     warnings,
   };
 }
@@ -476,11 +582,36 @@ export function buildInLawComparison(input: InLawInput): InLawComparisonResult {
   }
 
   const addressRegion = displayOptions.addressRegion;
-  const rootPaternal = applyInLawAddressHints(rootLineage.paternal, root, selectedSpouse, addressRegion);
-  const rootMaternal = applyInLawAddressHints(rootLineage.maternal, root, selectedSpouse, addressRegion);
-  const couple = applyInLawAddressHints(coupleItems, root, selectedSpouse, addressRegion);
-  const spousePaternal = applyInLawAddressHints(spouseLineage.paternal, root, selectedSpouse, addressRegion);
-  const spouseMaternal = applyInLawAddressHints(spouseLineage.maternal, root, selectedSpouse, addressRegion);
+  const rootPaternal = applyInLawAddressHints(
+    applyRootKinshipLabelsForInLaw({ root, persons: input.persons, relationships: input.relationships, items: rootLineage.paternal }),
+    root,
+    selectedSpouse,
+    addressRegion,
+  );
+  const rootMaternal = applyInLawAddressHints(
+    applyRootKinshipLabelsForInLaw({ root, persons: input.persons, relationships: input.relationships, items: rootLineage.maternal }),
+    root,
+    selectedSpouse,
+    addressRegion,
+  );
+  const couple = applyInLawAddressHints(
+    applyRootKinshipLabelsForInLaw({ root, persons: input.persons, relationships: input.relationships, items: coupleItems }),
+    root,
+    selectedSpouse,
+    addressRegion,
+  );
+  const spousePaternal = applyInLawAddressHints(
+    applyRootKinshipLabelsForInLaw({ root, persons: input.persons, relationships: input.relationships, items: spouseLineage.paternal }),
+    root,
+    selectedSpouse,
+    addressRegion,
+  );
+  const spouseMaternal = applyInLawAddressHints(
+    applyRootKinshipLabelsForInLaw({ root, persons: input.persons, relationships: input.relationships, items: spouseLineage.maternal }),
+    root,
+    selectedSpouse,
+    addressRegion,
+  );
 
   return {
     root,
