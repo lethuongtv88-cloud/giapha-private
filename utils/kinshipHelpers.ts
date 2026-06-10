@@ -73,6 +73,53 @@ function isOlder(a?: KinshipPersonNode | null, b?: KinshipPersonNode | null): bo
   return null;
 }
 
+function normalizeTerm(value: string): string {
+  return value
+    .toLocaleLowerCase("vi")
+    .replace(/[·,:;().]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sideOfSpouse(root?: KinshipPersonNode | null): "vợ" | "chồng" | "vợ/chồng" {
+  if (root?.gender === "male") return "vợ";
+  if (root?.gender === "female") return "chồng";
+  return "vợ/chồng";
+}
+
+function parentInLawTerm(target?: KinshipPersonNode | null, root?: KinshipPersonNode | null): string {
+  const side = sideOfSpouse(root);
+  if (target?.gender === "male") return side === "vợ" ? "cha vợ" : side === "chồng" ? "cha chồng" : "cha vợ/chồng";
+  if (target?.gender === "female") return side === "vợ" ? "mẹ vợ" : side === "chồng" ? "mẹ chồng" : "mẹ vợ/chồng";
+  return side === "vợ" ? "cha/mẹ vợ" : side === "chồng" ? "cha/mẹ chồng" : "cha/mẹ vợ/chồng";
+}
+
+function spouseSiblingInLawTerm(input: {
+  target?: KinshipPersonNode | null;
+  spouse?: KinshipPersonNode | null;
+  root?: KinshipPersonNode | null;
+}): string {
+  const { target, spouse, root } = input;
+  const side = sideOfSpouse(root);
+  const older = isOlder(target, spouse);
+  const prefix = target?.gender === "female"
+    ? older === true ? "chị" : older === false ? "em" : "chị/em"
+    : target?.gender === "male"
+      ? older === true ? "anh" : older === false ? "em" : "anh/em"
+      : older === true ? "anh/chị" : older === false ? "em" : "anh/chị/em";
+
+  if (side === "vợ") return `${prefix} vợ`;
+  if (side === "chồng") return `${prefix} chồng`;
+  return `${prefix} vợ/chồng`;
+}
+
+function childSpouseParentTerm(target?: KinshipPersonNode | null): string {
+  if (target?.gender === "male") return "ông sui";
+  if (target?.gender === "female") return "bà sui";
+  return "sui gia";
+}
+
+
 function directAncestorTerm(steps: Step[], people: KinshipPersonNode[]): string | null {
   if (!steps.every((step) => step === "parent")) return null;
 
@@ -304,38 +351,73 @@ function genericCollateralTerm(steps: Step[], people: KinshipPersonNode[]): stri
 
 
 function spouseOfKinshipTerm(baseTerm: string, spouse?: KinshipPersonNode | null): string | null {
-  const base = baseTerm.toLowerCase().trim();
+  const base = normalizeTerm(baseTerm);
   const spouseGender = spouse?.gender;
 
   if (spouseGender === "female") {
-    if (base === "anh" || base === "anh họ" || base.includes("anh/em") || base.includes("anh/chị")) return "chị dâu";
-    if (base === "em trai" || base === "em trai họ" || base === "em họ") return "em dâu";
-    if (base === "chú") return "thím";
-    if (base === "ông chú nội" || base === "ông chú" || base.includes("ông chú")) return "bà thím";
-    if (base === "cậu" || base.includes("cậu")) return base.includes("ông cậu") ? "bà mợ" : "mợ";
+    if (base.includes("ông chú")) return "bà thím";
+    if (base.includes("ông cậu")) return "bà mợ";
+    if (base === "chú" || base.includes(" chú") || base.includes("chú ")) return "thím";
+    if (base === "cậu" || base.includes(" cậu") || base.includes("cậu ")) return "mợ";
+
+    if (base === "anh" || base === "anh họ" || base.startsWith("anh ")) return "chị dâu";
+    if (base === "em trai" || base === "em trai họ" || base === "em họ" || base.includes("em trai") || base.includes("em họ")) return "em dâu";
+    if (base.includes("anh/em") || base.includes("anh chị em")) return "chị/em dâu";
+
     if (base === "con trai") return "con dâu";
-    if (base === "cháu" || base.includes("cháu")) return "cháu dâu";
+    if (base === "cháu" || base.includes("cháu trai") || base.includes("cháu")) return "cháu dâu";
   }
 
   if (spouseGender === "male") {
-    if (base === "chị" || base === "chị họ") return "anh rể";
-    if (base === "em gái" || base === "em gái họ" || base === "em họ") return "em rể";
-    if (base === "cô") return "dượng";
-    if (base === "dì") return "dượng";
-    if (base === "bà cô nội" || base === "bà cô" || base.includes("bà cô")) return "ông dượng";
-    if (base === "bà dì ngoại" || base === "bà dì" || base.includes("bà dì")) return "ông dượng";
+    if (base.includes("bà cô")) return "ông dượng";
+    if (base.includes("bà dì")) return "ông dượng";
+    if (base === "cô" || base.includes(" cô") || base.includes("cô ")) return "dượng";
+    if (base === "dì" || base.includes(" dì") || base.includes("dì ")) return "dượng";
+
+    if (base === "chị" || base === "chị họ" || base.startsWith("chị ")) return "anh rể";
+    if (base === "em gái" || base === "em gái họ" || base === "em họ" || base.includes("em gái") || base.includes("em họ")) return "em rể";
+    if (base.includes("chị/em") || base.includes("anh chị em")) return "anh/em rể";
+
     if (base === "con gái") return "con rể";
-    if (base === "cháu" || base.includes("cháu")) return "cháu rể";
+    if (base === "cháu" || base.includes("cháu gái") || base.includes("cháu")) return "cháu rể";
   }
 
   return null;
 }
 
 function termFromPath(steps: Step[], people: KinshipPersonNode[]): string {
+  const root = people[0];
   const target = people[people.length - 1];
 
   if (steps.length === 0) return "bản thân";
   if (steps.length === 1 && steps[0] === "spouse") return target?.gender === "female" ? "vợ" : target?.gender === "male" ? "chồng" : "vợ/chồng";
+
+  // Sui gia / in-law patterns should be resolved before generic collateral fallback.
+  // root -> spouse -> parent = cha/mẹ vợ/chồng.
+  if (steps.length === 2 && steps[0] === "spouse" && steps[1] === "parent") {
+    return parentInLawTerm(target, root);
+  }
+
+  // root -> spouse -> parent -> child = anh/chị/em vợ/chồng.
+  if (steps.length === 3 && steps[0] === "spouse" && steps[1] === "parent" && steps[2] === "child") {
+    return spouseSiblingInLawTerm({ target, spouse: people[1], root });
+  }
+
+  // root -> child -> spouse -> parent = ông/bà sui.
+  if (steps.length === 3 && steps[0] === "child" && steps[1] === "spouse" && steps[2] === "parent") {
+    return childSpouseParentTerm(target);
+  }
+
+  // Spouse of a known relation: map to Vietnamese affinal terms before trying
+  // collateral patterns, otherwise paths ending in spouse can be lost to generic labels.
+  if (steps[steps.length - 1] === "spouse") {
+    const base = termFromPath(steps.slice(0, -1), people.slice(0, -1));
+    const mapped = spouseOfKinshipTerm(base, target);
+    if (mapped) return mapped;
+    if (target?.gender === "female") return `vợ của ${base}`;
+    if (target?.gender === "male") return `chồng của ${base}`;
+    return `vợ/chồng của ${base}`;
+  }
 
   const ancestor = directAncestorTerm(steps, people);
   if (ancestor) return ancestor;
@@ -388,21 +470,10 @@ function termFromPath(steps: Step[], people: KinshipPersonNode[]): string {
   const collateral = genericCollateralTerm(steps, people);
   if (collateral) return collateral;
 
-  // Spouse of a known relation: map to Vietnamese affinal terms instead of
-  // showing literal “vợ/chồng của ...” where customary names exist.
-  if (steps[steps.length - 1] === "spouse") {
-    const base = termFromPath(steps.slice(0, -1), people.slice(0, -1));
-    const mapped = spouseOfKinshipTerm(base, target);
-    if (mapped) return mapped;
-    if (target?.gender === "female") return `vợ của ${base}`;
-    if (target?.gender === "male") return `chồng của ${base}`;
-    return `vợ/chồng của ${base}`;
-  }
-
-  // Inverse spouse relation, e.g. spouse -> parent.
+  // Other inverse spouse relations not covered above.
   if (steps[0] === "spouse") {
     const base = termFromPath(steps.slice(1), people.slice(1));
-    return `${base} bên vợ/chồng`;
+    return `${base} bên ${sideOfSpouse(root)}`;
   }
 
   if (steps.filter((step) => step === "parent").length > 0 && steps.filter((step) => step === "child").length > 0) {

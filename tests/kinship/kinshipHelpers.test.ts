@@ -116,4 +116,64 @@ describe("computeKinship", () => {
     expect(computeKinship(persons[0], persons[5], persons, relationships)?.aCallsB).toBe("chú");
   });
 
+
+  it("recognizes spouses of paternal aunt/uncle and younger cousin", () => {
+    const persons = [
+      person("root", "Người gốc", { gender: "male", birth_year: 1990 }),
+      person("father", "Cha", { gender: "male", birth_year: 1965 }),
+      person("grand", "Ông nội", { gender: "male" }),
+      person("co", "Cô", { gender: "female", birth_year: 1970 }),
+      person("duong", "Dượng", { gender: "male" }),
+      person("chu", "Chú", { gender: "male", birth_year: 1972 }),
+      person("thim", "Thím", { gender: "female" }),
+      person("emHo", "Em họ", { gender: "male", birth_year: 1998 }),
+      person("emDau", "Em dâu", { gender: "female" }),
+    ];
+    const relationships = [
+      child("father", "root"),
+      child("grand", "father"),
+      child("grand", "co"),
+      child("grand", "chu"),
+      { person_a: "co", person_b: "duong", type: "marriage" },
+      { person_a: "chu", person_b: "thim", type: "marriage" },
+      child("chu", "emHo"),
+      { person_a: "emHo", person_b: "emDau", type: "marriage" },
+    ];
+
+    expect(computeKinship(persons[0], persons[4], persons, relationships)?.aCallsB).toBe("dượng");
+    expect(computeKinship(persons[0], persons[6], persons, relationships)?.aCallsB).toBe("thím");
+    expect(computeKinship(persons[0], persons[8], persons, relationships)?.aCallsB).toBe("em dâu");
+  });
+
+  it("recognizes sui gia and spouse family terms", () => {
+    const persons = [
+      person("root", "Người gốc", { gender: "male", birth_year: 1970 }),
+      person("wife", "Vợ", { gender: "female", birth_year: 1972 }),
+      person("fatherInLaw", "Cha vợ", { gender: "male", birth_year: 1940 }),
+      person("motherInLaw", "Mẹ vợ", { gender: "female", birth_year: 1945 }),
+      person("wifeBrother", "Anh vợ", { gender: "male", birth_year: 1968 }),
+      person("son", "Con trai", { gender: "male" }),
+      person("daughterInLaw", "Con dâu", { gender: "female" }),
+      person("suiOng", "Ông sui", { gender: "male" }),
+      person("suiBa", "Bà sui", { gender: "female" }),
+    ];
+    const relationships = [
+      { person_a: "root", person_b: "wife", type: "marriage" },
+      child("fatherInLaw", "wife"),
+      child("motherInLaw", "wife"),
+      child("fatherInLaw", "wifeBrother"),
+      child("root", "son"),
+      { person_a: "son", person_b: "daughterInLaw", type: "marriage" },
+      child("suiOng", "daughterInLaw"),
+      child("suiBa", "daughterInLaw"),
+    ];
+
+    expect(computeKinship(persons[0], persons[2], persons, relationships)?.aCallsB).toBe("cha vợ");
+    expect(computeKinship(persons[0], persons[3], persons, relationships)?.aCallsB).toBe("mẹ vợ");
+    expect(computeKinship(persons[0], persons[4], persons, relationships)?.aCallsB).toBe("anh vợ");
+    expect(computeKinship(persons[0], persons[6], persons, relationships)?.aCallsB).toBe("con dâu");
+    expect(computeKinship(persons[0], persons[7], persons, relationships)?.aCallsB).toBe("ông sui");
+    expect(computeKinship(persons[0], persons[8], persons, relationships)?.aCallsB).toBe("bà sui");
+  });
+
 });
