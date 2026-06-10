@@ -6,6 +6,7 @@ import {
 } from "@/services/data-quality/dataQuality.service";
 import { getSupabase } from "@/utils/supabase/queries";
 import Link from "next/link";
+import { DataQualityShortcuts } from "@/components/AdminMaintenanceShortcuts";
 
 export const metadata = {
   title: "Data Quality",
@@ -209,71 +210,7 @@ export default async function DataQualityPage() {
     <div className="flex-1 w-full relative flex flex-col pb-12">
       <div className="w-full relative z-20 py-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <h1 className="title">Data Quality</h1>
-<section className="mt-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-  <h2 className="text-lg font-bold text-stone-900">
-    Công cụ bảo trì dữ liệu
-  </h2>
 
-  <p className="mt-1 text-sm text-stone-500">
-    Mở các trang maintenance để xử lý dữ liệu bất thường sau migration/import.
-  </p>
-
-  <div className="mt-4 flex flex-wrap gap-2">
-    <Link
-      href="/dashboard/data-maintenance"
-      className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800"
-    >
-      Tổng quan maintenance
-    </Link>
-
-    <Link
-      href="/dashboard/data-quality/family-model"
-      className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-800"
-    >
-      Family Model nâng cao
-    </Link>
-
-    <Link
-      href="/dashboard/data-maintenance/family-model"
-      className="rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800"
-    >
-      Repair Family Model
-    </Link>
-<Link
-  href="/dashboard/admin-health"
-  className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
->
-  Admin Health
-</Link>
-    <Link
-      href="/dashboard/data-maintenance/unknown-persons"
-      className="rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
-    >
-      Unknown persons
-    </Link>
-
-    <Link
-      href="/dashboard/data-maintenance/duplicate-events"
-      className="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800"
-    >
-      Duplicate events
-    </Link>
-
-    <Link
-      href="/dashboard/data-maintenance/events-missing-links"
-      className="rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800"
-    >
-      Missing event links
-    </Link>
-
-    <Link
-      href="/dashboard/data-maintenance/empty-families"
-      className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800"
-    >
-      Empty families
-    </Link>
-  </div>
-</section>
         <p className="text-stone-500 mt-1 text-sm">
           Kiểm tra chất lượng dữ liệu Family Model, Event Model, Tree, Stats và
           legacy soft-delete trước khi làm GEDCOM staging import hoặc cleanup.
@@ -281,6 +218,8 @@ export default async function DataQualityPage() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-1 space-y-6">
+        <DataQualityShortcuts />
+
         {loadErrors.length > 0 ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">
             <h2 className="font-bold">Có lỗi khi tải dữ liệu</h2>

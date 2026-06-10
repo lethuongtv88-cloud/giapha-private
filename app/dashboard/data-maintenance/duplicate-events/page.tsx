@@ -3,6 +3,7 @@ import { AlertTriangle, CalendarDays, Eye } from "lucide-react";
 import { getSupabase } from "@/utils/supabase/queries";
 import { buildDuplicateEventGroups } from "@/services/data-maintenance/duplicateEvents.service";
 import SoftDeleteDuplicateEventsButton from "@/components/SoftDeleteDuplicateEventsButton";
+import { BackToDataMaintenance } from "@/components/AdminMaintenanceShortcuts";
 
 export const metadata = {
   title: "Duplicate events maintenance",
@@ -32,6 +33,7 @@ export default async function DuplicateEventsPage() {
   return (
     <div className="flex-1 w-full relative flex flex-col pb-12">
       <div className="w-full relative z-20 py-6 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+        <BackToDataMaintenance />
         <h1 className="title">Duplicate events maintenance</h1>
         <p className="mt-1 text-sm text-stone-500">
           Liệt kê birth/death events bị trùng theo person, type, start_date và sort_date.

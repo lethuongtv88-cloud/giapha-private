@@ -1,3 +1,4 @@
+import { BackToDataQuality } from "@/components/AdminMaintenanceShortcuts";
 import Link from "next/link";
 import { DatabaseZap, ShieldCheck, AlertTriangle, Wrench, Eye } from "lucide-react";
 import { getSupabase } from "@/utils/supabase/queries";
@@ -214,6 +215,7 @@ export default async function FamilyModelQualityPage() {
   return (
     <div className="flex-1 w-full relative flex flex-col pb-12">
       <div className="w-full relative z-20 py-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+        <BackToDataQuality />
         <h1 className="title">Family Model Quality</h1>
         <p className="mt-1 text-sm text-stone-500">
           Kiểm tra nâng cao families, family_parents và family_children. Mục tiêu là

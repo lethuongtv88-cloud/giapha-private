@@ -11,6 +11,7 @@ import {
   ShieldX,
   UsersRound,
 } from "lucide-react";
+import { AdminHealthShortcuts } from "@/components/AdminMaintenanceShortcuts";
 import { getSupabase } from "@/utils/supabase/queries";
 import {
   buildAdminHealthResult,
@@ -154,6 +155,8 @@ export default async function AdminHealthPage() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-1 space-y-6">
+        <AdminHealthShortcuts />
+
         <section
           className={`rounded-2xl border p-5 shadow-sm ${
             health.ok
@@ -191,39 +194,7 @@ export default async function AdminHealthPage() {
           ))}
         </section>
 
-        <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-stone-900">Lối tắt</h2>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link
-              href="/dashboard/data-maintenance"
-              className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800"
-            >
-              Data Maintenance
-            </Link>
-
-            <Link
-              href="/dashboard/data-quality"
-              className="rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
-            >
-              Data Quality
-            </Link>
-
-            <Link
-              href="/dashboard/import"
-              className="rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800"
-            >
-              GEDCOM Import
-            </Link>
-
-            <Link
-              href="/dashboard/stats"
-              className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800"
-            >
-              Stats
-            </Link>
-          </div>
-        </section>
+        
       </main>
     </div>
   );

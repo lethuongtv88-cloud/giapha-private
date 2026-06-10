@@ -8,6 +8,7 @@ import {
   Wrench,
   Activity,
 } from "lucide-react";
+import { DataMaintenanceShortcuts } from "@/components/AdminMaintenanceShortcuts";
 import { getSupabase } from "@/utils/supabase/queries";
 
 export const metadata = {
@@ -126,6 +127,8 @@ export default async function DataMaintenancePage() {
       </div>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-1 space-y-6">
+        <DataMaintenanceShortcuts />
+
         <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900">
           <div className="flex gap-3">
             <ShieldCheck className="mt-0.5 size-6 shrink-0 text-emerald-600" />
@@ -199,47 +202,7 @@ export default async function DataMaintenancePage() {
             tone="indigo"
           />
         </section>
-        <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-stone-900">Lối tắt</h2>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link
-  href="/dashboard/admin-health"
-  className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
->
-  Admin Health
-</Link>
-
-            <Link
-              href="/dashboard/data-quality"
-              className="rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
-            >
-              Data Quality
-            </Link>
-
-            <Link
-              href="/dashboard/import"
-              className="rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800"
-            >
-              GEDCOM Import
-            </Link>
-
-            <Link
-              href="/dashboard/audit-log"
-              className="inline-flex items-center gap-2 rounded-xl bg-stone-700 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800"
-            >
-              <Activity className="size-4" />
-              Audit Log
-            </Link>
-
-            <Link
-              href="/dashboard/stats"
-              className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800"
-            >
-              Stats
-            </Link>
-          </div>
-        </section>
+        
       </main>
     </div>
   );

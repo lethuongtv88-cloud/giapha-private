@@ -3,6 +3,7 @@ import { AlertTriangle, Link2Off, Eye } from "lucide-react";
 import { getSupabase } from "@/utils/supabase/queries";
 import { buildEventsMissingLinksRows } from "@/services/data-maintenance/eventsMissingLinks.service";
 import RepairEventsMissingLinksButton from "@/components/RepairEventsMissingLinksButton";
+import { BackToDataMaintenance } from "@/components/AdminMaintenanceShortcuts";
 
 export const metadata = {
   title: "Events missing links maintenance",
@@ -38,6 +39,7 @@ export default async function EventsMissingLinksPage() {
   return (
     <div className="flex-1 w-full relative flex flex-col pb-12">
       <div className="w-full relative z-20 py-6 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+        <BackToDataMaintenance />
         <h1 className="title">Events missing links maintenance</h1>
         <p className="mt-1 text-sm text-stone-500">
           Liệt kê birth/death events có legacy_person_id nhưng thiếu link trong

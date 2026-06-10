@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, Pencil, UserRoundX } from "lucide-react";
 import { getSupabase } from "@/utils/supabase/queries";
 import { buildUnknownPersonRows } from "@/services/data-maintenance/unknownPersons.service";
+import { BackToDataMaintenance } from "@/components/AdminMaintenanceShortcuts";
 
 export const metadata = {
   title: "Unknown persons maintenance",
@@ -33,6 +34,7 @@ export default async function UnknownPersonsPage() {
   return (
     <div className="flex-1 w-full relative flex flex-col pb-12">
       <div className="w-full relative z-20 py-6 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+        <BackToDataMaintenance />
         <h1 className="title">Unknown persons maintenance</h1>
         <p className="mt-1 text-sm text-stone-500">
           Quản lý người thật nhưng chưa biết tên. Trang này chỉ liệt kê và dẫn
