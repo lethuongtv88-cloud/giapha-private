@@ -80,3 +80,7 @@ USING (
       AND p.role = 'admin'
   )
 );
+
+-- Allow semantic app audit actions.
+ALTER TABLE public.audit_logs
+  DROP CONSTRAINT IF EXISTS audit_logs_action_check;

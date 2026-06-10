@@ -1,6 +1,4 @@
 import EventsList from "@/components/EventsList";
-import AdminEventForm from "@/components/events/AdminEventForm";
-import { CalendarDays, MapPin, Users2 } from "lucide-react";
 import type { Person } from "@/types";
 import MemberDetailModal from "@/components/modal/MemberDetailModal";
 import { MemberListProvider } from "@/context/MemberListContext";
@@ -117,55 +115,6 @@ function PermissionEmptyState({
   );
 }
 
-function isAdminManagedEvent(event: PermissionEvent) {
-  const legacySource = String(event.legacy_source ?? "");
-  return event.type === "wedding" || legacySource.startsWith("manual.admin_");
-}
-
-function formatEventDate(event: PermissionEvent) {
-  const value = event.start_date || event.sort_date;
-  if (!value) return "Chưa rõ ngày";
-
-  if (event.date_precision === "year") return value.slice(0, 4);
-
-  if (event.date_precision === "month") {
-    const match = value.match(/^(\d{4})-(\d{2})/);
-    return match ? `${match[2]}-${match[1]}` : value;
-  }
-
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : value;
-}
-
-function getEventTypeLabel(type?: string | null) {
-  const labels: Record<string, string> = {
-    wedding: "Đám cưới",
-    custom: "Sự kiện chung",
-    birth: "Sinh",
-    death: "Mất",
-    marriage: "Kết hôn",
-    divorce: "Ly hôn",
-  };
-
-  return labels[type ?? ""] ?? type ?? "Sự kiện";
-}
-
-function buildPersonLookup(persons: EventPerson[]) {
-  return new Map(persons.map((person) => [person.id, person.full_name]));
-}
-
-function getEventPersonNames(input: {
-  eventId: string;
-  personEvents: PermissionPersonEvent[];
-  personById: Map<string, string>;
-}) {
-  return input.personEvents
-    .filter((row) => row.event_id === input.eventId)
-    .filter((row) => row.role !== "visibility_root")
-    .map((row) => input.personById.get(row.person_id))
-    .filter(Boolean) as string[];
-}
-
 function toPersonSelectorRows(persons: EventPerson[]) {
   return persons.map((person) => ({
     id: person.id,
@@ -190,6 +139,66 @@ function toPersonSelectorRows(persons: EventPerson[]) {
     generation: person.generation ?? null,
     other_names: person.other_names ?? null,
   })) as Person[];
+}
+
+function isFutureEvent(event: PermissionEvent) {
+  const raw = event.start_date || event.sort_date;
+  if (!raw || event.date_precision !== "day") return false;
+  const eventDate = new Date(`${String(raw).slice(0, 10)}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return eventDate.getTime() >= today.getTime();
+}
+
+function isDirectMarriageViewer(input: {
+  event: PermissionEvent;
+  personEvents: PermissionPersonEvent[];
+  familyChildren: PermissionFamilyChild[];
+  viewerPersonId: string | null;
+}) {
+  if (!input.viewerPersonId) return false;
+
+  const principalIds = input.personEvents
+    .filter((row) => row.event_id === input.event.id)
+    .filter((row) => row.role !== "visibility_root")
+    .map((row) => row.person_id);
+
+  if (principalIds.includes(input.viewerPersonId)) return true;
+
+  if (input.event.family_id) {
+    return input.familyChildren.some(
+      (row) =>
+        row.family_id === input.event.family_id &&
+        row.person_id === input.viewerPersonId,
+    );
+  }
+
+  return false;
+}
+
+function filterEventsForEventList(input: {
+  events: PermissionEvent[];
+  personEvents: PermissionPersonEvent[];
+  familyChildren: PermissionFamilyChild[];
+  isRestricted: boolean;
+  viewerPersonId: string | null;
+}) {
+  return input.events.filter((event) => {
+    if (event.type !== "marriage") return true;
+
+    // Đám cưới sắp tới: hiển thị 1 lần theo quyền xem hiện có.
+    if (isFutureEvent(event)) return true;
+
+    // Kỷ niệm cưới: chỉ cho vợ/chồng hoặc con trực tiếp của cặp đó xem.
+    if (!input.isRestricted) return true;
+
+    return isDirectMarriageViewer({
+      event,
+      personEvents: input.personEvents,
+      familyChildren: input.familyChildren,
+      viewerPersonId: input.viewerPersonId,
+    });
+  });
 }
 
 export default async function EventsPage() {
@@ -299,16 +308,15 @@ export default async function EventsPage() {
     : allPersons;
 
   const customEvents = permission.isRestricted ? [] : allCustomEvents;
-  const canCreateAdminEvent = profile?.role === "admin" || profile?.role === "editor";
-  const personById = buildPersonLookup(allPersons);
-  const adminManagedEvents = eventFilter.events
-    .filter(isAdminManagedEvent)
-    .sort((a, b) =>
-      String(a.sort_date || a.start_date || "9999-99-99").localeCompare(
-        String(b.sort_date || b.start_date || "9999-99-99"),
-      ),
-    );
+  const canCreateEvent = profile?.role === "admin" || profile?.role === "editor";
   const selectorPersons = toPersonSelectorRows(persons);
+  const eventsForList = filterEventsForEventList({
+    events: eventFilter.events,
+    personEvents: eventFilter.personEvents,
+    familyChildren: allFamilyChildren,
+    isRestricted: permission.isRestricted,
+    viewerPersonId: permission.viewerPersonId,
+  });
 
   return (
     <MemberListProvider>
@@ -329,78 +337,14 @@ export default async function EventsPage() {
 
         <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-1 space-y-8">
           <section className="rounded-3xl border border-stone-200 bg-white/90 p-5 shadow-sm">
-            <div className="mb-4">
-              {canCreateAdminEvent ? (
-                <AdminEventForm persons={selectorPersons} />
-              ) : (
-                <div>
-                  <h2 className="text-lg font-bold text-stone-800">Danh sách sự kiện</h2>
-                  <p className="text-sm text-stone-500">
-                    Sinh nhật, ngày giỗ, kỷ niệm ngày cưới và sự kiện gia đình. Mỗi sự kiện đã có thời gian đếm ngược ngay trên thẻ sự kiện.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {adminManagedEvents.length > 0 ? (
-              <div className="mb-6 space-y-3">
-                {adminManagedEvents.map((event) => {
-                  const names = getEventPersonNames({
-                    eventId: event.id,
-                    personEvents: eventFilter.personEvents,
-                    personById,
-                  });
-
-                  return (
-                    <article
-                      key={event.id}
-                      className="rounded-2xl border border-stone-200 bg-gradient-to-br from-white to-amber-50/40 p-4 shadow-sm"
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <div className="mb-2 flex flex-wrap items-center gap-2">
-                            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-800">
-                              {getEventTypeLabel(event.type)}
-                            </span>
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-stone-500">
-                              <CalendarDays className="size-3.5" />
-                              {formatEventDate(event)}
-                            </span>
-                          </div>
-
-                          <h3 className="text-base font-bold text-stone-900">
-                            {event.title || getEventTypeLabel(event.type)}
-                          </h3>
-
-                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium text-stone-500">
-                            {event.place_text ? (
-                              <span className="inline-flex items-center gap-1">
-                                <MapPin className="size-3.5" />
-                                {event.place_text}
-                              </span>
-                            ) : null}
-                            {names.length > 0 ? (
-                              <span className="inline-flex items-center gap-1">
-                                <Users2 className="size-3.5" />
-                                {names.join(", ")}
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-
-                      {event.description ? (
-                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-stone-600">
-                          {String(event.description)}
-                        </p>
-                      ) : null}
-                    </article>
-                  );
-                })}
-              </div>
-            ) : null}
-
-            <EventsList persons={persons} customEvents={customEvents} />
+            <EventsList
+              persons={persons}
+              customEvents={customEvents}
+              eventModelEvents={eventsForList}
+              personEvents={eventFilter.personEvents}
+              selectorPersons={selectorPersons}
+              canCreateEvent={canCreateEvent}
+            />
           </section>
         </main>
       </div>
