@@ -37,6 +37,89 @@ function normalizeOptionalUuid(value: FormDataEntryValue | null) {
   return text ? text : null;
 }
 
+
+function normalizeUsername(value: FormDataEntryValue | string | null | undefined) {
+  const raw = typeof value === "string" ? value : value?.toString();
+  const username = raw?.trim().toLowerCase() ?? "";
+  if (!username) return null;
+  return username;
+}
+
+function validateUsername(username: string | null) {
+  if (!username) return null;
+
+  if (username.length < 3 || username.length > 32) {
+    return "Tên đăng nhập phải dài từ 3 đến 32 ký tự.";
+  }
+
+  if (!/^[a-z0-9._]+$/.test(username)) {
+    return "Tên đăng nhập chỉ được dùng chữ thường không dấu, số, dấu chấm và dấu gạch dưới.";
+  }
+
+  if (username.includes("..") || username.startsWith(".") || username.endsWith(".")) {
+    return "Tên đăng nhập không được bắt đầu/kết thúc bằng dấu chấm hoặc có hai dấu chấm liên tiếp.";
+  }
+
+  return null;
+}
+
+async function ensureUsernameAvailable(username: string | null, exceptUserId?: string) {
+  if (!username) return null;
+  const admin = getSupabaseAdmin();
+  let query = admin.from("profiles").select("id").eq("username", username).limit(1);
+  if (exceptUserId) query = query.neq("id", exceptUserId);
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("Failed to check username availability:", error);
+    return "Không kiểm tra được tên đăng nhập: " + error.message;
+  }
+
+  if (data && data.length > 0) return "Tên đăng nhập này đã được sử dụng.";
+  return null;
+}
+
+export async function resolveLoginIdentifier(identifier: string) {
+  const loginId = identifier.trim().toLowerCase();
+  if (!loginId) return { error: "Vui lòng nhập email hoặc tên đăng nhập." };
+
+  if (loginId.includes("@")) {
+    return { email: loginId };
+  }
+
+  const usernameError = validateUsername(loginId);
+  if (usernameError) return { error: "Email hoặc tên đăng nhập không hợp lệ." };
+
+  try {
+    const admin = getSupabaseAdmin();
+    const { data: profile, error } = await admin
+      .from("profiles")
+      .select("id, username")
+      .eq("username", loginId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Failed to resolve username:", error);
+      return { error: "Không thể kiểm tra tên đăng nhập. Vui lòng thử lại." };
+    }
+
+    if (!profile?.id) {
+      return { error: "Email hoặc tên đăng nhập không đúng." };
+    }
+
+    const { data: userData, error: userError } = await admin.auth.admin.getUserById(profile.id);
+    if (userError || !userData.user?.email) {
+      console.error("Failed to resolve username to auth email:", userError);
+      return { error: "Email hoặc tên đăng nhập không đúng." };
+    }
+
+    return { email: userData.user.email.toLowerCase() };
+  } catch (err) {
+    console.error("Unexpected username resolve error:", err);
+    return { error: "Không thể đăng nhập bằng tên đăng nhập lúc này." };
+  }
+}
+
 export async function changeUserRole(userId: string, newRole: UserRole) {
   const supabase = await getSupabase();
   const { error } = await supabase.rpc("set_user_role", {
@@ -87,6 +170,7 @@ export async function adminCreateUser(formData: FormData) {
   const email = formData.get("email")?.toString()?.trim().toLowerCase();
   const password = formData.get("password")?.toString();
   const fullName = formData.get("full_name")?.toString()?.trim() || "";
+  const username = normalizeUsername(formData.get("username"));
   const role = normalizeRole(formData.get("role")?.toString() || "member");
   const defaultTreeRootId = normalizeOptionalUuid(
     formData.get("default_tree_root_id"),
@@ -103,6 +187,12 @@ export async function adminCreateUser(formData: FormData) {
   if (!email || !password) {
     return { error: "Email và mật khẩu là bắt buộc." };
   }
+
+  const usernameError = validateUsername(username);
+  if (usernameError) return { error: usernameError };
+
+  const usernameTaken = await ensureUsernameAvailable(username);
+  if (usernameTaken) return { error: usernameTaken };
 
   const supabase = await getSupabase();
 
@@ -185,17 +275,17 @@ export async function adminCreateUser(formData: FormData) {
       }
     }
 
-    if (linkedPersonId) {
+    if (linkedPersonId || username) {
       const { error: profileError } = await admin
         .from("profiles")
-        .update({ person_id: linkedPersonId })
+        .update({ person_id: linkedPersonId, username })
         .eq("id", createdUser.id);
 
       if (profileError) {
-        console.error("Created user but failed to link person:", profileError);
+        console.error("Created user but failed to update profile:", profileError);
         return {
           error:
-            "Đã tạo người dùng, nhưng chưa gán được người trong gia phả: " +
+            "Đã tạo người dùng, nhưng chưa lưu được tên đăng nhập/người trong gia phả: " +
             profileError.message,
         };
       }
@@ -211,6 +301,7 @@ export async function adminCreateUser(formData: FormData) {
     metadata: {
       email,
       fullName,
+      username,
       role,
       isActive,
       defaultTreeRootId,
@@ -226,6 +317,7 @@ export async function adminUpdateUser(formData: FormData) {
   const userId = formData.get("user_id")?.toString()?.trim();
   const email = formData.get("email")?.toString()?.trim().toLowerCase();
   const fullName = formData.get("full_name")?.toString()?.trim() || "";
+  const username = normalizeUsername(formData.get("username"));
   const role = normalizeRole(formData.get("role")?.toString());
   const isActive = formData.get("is_active")?.toString() === "true";
   const defaultTreeRootId = normalizeOptionalUuid(
@@ -236,6 +328,12 @@ export async function adminUpdateUser(formData: FormData) {
   if (!userId) return { error: "Thiếu ID người dùng." };
   if (!email) return { error: "Email là bắt buộc." };
   if (!role) return { error: "Vai trò không hợp lệ." };
+
+  const usernameError = validateUsername(username);
+  if (usernameError) return { error: usernameError };
+
+  const usernameTaken = await ensureUsernameAvailable(username, userId);
+  if (usernameTaken) return { error: usernameTaken };
 
   const admin = getSupabaseAdmin();
   const supabase = await getSupabase();
@@ -290,7 +388,7 @@ export async function adminUpdateUser(formData: FormData) {
 
   const { error: profileError } = await admin
     .from("profiles")
-    .update({ person_id: linkedPersonId })
+    .update({ person_id: linkedPersonId, username })
     .eq("id", userId);
 
   if (profileError) {
@@ -307,6 +405,7 @@ export async function adminUpdateUser(formData: FormData) {
     metadata: {
       email,
       fullName,
+      username,
       role,
       isActive,
       defaultTreeRootId,

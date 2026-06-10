@@ -10,6 +10,7 @@ export interface Profile {
   role: UserRole;
   is_active: boolean;
   person_id?: string | null;
+  username?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +25,7 @@ export interface AdminUserData {
   created_at: string;
   default_tree_root_id?: string | null;
   person_id?: string | null;
+  username?: string | null;
 }
 
 export interface Person {

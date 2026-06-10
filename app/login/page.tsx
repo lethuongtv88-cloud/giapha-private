@@ -1,5 +1,6 @@
 "use client";
 
+import { resolveLoginIdentifier } from "@/app/actions/user";
 import config from "@/app/config";
 import Footer from "@/components/Footer";
 import { createClient } from "@/utils/supabase/client";
@@ -49,8 +50,16 @@ export default function LoginPage() {
 
     try {
       if (isLogin) {
+        const resolved = await resolveLoginIdentifier(email);
+
+        if (resolved.error || !resolved.email) {
+          setError(resolved.error || "Email hoặc tên đăng nhập không đúng.");
+          setLoading(false);
+          return;
+        }
+
         const { error } = await supabase.auth.signInWithPassword({
-          email,
+          email: resolved.email,
           password,
         });
 
@@ -61,6 +70,12 @@ export default function LoginPage() {
           router.refresh();
         }
       } else {
+        if (!email.includes("@")) {
+          setError("Đăng ký tài khoản mới phải dùng email. Tên đăng nhập sẽ do admin đặt sau.");
+          setLoading(false);
+          return;
+        }
+
         if (password !== confirmPassword) {
           setError("Mật khẩu xác nhận không khớp.");
           setLoading(false);
@@ -177,18 +192,18 @@ export default function LoginPage() {
                   htmlFor="email-address"
                   className="block text-[13px] font-semibold text-stone-600 mb-1.5 ml-1"
                 >
-                  Email
+                  {isLogin ? "Email hoặc tên đăng nhập" : "Email"}
                 </label>
                 <div className="relative flex items-center group">
                   <Mail className="absolute left-3.5 size-5 text-stone-400 group-focus-within:text-amber-500 transition-colors" />
                   <input
                     id="email-address"
                     name="email"
-                    type="email"
-                    autoComplete="email"
+                    type={isLogin ? "text" : "email"}
+                    autoComplete={isLogin ? "username" : "email"}
                     required
                     className="bg-white/50 text-stone-900 placeholder-stone-400 block w-full rounded-xl border border-stone-200/80 shadow-[0_2px_10px_-3px_rgba(0,0,0,0.05)] focus:border-amber-400 focus:ring-amber-400 focus:bg-white pl-11 pr-4 py-3.5 transition-all duration-200 outline-none"
-                    placeholder="name@example.com"
+                    placeholder={isLogin ? "admin@thuongle.net hoặc thuongle" : "name@example.com"}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />

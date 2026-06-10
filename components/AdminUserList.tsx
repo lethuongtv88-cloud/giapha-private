@@ -35,6 +35,10 @@ function getPersonName(persons: Person[], personId?: string | null) {
   return persons.find((person) => person.id === personId)?.full_name ?? "Không tìm thấy";
 }
 
+function getUsername(user: AdminUserData) {
+  return user.username?.trim() || "";
+}
+
 export default function AdminUserList({
   initialUsers,
   currentUserId,
@@ -258,6 +262,7 @@ export default function AdminUserList({
       formData.get("email")?.toString()?.trim().toLowerCase() ??
       editingUser.email;
     const nextName = formData.get("full_name")?.toString()?.trim() ?? "";
+    const nextUsername = formData.get("username")?.toString()?.trim().toLowerCase() || null;
     const nextRole = (formData.get("role")?.toString() ||
       editingUser.role) as UserRole;
     const nextActive = formData.get("is_active")?.toString() === "true";
@@ -267,12 +272,14 @@ export default function AdminUserList({
 
     const currentEmail = editingUser.email.trim().toLowerCase();
     const currentName = (editingUser.full_name ?? editingUser.name ?? "").trim();
+    const currentUsername = editingUser.username ?? null;
     const currentRootId = editingUser.default_tree_root_id ?? null;
     const currentPersonId = editingUser.person_id ?? null;
 
     const onlySafeDemoProfileLinkChanged =
       nextEmail === currentEmail &&
       nextName === currentName &&
+      nextUsername === currentUsername &&
       nextRole === editingUser.role &&
       nextActive === editingUser.is_active &&
       (nextRootId !== currentRootId || nextPersonId !== currentPersonId);
@@ -280,6 +287,7 @@ export default function AdminUserList({
     const hasNoChange =
       nextEmail === currentEmail &&
       nextName === currentName &&
+      nextUsername === currentUsername &&
       nextRole === editingUser.role &&
       nextActive === editingUser.is_active &&
       nextRootId === currentRootId &&
@@ -316,6 +324,7 @@ export default function AdminUserList({
                 email: nextEmail,
                 full_name: nextName,
                 name: nextName,
+                username: nextUsername,
                 role: nextRole,
                 is_active: nextActive,
                 default_tree_root_id: nextRootId,
@@ -434,6 +443,9 @@ export default function AdminUserList({
                   Email
                 </th>
                 <th className="px-6 py-4 text-stone-500 font-semibold text-xs">
+                  Tên đăng nhập
+                </th>
+                <th className="px-6 py-4 text-stone-500 font-semibold text-xs">
                   Tên
                 </th>
                 <th className="px-6 py-4 text-stone-500 font-semibold text-xs">
@@ -466,6 +478,15 @@ export default function AdminUserList({
                   >
                     <td className="px-6 py-4 font-medium text-stone-900">
                       {user.email}
+                    </td>
+                    <td className="px-6 py-4 text-stone-600">
+                      {user.username ? (
+                        <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-700">
+                          {user.username}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-stone-400">Chưa đặt</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-stone-700">
                       {displayName ? (
@@ -720,6 +741,23 @@ function UserFormModal({
 
           <div>
             <label className="block text-sm font-medium text-stone-700 mb-1">
+              Tên đăng nhập
+            </label>
+            <input
+              type="text"
+              name="username"
+              autoComplete="username"
+              pattern="[a-z0-9._]{3,32}"
+              className="w-full px-3 py-2 sm:py-2.5 bg-white text-stone-900 placeholder-stone-400 border border-stone-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+              placeholder="Ví dụ: thuongle hoặc thuong.le"
+            />
+            <p className="mt-1 text-xs text-stone-500">
+              Chỉ admin được đặt/sửa tên đăng nhập. User không thể tự đổi.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1">
               Mật khẩu <span className="text-red-500">*</span>
             </label>
             <input
@@ -836,6 +874,24 @@ function EditUserModal({
               className="w-full px-3 py-2 sm:py-2.5 bg-white text-stone-900 placeholder-stone-400 border border-stone-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
               placeholder="Ví dụ: Nguyễn Văn A"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1">
+              Tên đăng nhập
+            </label>
+            <input
+              type="text"
+              name="username"
+              defaultValue={getUsername(user)}
+              autoComplete="username"
+              pattern="[a-z0-9._]{3,32}"
+              className="w-full px-3 py-2 sm:py-2.5 bg-white text-stone-900 placeholder-stone-400 border border-stone-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+              placeholder="Ví dụ: thuongle hoặc thuong.le"
+            />
+            <p className="mt-1 text-xs text-stone-500">
+              Để trống nếu chỉ muốn cho đăng nhập bằng email. User không thể tự đổi mục này.
+            </p>
           </div>
 
           <RoleStatusFields defaultRole={user.role} defaultActive={user.is_active} />

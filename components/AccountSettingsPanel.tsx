@@ -55,6 +55,7 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [linkedPersonId, setLinkedPersonId] = useState<string | null>(null);
   const [linkedPersonLoaded, setLinkedPersonLoaded] = useState(false);
+  const [username, setUsername] = useState<string | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -94,6 +95,7 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
 
       if (!user?.id) {
         setLinkedPersonId(null);
+        setUsername(null);
         setLinkedPersonLoaded(true);
         return;
       }
@@ -101,7 +103,7 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
       const supabase = createClient();
       const { data, error } = await supabase
         .from("profiles")
-        .select("person_id")
+        .select("person_id, username")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -110,8 +112,10 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
       if (error) {
         console.error("Không tải được người gắn với tài khoản:", error);
         setLinkedPersonId(null);
+        setUsername(null);
       } else {
         setLinkedPersonId(data?.person_id ?? null);
+        setUsername(data?.username ?? null);
       }
 
       setLinkedPersonLoaded(true);
@@ -257,6 +261,22 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
         </p>
         <p className="mt-1 text-xs text-sky-700/80">
           Chỉ quản trị viên được thay đổi mục này vì đây là khóa phân quyền dữ liệu.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-stone-200 bg-white p-4 text-sm text-stone-700">
+        <p className="font-semibold text-stone-900">Tên đăng nhập</p>
+        <p className="mt-1">
+          {username ? (
+            <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-700">
+              {username}
+            </span>
+          ) : (
+            <span className="text-stone-500">Chưa được admin đặt tên đăng nhập.</span>
+          )}
+        </p>
+        <p className="mt-2 text-xs leading-relaxed text-stone-500">
+          Bạn có thể đăng nhập bằng email hoặc tên đăng nhập này. Chỉ quản trị viên được đặt hoặc thay đổi tên đăng nhập.
         </p>
       </div>
 
