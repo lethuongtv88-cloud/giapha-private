@@ -6,6 +6,7 @@ import PersonSelector from "@/components/PersonSelector";
 import { useMemberListView } from "@/context/MemberListContext";
 import type { Person } from "@/types";
 import { getZodiacSign } from "@/utils/dateHelpers";
+import { buildEventMessage } from "@/utils/events/eventMessages";
 import {
   computeEvents,
   CustomEventRecord,
@@ -77,7 +78,7 @@ type PersonEventLink = {
 };
 
 type ExtendedFamilyEvent = Omit<FamilyEvent, "type"> & {
-  type: FamilyEvent["type"] | "marriage_upcoming" | "marriage_anniversary";
+  type: FamilyEvent["type"] | "marriage_upcoming" | "marriage_anniversary" | "death_recent";
   eventModelId?: string;
   eventModelRootPersonId?: string | null;
   eventModelType?: "custom" | "marriage";
@@ -93,7 +94,7 @@ const DAY_LABELS: Record<string, string> = {
 const FILTER_TABS = [
   { key: "all", label: "Tất cả" },
   { key: "birthday", label: "Sinh nhật" },
-  { key: "death_anniversary", label: "Ngày giỗ" },
+  { key: "death_anniversary", label: "Ngày giỗ / chia buồn" },
   { key: "marriage", label: "Cưới / kỷ niệm cưới" },
   { key: "custom_event", label: "Tuỳ chỉnh" },
   { key: "past", label: "Đã qua" },
@@ -236,7 +237,7 @@ function buildEventModelEvents(input: {
 
   for (const event of input.events) {
     if (event.deleted_at) continue;
-    if (event.type !== "custom" && event.type !== "marriage") continue;
+    if (event.type !== "custom" && event.type !== "marriage" && event.type !== "death") continue;
 
     const eventDate = parseIsoLocalDate(event.start_date || event.sort_date);
     if (!eventDate) continue;
@@ -253,6 +254,35 @@ function buildEventModelEvents(input: {
     const originMonth = eventDate.getMonth() + 1;
     const originDay = eventDate.getDate();
     const lunarDateLabel = formatLunarEventLabel(event);
+
+
+    if (event.type === "death") {
+      const daysUntil = differenceInDays(today, eventDate);
+      if (daysUntil < -5 || daysUntil > 0) continue;
+
+      const principalName = names[0] || event.title || "người thân";
+
+      out.push({
+        type: "death_recent",
+        personId: fallbackPersonId ?? rootPersonId ?? undefined,
+        personName: event.title || principalName,
+        nextOccurrence: eventDate,
+        daysUntil,
+        originYear,
+        originMonth,
+        originDay,
+        eventDateLabel: `${String(originDay).padStart(2, "0")}/${String(originMonth).padStart(2, "0")}/${originYear}`,
+        lunarDateLabel,
+        location: event.place_text ?? undefined,
+        content: event.description ?? undefined,
+        isDeceased: true,
+        eventModelId: event.id,
+        eventModelRootPersonId: rootPersonId ?? fallbackPersonId ?? null,
+        eventModelType: "custom",
+      } as ExtendedFamilyEvent);
+
+      continue;
+    }
 
     if (event.type === "marriage") {
       const isFutureOrToday = eventDate.getTime() >= today.getTime();
@@ -315,6 +345,10 @@ function isMarriageEventType(type: string) {
   return type === "marriage_upcoming" || type === "marriage_anniversary";
 }
 
+function isMemorialEventType(type: string) {
+  return type === "death_anniversary" || type === "death_recent" || type === "death";
+}
+
 function EventCard({
   event,
   index,
@@ -331,6 +365,15 @@ function EventCard({
   const isBirthday = event.type === "birthday";
   const isCustom = event.type === "custom_event";
   const isMarriage = isMarriageEventType(String(event.type));
+  const isMemorial = isMemorialEventType(String(event.type));
+  const eventMessage = buildEventMessage({
+    type: String(event.type),
+    personName: event.personName,
+    daysUntil: event.daysUntil,
+    eventDateLabel: event.eventDateLabel,
+    location: event.location,
+    content: event.content,
+  });
   const isToday = event.daysUntil === 0;
   const isPast = event.daysUntil < 0;
   const isSoon = event.daysUntil > 0 && event.daysUntil <= 7;
@@ -427,6 +470,8 @@ function EventCard({
           <Cake className="size-[18px] sm:size-5" />
         ) : isCustom ? (
           <Star className="size-[18px] sm:size-5" />
+        ) : isMarriage ? (
+          <CalendarDays className="size-[18px] sm:size-5" />
         ) : (
           <Flower className="size-[18px] sm:size-5" />
         )}
@@ -450,9 +495,9 @@ function EventCard({
                 {getZodiacSign(event.originDay, event.originMonth)}
               </span>
             )}
-          {isMarriage && (
+          {(isMarriage || isMemorial || isBirthday || isCustom) && (
             <span className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
-              {event.type === "marriage_upcoming" ? "Đám cưới" : "Kỷ niệm cưới"}
+              {eventMessage.label}
             </span>
           )}
           <span
@@ -481,6 +526,11 @@ function EventCard({
             <CalendarDays className="size-3.5 shrink-0" />
             <span className="font-medium text-stone-600">{dateLabel}</span>
             {yearsInfo && <span className="text-stone-400">· {yearsInfo}</span>}
+          </p>
+
+          <p className="mt-1 rounded-xl border border-stone-100 bg-white/70 px-3 py-2 text-[13px] leading-5 text-stone-600">
+            <span className="mr-1">{eventMessage.emoji}</span>
+            {eventMessage.message}
           </p>
 
           {event.location && (
@@ -874,6 +924,8 @@ export default function EventsList({
     }
     if (filter === "marriage") {
       result = result.filter((e) => isMarriageEventType(String(e.type)));
+    } else if (filter === "death_anniversary") {
+      result = result.filter((e) => isMemorialEventType(String(e.type)));
     } else if (filter !== "all") {
       result = result.filter((e) => e.type === filter);
     }
