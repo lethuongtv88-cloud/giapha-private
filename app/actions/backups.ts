@@ -38,6 +38,26 @@ function getEnv(name: string) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function getBunBinary() {
+  const configured = getEnv("BUN_BIN");
+  if (configured) return configured;
+
+  const candidates = [
+    process.execPath && process.execPath.includes("bun") ? process.execPath : "",
+    process.env.BUN_INSTALL ? join(process.env.BUN_INSTALL, "bin", "bun") : "",
+    "/home/thuongle/.bun/bin/bun",
+    "/root/.bun/bin/bun",
+    "/usr/local/bin/bun",
+    "/usr/bin/bun",
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+
+  return "bun";
+}
+
 function getBackupDirSync() {
   return resolve(getEnv("BACKUP_DIR") || DEFAULT_BACKUP_DIR);
 }
@@ -210,7 +230,7 @@ export async function runDatabaseBackupAction() {
 
   try {
     await requireBackupAdmin();
-    const result = await runCommand("bun", ["run", "backup:db"]);
+    const result = await runCommand(getBunBinary(), ["run", "backup:db"]);
 
     await recordAuditLog({
       action: "backup.created",
@@ -283,7 +303,7 @@ export async function cleanupBackupsAction() {
 
   try {
     await requireBackupAdmin();
-    await runCommand("bun", ["run", "backup:cleanup"]);
+    await runCommand(getBunBinary(), ["run", "backup:cleanup"]);
 
     await recordAuditLog({
       action: "backup.cleanup",
