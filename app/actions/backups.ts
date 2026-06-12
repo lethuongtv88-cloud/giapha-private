@@ -38,9 +38,14 @@ function getEnv(name: string) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-export function getBackupDir() {
+function getBackupDirSync() {
   return resolve(getEnv("BACKUP_DIR") || DEFAULT_BACKUP_DIR);
 }
+
+export async function getBackupDir() {
+  return getBackupDirSync();
+}
+
 
 function getBackupConfigPath() {
   return resolve(getEnv("BACKUP_CONFIG_PATH") || DEFAULT_BACKUP_CONFIG_PATH);
@@ -51,7 +56,7 @@ function getBackupPrefix() {
 }
 
 function ensureBackupDir() {
-  const dir = getBackupDir();
+  const dir = getBackupDirSync();
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -105,7 +110,7 @@ export async function getBackupConfig() {
   return {
     keepLast: configKeepLast ?? envKeepLast ?? DEFAULT_KEEP_LAST,
     keepLastSource: configKeepLast ? "config" : envKeepLast ? "env" : "default",
-    backupDir: getBackupDir(),
+    backupDir: getBackupDirSync(),
     configPath: getBackupConfigPath(),
     prefix: getBackupPrefix(),
     hasDatabaseUrl: Boolean(
@@ -215,7 +220,7 @@ export async function runDatabaseBackupAction() {
       metadata: {
         stdout: result.stdout.slice(-4000),
         stderr: result.stderr.slice(-4000),
-        backupDir: getBackupDir(),
+        backupDir: getBackupDirSync(),
       },
     });
 
