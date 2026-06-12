@@ -12,7 +12,10 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "audit:migrations": "tsx scripts/audit-migrations-v240.ts",
-    "release:check": "tsx scripts/release-check-v240.ts"
+    "release:check": "tsx scripts/release-check-v240.ts",
+    "backup:db": "tsx scripts/backup-database.ts run",
+    "backup:list": "tsx scripts/backup-database.ts list",
+    "backup:cleanup": "tsx scripts/backup-database.ts cleanup"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
