@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Lunar, Solar } from "lunar-javascript";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface MemberFormProps {
   initialData?: Person;
@@ -28,6 +28,19 @@ interface MemberFormProps {
   /** Called when user clicks Cancel. Overrides default router.back(). */
   onCancel?: () => void;
 }
+
+type DeathAnniversaryMode = "same_day" | "next_day" | "custom";
+
+type DeathAnniversaryDraft = {
+  startDate: string;
+  dateOriginalText: string;
+  canonicalCalendar: "gregorian" | "lunar";
+  lunarYear: number | null;
+  lunarMonth: number | null;
+  lunarDay: number | null;
+  lunarIsLeapMonth: boolean;
+  description: string | null;
+};
 
 export default function MemberForm({
   initialData,
@@ -75,6 +88,17 @@ export default function MemberForm({
     initialData?.death_lunar_day || "",
   );
 
+  const [deathAnniversaryMode] = useState<DeathAnniversaryMode>("custom");
+  const [deathAnniversaryLunarYear, setDeathAnniversaryLunarYear] = useState<
+    number | ""
+  >(initialData?.death_lunar_year || "");
+  const [deathAnniversaryLunarMonth, setDeathAnniversaryLunarMonth] = useState<
+    number | ""
+  >(initialData?.death_lunar_month || "");
+  const [deathAnniversaryLunarDay, setDeathAnniversaryLunarDay] = useState<
+    number | ""
+  >(initialData?.death_lunar_day || "");
+
   const [isDeceased, setIsDeceased] = useState<boolean>(
     initialData?.is_deceased || false,
   );
@@ -101,12 +125,61 @@ export default function MemberForm({
   const [phoneNumber, setPhoneNumber] = useState(
     initialData?.phone_number ?? "",
   );
-  const [occupation, setOccupation] = useState(
-    initialData?.occupation ?? "",
-  );
+  const [occupation, setOccupation] = useState(initialData?.occupation ?? "");
   const [currentResidence, setCurrentResidence] = useState(
     initialData?.current_residence ?? "",
   );
+
+  useEffect(() => {
+    if (!initialData?.id) return;
+
+    let cancelled = false;
+
+    const loadDeathAnniversary = async () => {
+      const { data: links, error: linksError } = await supabase
+        .from("person_events")
+        .select("event_id")
+        .eq("person_id", initialData.id);
+
+      if (linksError || cancelled) {
+        if (linksError) console.error("Error loading person_events:", linksError);
+        return;
+      }
+
+      const eventIds = Array.from(
+        new Set((links ?? []).map((row) => row.event_id).filter(Boolean)),
+      );
+      if (eventIds.length === 0) return;
+
+      const { data: events, error: eventsError } = await supabase
+        .from("events")
+        .select("id,lunar_year,lunar_month,lunar_day,deleted_at")
+        .in("id", eventIds)
+        .eq("type", "death_anniversary")
+        .is("deleted_at", null)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+
+      if (cancelled) return;
+      if (eventsError) {
+        console.error("Error loading death anniversary:", eventsError);
+        return;
+      }
+
+      const event = events?.[0];
+      if (!event) return;
+      setDeathAnniversaryLunarDay(event.lunar_day ?? "");
+      setDeathAnniversaryLunarMonth(event.lunar_month ?? "");
+      setDeathAnniversaryLunarYear(event.lunar_year ?? "");
+    };
+
+    void loadDeathAnniversary();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialData?.id]);
 
   const slugify = (str: string) => {
     return str
@@ -144,9 +217,20 @@ export default function MemberForm({
       try {
         const solar = Solar.fromYmd(y, m, d);
         const lunar = solar.getLunar();
-        setDeathLunarDay(lunar.getDay());
-        setDeathLunarMonth(Math.abs(lunar.getMonth()));
-        setDeathLunarYear(lunar.getYear());
+        const nextLunarDay = lunar.getDay();
+        const nextLunarMonth = Math.abs(lunar.getMonth());
+        const nextLunarYear = lunar.getYear();
+        setDeathLunarDay(nextLunarDay);
+        setDeathLunarMonth(nextLunarMonth);
+        setDeathLunarYear(nextLunarYear);
+        syncDeathAnniversaryFromDeathDate(deathAnniversaryMode, {
+          deathSolarDay: d,
+          deathSolarMonth: m,
+          deathSolarYear: y,
+          deathLunarDay: nextLunarDay,
+          deathLunarMonth: nextLunarMonth,
+          deathLunarYear: nextLunarYear,
+        });
       } catch {
         // Ignore invalid dates
       }
@@ -173,16 +257,270 @@ export default function MemberForm({
       setDeathLunarYear(num);
     }
 
+    if (deathAnniversaryMode === "same_day") {
+      setDeathAnniversaryLunarDay(d);
+      setDeathAnniversaryLunarMonth(m);
+      setDeathAnniversaryLunarYear(y);
+    }
+
     if (d !== "" && m !== "" && y !== "" && y > 100) {
       try {
         const lunar = Lunar.fromYmd(y, m, d);
         const solar = lunar.getSolar();
-        setDeathDay(solar.getDay());
-        setDeathMonth(solar.getMonth());
-        setDeathYear(solar.getYear());
+        const nextSolarDay = solar.getDay();
+        const nextSolarMonth = solar.getMonth();
+        const nextSolarYear = solar.getYear();
+        setDeathDay(nextSolarDay);
+        setDeathMonth(nextSolarMonth);
+        setDeathYear(nextSolarYear);
+        syncDeathAnniversaryFromDeathDate(deathAnniversaryMode, {
+          deathSolarDay: nextSolarDay,
+          deathSolarMonth: nextSolarMonth,
+          deathSolarYear: nextSolarYear,
+          deathLunarDay: d,
+          deathLunarMonth: m,
+          deathLunarYear: y,
+        });
       } catch {
         // Ignore invalid dates
       }
+    }
+  };
+
+  const syncDeathAnniversaryFromDeathDate = (
+    nextMode: DeathAnniversaryMode = deathAnniversaryMode,
+    input?: {
+      deathSolarDay?: number | "";
+      deathSolarMonth?: number | "";
+      deathSolarYear?: number | "";
+      deathLunarDay?: number | "";
+      deathLunarMonth?: number | "";
+      deathLunarYear?: number | "";
+    },
+  ) => {
+    if (nextMode === "custom") return;
+
+    const sourceSolarDay = input?.deathSolarDay ?? deathDay;
+    const sourceSolarMonth = input?.deathSolarMonth ?? deathMonth;
+    const sourceSolarYear = input?.deathSolarYear ?? deathYear;
+    const sourceLunarDay = input?.deathLunarDay ?? deathLunarDay;
+    const sourceLunarMonth = input?.deathLunarMonth ?? deathLunarMonth;
+    const sourceLunarYear = input?.deathLunarYear ?? deathLunarYear;
+
+    if (nextMode === "same_day") {
+      setDeathAnniversaryLunarDay(sourceLunarDay);
+      setDeathAnniversaryLunarMonth(sourceLunarMonth);
+      setDeathAnniversaryLunarYear(sourceLunarYear);
+      return;
+    }
+
+    try {
+      let baseDate: Date | null = null;
+
+      if (
+        sourceSolarDay !== "" &&
+        sourceSolarMonth !== "" &&
+        sourceSolarYear !== ""
+      ) {
+        baseDate = new Date(
+          sourceSolarYear,
+          sourceSolarMonth - 1,
+          sourceSolarDay,
+        );
+      } else if (
+        sourceLunarDay !== "" &&
+        sourceLunarMonth !== "" &&
+        sourceLunarYear !== ""
+      ) {
+        const lunar = Lunar.fromYmd(
+          sourceLunarYear,
+          sourceLunarMonth,
+          sourceLunarDay,
+        );
+        const solar = lunar.getSolar();
+        baseDate = new Date(
+          solar.getYear(),
+          solar.getMonth() - 1,
+          solar.getDay(),
+        );
+      }
+
+      if (!baseDate) {
+        setDeathAnniversaryLunarDay(sourceLunarDay);
+        setDeathAnniversaryLunarMonth(sourceLunarMonth);
+        setDeathAnniversaryLunarYear(sourceLunarYear);
+        return;
+      }
+
+      baseDate.setDate(baseDate.getDate() + 1);
+      const nextSolar = Solar.fromYmd(
+        baseDate.getFullYear(),
+        baseDate.getMonth() + 1,
+        baseDate.getDate(),
+      );
+      const nextLunar = nextSolar.getLunar();
+      setDeathAnniversaryLunarDay(nextLunar.getDay());
+      setDeathAnniversaryLunarMonth(Math.abs(nextLunar.getMonth()));
+      setDeathAnniversaryLunarYear(nextLunar.getYear());
+    } catch {
+      setDeathAnniversaryLunarDay(sourceLunarDay);
+      setDeathAnniversaryLunarMonth(sourceLunarMonth);
+      setDeathAnniversaryLunarYear(sourceLunarYear);
+    }
+  };
+
+  const toIsoDate = (year: number, month: number, day: number) =>
+    `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+  const buildDeathAnniversaryDraft = (input: {
+    finalDeathDay: number | "";
+    finalDeathMonth: number | "";
+    finalDeathYear: number | "";
+    finalDeathLunarDay: number | "";
+    finalDeathLunarMonth: number | "";
+    finalDeathLunarYear: number | "";
+  }): DeathAnniversaryDraft | null => {
+    if (!isDeceased) return null;
+
+    const lunarDay = deathAnniversaryLunarDay;
+    const lunarMonth = deathAnniversaryLunarMonth;
+    const lunarYear = deathAnniversaryLunarYear;
+
+    let startDate: string | null = null;
+    const description = "Ngày giỗ";
+
+    if (lunarDay !== "" && lunarMonth !== "" && lunarYear !== "") {
+      if (lunarDay < 1 || lunarDay > 30 || lunarMonth < 1 || lunarMonth > 12) {
+        setError("Ngày giỗ âm lịch không hợp lệ. Vui lòng kiểm tra lại.");
+        return null;
+      }
+
+      if (!startDate) {
+        try {
+          const lunar = Lunar.fromYmd(lunarYear, lunarMonth, lunarDay);
+          const solar = lunar.getSolar();
+          startDate = toIsoDate(
+            solar.getYear(),
+            solar.getMonth(),
+            solar.getDay(),
+          );
+        } catch {
+          setError("Ngày giỗ âm lịch không hợp lệ. Vui lòng kiểm tra lại.");
+          return null;
+        }
+      }
+
+      return {
+        startDate,
+        dateOriginalText: `${String(lunarDay).padStart(2, "0")}/${String(lunarMonth).padStart(2, "0")}${Number.isFinite(lunarYear) && lunarYear > 0 ? `/${lunarYear}` : ""} ÂL`,
+        canonicalCalendar: "lunar",
+        lunarYear: Number(lunarYear),
+        lunarMonth: Number(lunarMonth),
+        lunarDay: Number(lunarDay),
+        lunarIsLeapMonth: false,
+        description,
+      };
+    }
+
+    const hasAnyDeathAnniversaryDate =
+      lunarDay !== "" || lunarMonth !== "" || lunarYear !== "";
+
+    if (hasAnyDeathAnniversaryDate) {
+      setError("Ngày giỗ âm lịch cần nhập đủ ngày, tháng, năm.");
+      return null;
+    }
+
+    return null;
+  };
+
+  const syncDeathAnniversaryEvent = async (
+    personId: string,
+    draft: DeathAnniversaryDraft | null,
+  ) => {
+    const { data: links, error: linksError } = await supabase
+      .from("person_events")
+      .select("event_id")
+      .eq("person_id", personId);
+
+    if (linksError) throw linksError;
+
+    const eventIds = Array.from(
+      new Set((links ?? []).map((row) => row.event_id).filter(Boolean)),
+    );
+
+    const existingEvents = eventIds.length
+      ? await supabase
+          .from("events")
+          .select("id")
+          .in("id", eventIds)
+          .eq("type", "death_anniversary")
+          .is("deleted_at", null)
+      : { data: [], error: null };
+
+    if (existingEvents.error) throw existingEvents.error;
+
+    const existingIds = (existingEvents.data ?? []).map((event) => event.id);
+
+    if (!draft) {
+      if (existingIds.length > 0) {
+        const { error: deleteError } = await supabase
+          .from("events")
+          .update({ deleted_at: new Date().toISOString() })
+          .in("id", existingIds);
+        if (deleteError) throw deleteError;
+      }
+      return;
+    }
+
+    const payload = {
+      type: "death_anniversary",
+      title: "Ngày giỗ",
+      start_date: draft.startDate,
+      end_date: null,
+      sort_date: draft.startDate,
+      date_precision: "day",
+      date_modifier: "exact",
+      canonical_calendar: draft.canonicalCalendar,
+      date_original_text: draft.dateOriginalText,
+      lunar_year: draft.lunarYear,
+      lunar_month: draft.lunarMonth,
+      lunar_day: draft.lunarDay,
+      lunar_is_leap_month: draft.lunarIsLeapMonth,
+      description: draft.description ?? "Ngày giỗ",
+      legacy_person_id: personId,
+      legacy_source: "manual.member_form.death_anniversary",
+      migration_confidence: "manual",
+    };
+
+    if (existingIds[0]) {
+      const { error: updateEventError } = await supabase
+        .from("events")
+        .update(payload)
+        .eq("id", existingIds[0]);
+      if (updateEventError) throw updateEventError;
+      return;
+    }
+
+    const { data: eventRow, error: insertEventError } = await supabase
+      .from("events")
+      .insert(payload)
+      .select("id")
+      .single();
+
+    if (insertEventError) throw insertEventError;
+
+    const { error: linkError } = await supabase.from("person_events").insert({
+      person_id: personId,
+      event_id: eventRow.id,
+      role: "deceased",
+    });
+
+    if (linkError) {
+      await supabase
+        .from("events")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", eventRow.id);
+      throw linkError;
     }
   };
 
@@ -291,6 +629,26 @@ export default function MemberForm({
       return;
     }
 
+    const deathAnniversaryDraft = buildDeathAnniversaryDraft({
+      finalDeathDay,
+      finalDeathMonth,
+      finalDeathYear,
+      finalDeathLunarDay,
+      finalDeathLunarMonth,
+      finalDeathLunarYear,
+    });
+
+    if (
+      isDeceased &&
+      (deathAnniversaryLunarDay !== "" ||
+        deathAnniversaryLunarMonth !== "" ||
+        deathAnniversaryLunarYear !== "") &&
+      !deathAnniversaryDraft
+    ) {
+      setLoading(false);
+      return;
+    }
+
     try {
       let currentAvatarUrl = avatarUrl;
 
@@ -377,6 +735,11 @@ export default function MemberForm({
         if (updateAvatarError) throw updateAvatarError;
       }
 
+      if (!currentPersonId)
+        throw new Error("Không lấy được ID thành viên sau khi lưu.");
+
+      await syncDeathAnniversaryEvent(currentPersonId, deathAnniversaryDraft);
+
       // 3. Upsert private data (only if admin and currentPersonId exists)
       if (isAdmin && currentPersonId) {
         const normalizedData = {
@@ -407,8 +770,6 @@ export default function MemberForm({
         }
       }
       // After save: use callback if provided, otherwise fall back to page navigation
-      if (!currentPersonId)
-        throw new Error("Không lấy được ID thành viên sau khi lưu.");
       if (onSuccess) {
         onSuccess(currentPersonId);
       } else {
@@ -417,7 +778,11 @@ export default function MemberForm({
       }
     } catch (err) {
       console.error("Error saving member:", err);
-      setError((err as Error).message || "Failed to save member");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Đã xảy ra lỗi khi lưu hồ sơ. Vui lòng thử lại.",
+      );
     } finally {
       setLoading(false);
     }
@@ -714,14 +1079,20 @@ export default function MemberForm({
                     type="checkbox"
                     checked={isDeceased}
                     onChange={(e) => {
-                      setIsDeceased(e.target.checked);
-                      if (!e.target.checked) {
+                      const checked = e.target.checked;
+                      setIsDeceased(checked);
+                      if (checked) {
+                        syncDeathAnniversaryFromDeathDate();
+                      } else {
                         setDeathYear("");
                         setDeathMonth("");
                         setDeathDay("");
                         setDeathLunarYear("");
                         setDeathLunarMonth("");
                         setDeathLunarDay("");
+                        setDeathAnniversaryLunarYear("");
+                        setDeathAnniversaryLunarMonth("");
+                        setDeathAnniversaryLunarDay("");
                       }
                     }}
                     className="peer sr-only"
@@ -762,8 +1133,7 @@ export default function MemberForm({
                   className="overflow-hidden"
                 >
                   <p className="text-[13px] text-stone-500 mb-4 italic">
-                    * Nhập Ngày Dương lịch hoặc Ngày Âm lịch. Hệ thống sẽ tự
-                    động tính toán và điền phần còn lại.
+                    * Ngày mất là dữ liệu lịch sử. Ngày giỗ bên dưới là sự kiện nhắc hằng năm theo âm lịch.
                   </p>
 
                   <div className="flex flex-col gap-5">
@@ -845,6 +1215,56 @@ export default function MemberForm({
                           className={inputClasses}
                         />
                       </div>
+                    </div>
+
+                    {/* Death Anniversary */}
+                    <div className="rounded-2xl border border-amber-200/70 bg-amber-50/60 p-4">
+                      <label className="block text-sm font-semibold text-amber-900 mb-2">
+                        Ngày giỗ
+                      </label>
+                      <div className="grid grid-cols-3 gap-3">
+                        <input
+                          type="number"
+                          placeholder="dd"
+                          min="1"
+                          max="30"
+                          value={deathAnniversaryLunarDay}
+                          onChange={(e) =>
+                            setDeathAnniversaryLunarDay(
+                              e.target.value ? Number(e.target.value) : "",
+                            )
+                          }
+                          className={inputClasses}
+                        />
+                        <input
+                          type="number"
+                          placeholder="mm"
+                          min="1"
+                          max="12"
+                          value={deathAnniversaryLunarMonth}
+                          onChange={(e) =>
+                            setDeathAnniversaryLunarMonth(
+                              e.target.value ? Number(e.target.value) : "",
+                            )
+                          }
+                          className={inputClasses}
+                        />
+                        <input
+                          type="number"
+                          placeholder="yyyy"
+                          min="1"
+                          value={deathAnniversaryLunarYear}
+                          onChange={(e) =>
+                            setDeathAnniversaryLunarYear(
+                              e.target.value ? Number(e.target.value) : "",
+                            )
+                          }
+                          className={inputClasses}
+                        />
+                      </div>
+                      <p className="mt-2 text-xs text-amber-800/70">
+                        Nhập ngày giỗ âm lịch dạng dd / mm / yyyy. Hệ thống lưu thành event riêng type = death_anniversary và dùng để nhắc hằng năm.
+                      </p>
                     </div>
                   </div>
                 </motion.div>

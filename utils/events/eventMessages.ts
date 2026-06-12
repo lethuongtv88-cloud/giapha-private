@@ -27,6 +27,12 @@ function isToday(daysUntil?: number | null) {
   return daysUntil === 0;
 }
 
+
+export function shouldNotifyEventType(type: string) {
+  // Ngày mất là dữ liệu lịch sử. Nhắc hằng năm phải dùng death_anniversary.
+  return type !== "death" && type !== "death_recent";
+}
+
 function daysLabel(daysUntil?: number | null) {
   if (daysUntil == null) return "";
   if (daysUntil === 0) return "hôm nay";
@@ -58,14 +64,11 @@ export function buildEventMessage(input: EventMessageInput): EventMessage {
     case "death":
       return {
         emoji: "🕯️",
-        label: "Chia buồn",
-        title: isToday(input.daysUntil)
-          ? `Tin buồn: ${name} vừa mất hôm nay`
-          : `Tưởng nhớ ${name}`,
-        message: isToday(input.daysUntil)
-          ? `Gia đình xin thành kính chia buồn. Nguyện cầu hương linh ${name} an nghỉ.`
-          : `${name} mất ${when}. Gia đình cùng tưởng nhớ và chia sẻ mất mát này.`,
-        tone: "condolence",
+        label: "Ngày mất",
+        title: `Ngày mất của ${name}`,
+        message:
+          "Ngày mất chỉ là dữ liệu lịch sử trong hồ sơ. Hệ thống không dùng ngày mất để nhắc sự kiện; ngày nhắc hằng năm phải là Ngày giỗ.",
+        tone: "memorial",
       };
 
     case "death_anniversary":

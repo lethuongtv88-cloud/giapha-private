@@ -311,7 +311,9 @@ export default async function EventsPage() {
   const canCreateEvent = profile?.role === "admin" || profile?.role === "editor";
   const selectorPersons = toPersonSelectorRows(persons);
   const eventsForList = filterEventsForEventList({
-    events: eventFilter.events,
+    // Ngày mất là dữ liệu lịch sử trong timeline hồ sơ người.
+    // Trang Events chỉ dùng các sự kiện cần nhắc; ngày giỗ dùng death_anniversary.
+    events: eventFilter.events.filter((event) => event.type !== "death"),
     personEvents: eventFilter.personEvents,
     familyChildren: allFamilyChildren,
     isRestricted: permission.isRestricted,
