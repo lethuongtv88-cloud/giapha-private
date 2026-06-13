@@ -117,7 +117,7 @@ export async function buildGraphFromFamilies(): Promise<UnifiedGraph> {
     .select(
       "family_id, person_id, relationship_type, migration_confidence, legacy_relationship_id, sort_order",
     )
-    .eq("migration_confidence", "certain");
+    .in("migration_confidence", ["certain", "review", "manual"]);
 
   if (childrenError) throw childrenError;
 
