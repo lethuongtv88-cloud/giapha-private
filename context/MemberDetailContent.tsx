@@ -3,6 +3,10 @@
 import DefaultAvatar from "@/components/DefaultAvatar";
 import RelationshipManager from "@/components/RelationshipManager";
 import PersonEventsPanel from "@/components/PersonEventsPanel";
+import PlaceMapLinks, {
+  type PlaceForMapLinks,
+} from "@/components/places/PlaceMapLinks";
+import { createClient } from "@/utils/supabase/client";
 import PersonSourcesPanel from "@/components/PersonSourcesPanel";
 import { Person } from "@/types";
 import {
@@ -27,7 +31,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FemaleIcon, MaleIcon } from "@/components/GenderIcons";
 
 interface MemberDetailContentProps {
@@ -73,6 +77,47 @@ export default function MemberDetailContent({
 
   const fullPerson = { ...person, ...privateData };
   const note = (fullPerson.note as string) || "";
+  const [currentPlace, setCurrentPlace] = useState<PlaceForMapLinks | null>(
+    null,
+  );
+
+  useEffect(() => {
+    const currentPlaceId = fullPerson.current_place_id as string | null | undefined;
+
+    if (!currentPlaceId || !isAdmin) {
+      setCurrentPlace(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadCurrentPlace = async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("places")
+        .select(
+          "id, name, province, commune, address_detail, old_province, old_district, old_commune, latitude, longitude, google_maps_url, note",
+        )
+        .eq("id", currentPlaceId)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error || !data) {
+        setCurrentPlace(null);
+        return;
+      }
+
+      setCurrentPlace(data as PlaceForMapLinks);
+    };
+
+    void loadCurrentPlace();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fullPerson.current_place_id, isAdmin]);
   const isNoteLong = note.length > 300;
 
   const isDeceased =
@@ -640,12 +685,18 @@ export default function MemberDetailContent({
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] font-bold text-stone-500 uppercase tracking-wider flex items-center gap-1.5 mb-1">
-                        <MapPin className="w-3.5 h-3.5" /> Nơi ở hiện tại
+                      <dt className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                        <MapPin className="h-3.5 w-3.5" /> Nơi ở hiện tại
                       </dt>
-                      <dd className="text-stone-900 font-medium bg-white px-3 py-2 rounded-lg border border-stone-200/60 shadow-xs">
-                        {(fullPerson.current_residence as string) || (
-                          <span className="text-stone-400 font-normal">
+                      <dd className="rounded-lg border border-stone-200/60 bg-white px-3 py-2 text-stone-900 shadow-xs">
+                        {currentPlace ? (
+                          <PlaceMapLinks place={currentPlace} compact={false} />
+                        ) : (fullPerson.current_residence as string) ? (
+                          <span className="font-medium">
+                            {fullPerson.current_residence as string}
+                          </span>
+                        ) : (
+                          <span className="font-normal text-stone-400">
                             Chưa cập nhật
                           </span>
                         )}

@@ -51,6 +51,7 @@ interface PersonDetailsPrivateExport {
   phone_number: string | null;
   occupation: string | null;
   current_residence: string | null;
+  current_place_id?: string | null;
 }
 
 interface CustomEventExport {
@@ -173,7 +174,7 @@ export async function exportData(
 
   const { data: allPrivateDetails, error: privateDetailsError } = await supabase
     .from("person_details_private")
-    .select("person_id, phone_number, occupation, current_residence");
+    .select("person_id, phone_number, occupation, current_residence, current_place_id");
 
   if (privateDetailsError)
     return {

@@ -1,6 +1,7 @@
 "use client";
 
 import { Gender, Person } from "@/types";
+import PlaceSelector from "@/components/places/PlaceSelector";
 import { createClient } from "@/utils/supabase/client";
 import { AnimatePresence, motion, Variants } from "framer-motion";
 import {
@@ -129,7 +130,9 @@ export default function MemberForm({
   const [currentResidence, setCurrentResidence] = useState(
     initialData?.current_residence ?? "",
   );
-
+    const [currentPlaceId, setCurrentPlaceId] = useState<string | null>(
+    initialData?.current_place_id ?? null,
+  );
   useEffect(() => {
     if (!initialData?.id) return;
 
@@ -747,12 +750,14 @@ export default function MemberForm({
           phone_number: phoneNumber?.trim() || null,
           occupation: occupation?.trim() || null,
           current_residence: currentResidence?.trim() || null,
+          current_place_id: currentPlaceId || null,
         };
 
         const hasData =
           normalizedData.phone_number ||
           normalizedData.occupation ||
-          normalizedData.current_residence;
+          normalizedData.current_residence ||
+          normalizedData.current_place_id;
 
         if (hasData) {
           const { error } = await supabase
@@ -1343,16 +1348,32 @@ export default function MemberForm({
             </div>
 
             <div className="md:col-span-2">
-              <label className="flex items-center gap-1.5 text-sm font-semibold text-amber-900/80 mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-amber-900/80">
                 <MapPin className="size-4" /> Nơi ở hiện tại
               </label>
-              <input
-                type="text"
-                value={currentResidence}
-                onChange={(e) => setCurrentResidence(e.target.value)}
-                placeholder="Địa chỉ cư trú..."
-                className={inputClasses}
+
+              <PlaceSelector
+                value={currentPlaceId}
+                onChange={(placeId) => setCurrentPlaceId(placeId)}
+                label="Nơi ở hiện tại chuẩn"
+                placeholder="Tìm hoặc tạo địa điểm cư trú..."
               />
+
+              <label className="mt-3 block text-sm font-semibold text-amber-900/80">
+                Địa chỉ ghi chú / fallback
+                <input
+                  type="text"
+                  value={currentResidence}
+                  onChange={(e) => setCurrentResidence(e.target.value)}
+                  placeholder="Địa chỉ cư trú tự do nếu chưa chọn địa điểm chuẩn..."
+                  className={`${inputClasses} mt-1.5`}
+                />
+              </label>
+
+              <p className="mt-2 text-xs leading-5 text-stone-500">
+                Nếu đã chọn địa điểm chuẩn, hệ thống lưu current_place_id để mở
+                Google Maps và dẫn đường. Ô địa chỉ cũ vẫn được giữ làm fallback.
+              </p>
             </div>
           </div>
         </motion.div>
