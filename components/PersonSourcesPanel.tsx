@@ -7,6 +7,7 @@ import {
   type SourceType,
 } from "@/app/actions/sources";
 import { createClient } from "@/utils/supabase/client";
+import { Plus, X } from "lucide-react";
 
 type SourceRow = {
   link_id: string;
@@ -38,10 +39,11 @@ function sourceTypeLabel(value: SourceType) {
   return SOURCE_TYPES.find((item) => item.value === value)?.label ?? "Khác";
 }
 
-export function PersonSourcesPanel({ personId }: PersonSourcesPanelProps) {
+export default function PersonSourcesPanel({ personId }: PersonSourcesPanelProps) {
   const supabase = useMemo(() => createClient(), []);
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const [title, setTitle] = useState("");
@@ -114,6 +116,16 @@ export function PersonSourcesPanel({ personId }: PersonSourcesPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [personId]);
 
+  const resetForm = () => {
+    setTitle("");
+    setSourceType("oral_history");
+    setAuthor("");
+    setRepository("");
+    setUrl("");
+    setCitationText("");
+    setNote("");
+  };
+
   const handleAdd = () => {
     setError(null);
 
@@ -134,20 +146,14 @@ export function PersonSourcesPanel({ personId }: PersonSourcesPanelProps) {
         return;
       }
 
-      setTitle("");
-      setSourceType("oral_history");
-      setAuthor("");
-      setRepository("");
-      setUrl("");
-      setCitationText("");
-      setNote("");
-
+      resetForm();
+      setShowForm(false);
       await loadSources();
     });
   };
 
   const handleDelete = (linkId: string) => {
-    if (!window.confirm("Xóa liên kết nguồn này khỏi người đang xem?")) return;
+    if (!window.confirm("Xóa liên kết nguồn này khỏi người này?")) return;
 
     startTransition(async () => {
       const result = await softDeletePersonSourceLink(linkId, personId);
@@ -162,15 +168,28 @@ export function PersonSourcesPanel({ personId }: PersonSourcesPanelProps) {
   };
 
   return (
-    <section className="rounded-xl border border-stone-200 bg-white p-4">
-      <div className="mb-4">
-        <h3 className="text-base font-semibold text-stone-900">
-          Nguồn thông tin
-        </h3>
-        <p className="mt-1 text-sm text-stone-500">
-          Lưu nguồn xác minh cho thông tin của người này: lời kể, giấy tờ, hình
-          ảnh, sách, website hoặc tài liệu lưu trữ.
-        </p>
+    <section className="rounded-2xl border border-stone-200 bg-white p-4">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-stone-900">
+            Nguồn thông tin
+          </h3>
+          <p className="mt-1 text-sm text-stone-500">
+            Lưu giấy tờ, hình ảnh, lời kể hoặc tài liệu xác minh cho người này.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setShowForm((value) => !value);
+          }}
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-100"
+        >
+          {showForm ? <X className="size-4" /> : <Plus className="size-4" />}
+          {showForm ? "Đóng" : "Thêm nguồn"}
+        </button>
       </div>
 
       {error ? (
@@ -179,98 +198,112 @@ export function PersonSourcesPanel({ personId }: PersonSourcesPanelProps) {
         </div>
       ) : null}
 
-      <div className="mb-5 grid gap-3 rounded-lg border border-stone-100 bg-stone-50 p-3">
-        <div className="grid gap-2 md:grid-cols-2">
+      {showForm ? (
+        <div className="mb-5 grid gap-3 rounded-xl border border-amber-100 bg-amber-50/60 p-3">
+          <div className="grid grid-cols-1 gap-3">
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium text-stone-700">Tên nguồn</span>
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Ví dụ: Gia phả giấy, lời kể ông Bảy..."
+                className="w-full rounded-lg border border-stone-300 px-3 py-2"
+              />
+            </label>
+
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium text-stone-700">Loại nguồn</span>
+              <select
+                value={sourceType}
+                onChange={(event) => setSourceType(event.target.value as SourceType)}
+                className="w-full rounded-lg border border-stone-300 px-3 py-2"
+              >
+                {SOURCE_TYPES.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium text-stone-700">
+                Người cung cấp / tác giả
+              </span>
+              <input
+                value={author}
+                onChange={(event) => setAuthor(event.target.value)}
+                className="w-full rounded-lg border border-stone-300 px-3 py-2"
+              />
+            </label>
+
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium text-stone-700">
+                Nơi lưu / kho lưu trữ
+              </span>
+              <input
+                value={repository}
+                onChange={(event) => setRepository(event.target.value)}
+                className="w-full rounded-lg border border-stone-300 px-3 py-2"
+              />
+            </label>
+          </div>
+
           <label className="grid gap-1 text-sm">
-            <span className="font-medium text-stone-700">Tên nguồn</span>
+            <span className="font-medium text-stone-700">URL</span>
             <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Ví dụ: Lời kể của Bà Tư"
-              className="rounded-lg border border-stone-300 px-3 py-2"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder="https://..."
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
             />
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span className="font-medium text-stone-700">Loại nguồn</span>
-            <select
-              value={sourceType}
-              onChange={(event) => setSourceType(event.target.value as SourceType)}
-              className="rounded-lg border border-stone-300 px-3 py-2"
+            <span className="font-medium text-stone-700">Trích dẫn</span>
+            <textarea
+              value={citationText}
+              onChange={(event) => setCitationText(event.target.value)}
+              rows={2}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-stone-700">Ghi chú</span>
+            <textarea
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              rows={2}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
+            />
+          </label>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={isPending || !title.trim()}
+              className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {SOURCE_TYPES.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              {isPending ? "Đang lưu..." : "Lưu nguồn"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                resetForm();
+                setShowForm(false);
+              }}
+              className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+            >
+              Hủy
+            </button>
+          </div>
         </div>
-
-        <div className="grid gap-2 md:grid-cols-2">
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium text-stone-700">Người cung cấp / tác giả</span>
-            <input
-              value={author}
-              onChange={(event) => setAuthor(event.target.value)}
-              placeholder="Ví dụ: Ông Nguyễn Văn B"
-              className="rounded-lg border border-stone-300 px-3 py-2"
-            />
-          </label>
-
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium text-stone-700">Nơi lưu / kho lưu trữ</span>
-            <input
-              value={repository}
-              onChange={(event) => setRepository(event.target.value)}
-              placeholder="Ví dụ: Gia đình, nhà thờ họ, lưu trữ tỉnh"
-              className="rounded-lg border border-stone-300 px-3 py-2"
-            />
-          </label>
-        </div>
-
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium text-stone-700">URL</span>
-          <input
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            placeholder="https://..."
-            className="rounded-lg border border-stone-300 px-3 py-2"
-          />
-        </label>
-
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium text-stone-700">Trích dẫn</span>
-          <textarea
-            value={citationText}
-            onChange={(event) => setCitationText(event.target.value)}
-            placeholder="Ví dụ: Bà Tư kể ngày 10/06/2026 tại Cà Mau..."
-            rows={2}
-            className="rounded-lg border border-stone-300 px-3 py-2"
-          />
-        </label>
-
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium text-stone-700">Ghi chú</span>
-          <textarea
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            rows={2}
-            className="rounded-lg border border-stone-300 px-3 py-2"
-          />
-        </label>
-
-        <div>
-          <button
-            type="button"
-            onClick={handleAdd}
-            disabled={isPending || !title.trim()}
-            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isPending ? "Đang lưu..." : "Thêm nguồn"}
-          </button>
-        </div>
-      </div>
+      ) : null}
 
       {loading ? (
         <p className="text-sm text-stone-500">Đang tải nguồn...</p>
@@ -283,7 +316,7 @@ export function PersonSourcesPanel({ personId }: PersonSourcesPanelProps) {
           {sources.map((source) => (
             <article
               key={source.link_id}
-              className="rounded-lg border border-stone-200 p-3"
+              className="rounded-lg border border-stone-200 bg-stone-50 p-3"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>

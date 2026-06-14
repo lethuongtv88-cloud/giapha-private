@@ -199,14 +199,14 @@ export function EventSourcesPanel({
       ) : null}
 
       <div className="mb-5 grid gap-3 rounded-xl border border-amber-100 bg-white/80 p-3">
-        <div className="grid gap-2 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3">
           <label className="grid gap-1 text-sm">
             <span className="font-medium text-stone-700">Tên nguồn</span>
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder="Ví dụ: Giấy khai sinh, lời kể gia đình..."
-              className="rounded-lg border border-stone-300 px-3 py-2"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
             />
           </label>
 
@@ -215,7 +215,7 @@ export function EventSourcesPanel({
             <select
               value={sourceType}
               onChange={(event) => setSourceType(event.target.value as SourceType)}
-              className="rounded-lg border border-stone-300 px-3 py-2"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
             >
               {SOURCE_TYPES.map((item) => (
                 <option key={item.value} value={item.value}>
@@ -226,13 +226,13 @@ export function EventSourcesPanel({
           </label>
         </div>
 
-        <div className="grid gap-2 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3">
           <label className="grid gap-1 text-sm">
             <span className="font-medium text-stone-700">Người cung cấp / tác giả</span>
             <input
               value={author}
               onChange={(event) => setAuthor(event.target.value)}
-              className="rounded-lg border border-stone-300 px-3 py-2"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
             />
           </label>
 
@@ -241,7 +241,7 @@ export function EventSourcesPanel({
             <input
               value={repository}
               onChange={(event) => setRepository(event.target.value)}
-              className="rounded-lg border border-stone-300 px-3 py-2"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
             />
           </label>
         </div>
@@ -252,7 +252,7 @@ export function EventSourcesPanel({
             value={url}
             onChange={(event) => setUrl(event.target.value)}
             placeholder="https://..."
-            className="rounded-lg border border-stone-300 px-3 py-2"
+            className="w-full rounded-lg border border-stone-300 px-3 py-2"
           />
         </label>
 
@@ -262,7 +262,7 @@ export function EventSourcesPanel({
             value={citationText}
             onChange={(event) => setCitationText(event.target.value)}
             rows={2}
-            className="rounded-lg border border-stone-300 px-3 py-2"
+            className="w-full rounded-lg border border-stone-300 px-3 py-2"
           />
         </label>
 
@@ -272,7 +272,7 @@ export function EventSourcesPanel({
             value={note}
             onChange={(event) => setNote(event.target.value)}
             rows={2}
-            className="rounded-lg border border-stone-300 px-3 py-2"
+            className="w-full rounded-lg border border-stone-300 px-3 py-2"
           />
         </label>
 
