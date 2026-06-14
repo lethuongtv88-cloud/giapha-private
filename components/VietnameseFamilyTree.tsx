@@ -197,7 +197,7 @@ export default function VietnameseFamilyTree({
   const [hideMales, setHideMales] = useState(false);
   const [hideFemales, setHideFemales] = useState(false);
   const [hideExpandButtons, setHideExpandButtons] = useState(false);
-  const [compactTree, setCompactTree] = useState(false);
+  const [compactTree, setCompactTree] = useState(true);
   const [autoCollapseLevel, setAutoCollapseLevel] = useState(
     DEFAULT_AUTO_COLLAPSE_LEVEL,
   );

@@ -141,11 +141,11 @@ export default function BaseToolbar({
                 <label className="flex items-center gap-2 text-sm text-stone-600 cursor-pointer hover:text-stone-900 transition-colors select-none">
                   <input
                     type="checkbox"
-                    checked={!!compactTree}
-                    onChange={(e) => setCompactTree(e.target.checked)}
+                    checked={!compactTree}
+                    onChange={(e) => setCompactTree(!e.target.checked)}
                     className="rounded text-amber-600 focus:ring-amber-500 cursor-pointer size-4"
                   />
-                  Thu gọn sơ đồ cây
+                  Mở rộng sơ đồ cây
                 </label>
               )}
               {setAutoCollapseLevel && (
