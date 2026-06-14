@@ -106,10 +106,10 @@ export async function softDeletePersonSourceLink(linkId: string, personId: strin
     return { ok: false as const, error: "Thiếu linkId." };
   }
 
-  const { error } = await supabase
-    .from("person_source_links")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", cleanLinkId);
+  const { error } = await supabase.rpc("soft_delete_source_link", {
+    link_table: "person_source_links",
+    link_id: cleanLinkId,
+  });
 
   if (error) {
     return { ok: false as const, error: error.message };
@@ -209,16 +209,68 @@ export async function softDeleteEventSourceLink(linkId: string) {
     return { ok: false as const, error: "Thiếu linkId." };
   }
 
-  const { error } = await supabase
-    .from("event_source_links")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", cleanLinkId);
+  const { error } = await supabase.rpc("soft_delete_source_link", {
+    link_table: "event_source_links",
+    link_id: cleanLinkId,
+  });
 
   if (error) {
     return { ok: false as const, error: error.message };
   }
 
   revalidatePath("/dashboard/members");
+
+  return { ok: true as const };
+}
+
+export type ExistingPersonSourceLinkInput = {
+  personId: string;
+  sourceId: string;
+  citationText?: string;
+  note?: string;
+};
+
+export async function linkExistingPersonSource(input: ExistingPersonSourceLinkInput) {
+  const supabase = await getSupabase();
+
+  const personId = cleanText(input.personId);
+  const sourceId = cleanText(input.sourceId);
+
+  if (!personId) {
+    return { ok: false as const, error: "Thiếu personId." };
+  }
+
+  if (!sourceId) {
+    return { ok: false as const, error: "Chưa chọn nguồn." };
+  }
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) {
+    return { ok: false as const, error: userError.message };
+  }
+
+  const { error } = await supabase.from("person_source_links").insert({
+    person_id: personId,
+    source_id: sourceId,
+    citation_text: cleanText(input.citationText),
+    note: cleanText(input.note),
+    created_by: user?.id ?? null,
+  });
+
+  if (error) {
+    if (error.code === "23505") {
+      return { ok: false as const, error: "Nguồn này đã được gắn cho người này." };
+    }
+
+    return { ok: false as const, error: error.message };
+  }
+
+  revalidatePath("/dashboard/members");
+  revalidatePath(`/dashboard/members/${personId}`);
 
   return { ok: true as const };
 }
