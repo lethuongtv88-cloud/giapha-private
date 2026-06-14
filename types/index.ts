@@ -90,3 +90,22 @@ export interface GalleryItem {
   created_at: string;
   created_by: string | null;
 }
+
+export type Place = {
+  id: string;
+  name: string;
+  province: string | null;
+  commune: string | null;
+  address_detail: string | null;
+  old_province: string | null;
+  old_district: string | null;
+  old_commune: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  google_maps_url: string | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
