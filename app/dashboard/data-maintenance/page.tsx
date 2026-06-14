@@ -7,6 +7,7 @@ import {
   UserRoundX,
   Wrench,
   Activity,
+  GitBranch,
 } from "lucide-react";
 import { DataMaintenanceShortcuts } from "@/components/AdminMaintenanceShortcuts";
 import { getSupabase } from "@/utils/supabase/queries";
@@ -200,6 +201,14 @@ export default async function DataMaintenancePage() {
             href="/dashboard/data-maintenance/backups"
             icon={<Activity className="size-6" />}
             tone="indigo"
+          />
+
+          <ToolCard
+            title="Rà soát Family Model"
+            description="Xem và xác nhận các quan hệ cha mẹ - con còn ở trạng thái review sau migration."
+            href="/dashboard/data-maintenance/migration-review"
+            icon={<GitBranch className="size-6" />}
+            tone="amber"
           />
 
           <ToolCard
