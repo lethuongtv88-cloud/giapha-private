@@ -1,0 +1,124 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { getSupabase } from "@/utils/supabase/queries";
+
+export type SourceType =
+  | "document"
+  | "photo"
+  | "oral_history"
+  | "book"
+  | "website"
+  | "archive"
+  | "other";
+
+export type PersonSourceInput = {
+  personId: string;
+  title: string;
+  sourceType: SourceType;
+  author?: string;
+  repository?: string;
+  url?: string;
+  citationText?: string;
+  note?: string;
+};
+
+function cleanText(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+export async function createPersonSource(input: PersonSourceInput) {
+  const supabase = await getSupabase();
+
+  const personId = cleanText(input.personId);
+  const title = cleanText(input.title);
+
+  if (!personId) {
+    return { ok: false as const, error: "Thiếu personId." };
+  }
+
+  if (!title) {
+    return { ok: false as const, error: "Tên nguồn không được để trống." };
+  }
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) {
+    return { ok: false as const, error: userError.message };
+  }
+
+  const { data: source, error: sourceError } = await supabase
+    .from("sources")
+    .insert({
+      title,
+      source_type: input.sourceType || "other",
+      author: cleanText(input.author),
+      repository: cleanText(input.repository),
+      url: cleanText(input.url),
+      note: cleanText(input.note),
+      created_by: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+
+  if (sourceError || !source) {
+    return {
+      ok: false as const,
+      error: sourceError?.message ?? "Không tạo được source.",
+    };
+  }
+
+  const { error: linkError } = await supabase.from("person_source_links").insert({
+    person_id: personId,
+    source_id: source.id,
+    citation_text: cleanText(input.citationText),
+    note: cleanText(input.note),
+    created_by: user?.id ?? null,
+  });
+
+  if (linkError) {
+    await supabase
+      .from("sources")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", source.id);
+
+    return { ok: false as const, error: linkError.message };
+  }
+
+  revalidatePath("/dashboard/members");
+  revalidatePath(`/dashboard/members/${personId}`);
+
+  return { ok: true as const, sourceId: source.id };
+}
+
+export async function softDeletePersonSourceLink(linkId: string, personId: string) {
+  const supabase = await getSupabase();
+
+  const cleanLinkId = cleanText(linkId);
+  const cleanPersonId = cleanText(personId);
+
+  if (!cleanLinkId) {
+    return { ok: false as const, error: "Thiếu linkId." };
+  }
+
+  const { error } = await supabase
+    .from("person_source_links")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", cleanLinkId);
+
+  if (error) {
+    return { ok: false as const, error: error.message };
+  }
+
+  revalidatePath("/dashboard/members");
+  if (cleanPersonId) {
+    revalidatePath(`/dashboard/members/${cleanPersonId}`);
+  }
+
+  return { ok: true as const };
+}
