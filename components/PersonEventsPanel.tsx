@@ -299,6 +299,20 @@ export default function PersonEventsPanel({
                       onClick={() => {
                         setError(null);
                         setMessage(null);
+                        setEditing(null);
+                        setSourceEvent(event as EditableTimelineEvent);
+                      }}
+                      className="rounded-lg p-2 text-stone-400 transition hover:bg-blue-50 hover:text-blue-700"
+                      title="Nguồn sự kiện"
+                    >
+                      <BookOpen className="size-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError(null);
+                        setMessage(null);
                         setEditing({ mode: "edit", event: event as EditableTimelineEvent });
                       }}
                       className="rounded-lg p-2 text-stone-400 transition hover:bg-amber-50 hover:text-amber-700"
