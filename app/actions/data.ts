@@ -180,6 +180,7 @@ export async function exportData(
   const { data: allCustomEvents, error: customEventsError } = await supabase
     .from("custom_events")
     .select("id, name, content, event_date, location, created_by")
+    .is("deleted_at", null)
     .order("event_date", { ascending: true });
 
   if (customEventsError)

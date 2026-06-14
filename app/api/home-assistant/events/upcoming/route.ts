@@ -117,7 +117,10 @@ export async function GET(request: NextRequest) {
     supabase.from("family_children").select("family_id, person_id, relationship_type"),
     supabase.from("events").select("*").is("deleted_at", null),
     supabase.from("person_events").select("person_id, event_id, role"),
-    supabase.from("custom_events").select("id, name, content, event_date, location"),
+    supabase
+      .from("custom_events")
+      .select("id, name, content, event_date, location")
+      .is("deleted_at", null),
   ]);
 
   const firstError = [

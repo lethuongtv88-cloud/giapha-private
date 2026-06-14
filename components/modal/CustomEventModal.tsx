@@ -166,7 +166,7 @@ export default function CustomEventModal({
       const supabase = createClient();
       const { error: err } = await supabase
         .from("custom_events")
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq("id", eventToEdit.id);
 
       if (err) throw err;

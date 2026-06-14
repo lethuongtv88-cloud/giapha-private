@@ -1,5 +1,4 @@
 import { getTodayLunar } from "@/utils/dateHelpers";
-import { buildEventMessage } from "@/utils/events/eventMessages";
 import { computeEvents } from "@/utils/eventHelpers";
 import { getIsAdmin, getProfile, getSupabase } from "@/utils/supabase/queries";
 import { buildVisiblePersonSetForProfile } from "@/utils/permissions/applyPersonVisibility";
@@ -40,24 +39,6 @@ const eventTypeConfig = {
     label: "Sự kiện",
     color: "text-emerald-600",
     bg: "bg-emerald-50",
-  },
-  marriage_upcoming: {
-    icon: CalendarDays,
-    label: "Đám cưới",
-    color: "text-amber-600",
-    bg: "bg-amber-50",
-  },
-  marriage_anniversary: {
-    icon: CalendarDays,
-    label: "Kỷ niệm cưới",
-    color: "text-amber-600",
-    bg: "bg-amber-50",
-  },
-  death_recent: {
-    icon: Flower2,
-    label: "Chia buồn",
-    color: "text-rose-600",
-    bg: "bg-rose-50",
   },
 };
 
@@ -132,7 +113,8 @@ export default async function DashboardLaunchpad() {
       ),
     supabase
       .from("custom_events")
-      .select("id, name, content, event_date, location, created_by"),
+      .select("id, name, content, event_date, location, created_by")
+      .is("deleted_at", null),
     supabase.from("relationships_active").select("*"),
     supabase.from("families").select("*").is("deleted_at", null),
     supabase.from("family_parents").select("*"),
@@ -350,14 +332,8 @@ export default async function DashboardLaunchpad() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {upcomingEvents.slice(0, 4).map((evt, i) => {
-                    const cfg = eventTypeConfig[evt.type as keyof typeof eventTypeConfig] ?? eventTypeConfig.custom_event;
+                    const cfg = eventTypeConfig[evt.type];
                     const Icon = cfg.icon;
-                    const message = buildEventMessage({
-                      type: String(evt.type),
-                      personName: evt.personName,
-                      daysUntil: evt.daysUntil,
-                      eventDateLabel: evt.eventDateLabel,
-                    });
                     return (
                       <div
                         key={i}
@@ -379,9 +355,6 @@ export default async function DashboardLaunchpad() {
                                 ? "Ngày mai"
                                 : `${evt.daysUntil} ngày nữa`}{" "}
                             · {evt.eventDateLabel}
-                          </span>
-                          <span className="mt-1 text-xs leading-5 text-stone-600 line-clamp-2 block">
-                            {message.emoji} {message.message}
                           </span>
                         </div>
                       </div>

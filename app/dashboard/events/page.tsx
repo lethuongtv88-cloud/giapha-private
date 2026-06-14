@@ -222,7 +222,8 @@ export default async function EventsPage() {
       ),
     supabase
       .from("custom_events")
-      .select("id, name, content, event_date, location, created_by"),
+      .select("id, name, content, event_date, location, created_by")
+      .is("deleted_at", null),
     supabase.from("relationships_active").select("*"),
     supabase.from("families").select("*").is("deleted_at", null),
     supabase.from("family_parents").select("*"),
