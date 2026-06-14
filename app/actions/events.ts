@@ -258,6 +258,7 @@ function buildEventPayload(formData: FormData) {
   const title = cleanText(formData.get("title"));
   const description = cleanText(formData.get("description"));
   const placeText = cleanText(formData.get("place_text"));
+  const placeId = cleanText(formData.get("place_id"));
   const precision = normalizeDatePrecision(formData.get("date_precision"));
   const dateText = cleanText(formData.get("date_text"));
 
@@ -284,6 +285,7 @@ function buildEventPayload(formData: FormData) {
     title,
     description,
     place_text: placeText,
+    place_id: placeId,
     start_date: datePayload.start_date,
     end_date: datePayload.end_date,
     sort_date: datePayload.sort_date,

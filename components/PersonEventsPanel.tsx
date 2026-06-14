@@ -7,6 +7,7 @@ import {
 } from "@/app/actions/events";
 import PersonSelector from "@/components/PersonSelector";
 import { EventSourcesPanel } from "@/components/EventSourcesPanel";
+import PlaceSelector from "@/components/places/PlaceSelector";
 import { PersonTimeline, type TimelineEvent } from "@/components/PersonTimeline";
 import type { Person } from "@/types";
 import { createClient } from "@/utils/supabase/client";
@@ -25,6 +26,7 @@ type EditableTimelineEvent = TimelineEvent & {
   lunar_month?: number | null;
   lunar_day?: number | null;
   lunar_is_leap_month?: boolean | null;
+  place_id?: string | null;
 };
 
 type EditingState =
@@ -46,17 +48,36 @@ const EVENT_TYPES = [
 ];
 
 const PRECISIONS = [
-  { value: "day", label: "Chính xác ngày", placeholder: "dd/mm/yyyy, ví dụ 21/07/2015" },
-  { value: "month", label: "Chỉ tháng/năm", placeholder: "mm/yyyy, ví dụ 07/2015" },
-  { value: "year", label: "Chỉ năm", placeholder: "yyyy, ví dụ 2015" },
-  { value: "unknown", label: "Không rõ ngày", placeholder: "Để trống" },
+  {
+    value: "day",
+    label: "Chính xác ngày",
+    placeholder: "dd/mm/yyyy, ví dụ 21/07/2015",
+  },
+  {
+    value: "month",
+    label: "Chỉ tháng/năm",
+    placeholder: "mm/yyyy, ví dụ 07/2015",
+  },
+  {
+    value: "year",
+    label: "Chỉ năm",
+    placeholder: "yyyy, ví dụ 2015",
+  },
+  {
+    value: "unknown",
+    label: "Không rõ ngày",
+    placeholder: "Để trống",
+  },
 ];
 
 function toPersonSelectorRows(rows: Partial<Person>[]) {
   return rows.map((person) => ({
     id: person.id ?? "",
     full_name: person.full_name ?? "Không rõ tên",
-    gender: person.gender === "female" || person.gender === "male" ? person.gender : "other",
+    gender:
+      person.gender === "female" || person.gender === "male"
+        ? person.gender
+        : "other",
     birth_year: person.birth_year ?? null,
     birth_month: person.birth_month ?? null,
     birth_day: person.birth_day ?? null,
@@ -87,7 +108,9 @@ export default function PersonEventsPanel({
   const [persons, setPersons] = useState<Person[]>([]);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<EditingState | null>(null);
-  const [sourceEvent, setSourceEvent] = useState<EditableTimelineEvent | null>(null);
+  const [sourceEvent, setSourceEvent] = useState<EditableTimelineEvent | null>(
+    null,
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -142,7 +165,7 @@ export default function PersonEventsPanel({
       const { data: eventRows, error: eventsError } = await supabase
         .from("events_active")
         .select(
-          "id, type, title, start_date, end_date, date_precision, place_text, description, sort_date, lunar_year, lunar_month, lunar_day, lunar_is_leap_month",
+          "id, type, title, start_date, end_date, date_precision, place_text, place_id, description, sort_date, lunar_year, lunar_month, lunar_day, lunar_is_leap_month",
         )
         .in("id", eventIds)
         .order("sort_date", { ascending: false });
@@ -211,7 +234,10 @@ export default function PersonEventsPanel({
 
     startTransition(() => {
       void (async () => {
-        const result = await softDeletePersonEvent({ personId, eventId: event.id });
+        const result = await softDeletePersonEvent({
+          personId,
+          eventId: event.id,
+        });
 
         if (result?.error) {
           setError(result.error);
@@ -229,7 +255,8 @@ export default function PersonEventsPanel({
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-stone-500">
-            Quản lý timeline, ngày giỗ, kết hôn, ly hôn và các mốc thời gian của thành viên này.
+            Quản lý timeline, ngày giỗ, kết hôn, ly hôn và các mốc thời gian
+            của thành viên này.
           </p>
         </div>
 
@@ -313,13 +340,17 @@ export default function PersonEventsPanel({
                       onClick={() => {
                         setError(null);
                         setMessage(null);
-                        setEditing({ mode: "edit", event: event as EditableTimelineEvent });
+                        setEditing({
+                          mode: "edit",
+                          event: event as EditableTimelineEvent,
+                        });
                       }}
                       className="rounded-lg p-2 text-stone-400 transition hover:bg-amber-50 hover:text-amber-700"
                       title="Sửa sự kiện"
                     >
                       <Edit3 className="size-4" />
                     </button>
+
                     <button
                       type="button"
                       onClick={() => handleDelete(event as EditableTimelineEvent)}
@@ -353,7 +384,9 @@ function parseLunarDeathAnniversaryText(value: string) {
   const month = Number(match[2]);
   const year = Number(match[3]);
 
-  if (day < 1 || day > 30 || month < 1 || month > 12 || year < 1) return null;
+  if (day < 1 || day > 30 || month < 1 || month > 12 || year < 1) {
+    return null;
+  }
 
   return { day, month, year };
 }
@@ -368,7 +401,9 @@ function lunarDeathAnniversaryToSolarIso(input: {
     const lunarMonth = input.isLeapMonth ? -input.month : input.month;
     const solar = Lunar.fromYmd(input.year, lunarMonth, input.day).getSolar();
 
-    return `${String(solar.getYear()).padStart(4, "0")}-${String(solar.getMonth()).padStart(2, "0")}-${String(solar.getDay()).padStart(2, "0")}`;
+    return `${String(solar.getYear()).padStart(4, "0")}-${String(
+      solar.getMonth(),
+    ).padStart(2, "0")}-${String(solar.getDay()).padStart(2, "0")}`;
   } catch {
     return null;
   }
@@ -377,7 +412,9 @@ function lunarDeathAnniversaryToSolarIso(input: {
 function getDeathAnniversaryText(event: EditableTimelineEvent | null) {
   if (!event?.lunar_day || !event.lunar_month || !event.lunar_year) return "";
 
-  return `${String(event.lunar_day).padStart(2, "0")}/${String(event.lunar_month).padStart(2, "0")}/${event.lunar_year}`;
+  return `${String(event.lunar_day).padStart(2, "0")}/${String(
+    event.lunar_month,
+  ).padStart(2, "0")}/${event.lunar_year}`;
 }
 
 function EventForm({
@@ -397,21 +434,31 @@ function EventForm({
   const [precision, setPrecision] = useState(event?.date_precision || "day");
   const [eventType, setEventType] = useState(event?.type || "custom");
   const [spousePersonId, setSpousePersonId] = useState<string | null>(null);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(
+    event?.place_id ?? null,
+  );
   const [deathAnniversaryText, setDeathAnniversaryText] = useState(() =>
     event?.type === "death_anniversary" ? getDeathAnniversaryText(event) : "",
   );
   const [deathAnniversaryLeapMonth, setDeathAnniversaryLeapMonth] = useState(
     Boolean(event?.lunar_is_leap_month),
   );
-  const precisionInfo = PRECISIONS.find((item) => item.value === precision) ?? PRECISIONS[0];
-  const showSpouseSelector = editing.mode === "create" && eventType === "marriage";
+
+  const precisionInfo =
+    PRECISIONS.find((item) => item.value === precision) ?? PRECISIONS[0];
+  const showSpouseSelector =
+    editing.mode === "create" && eventType === "marriage";
   const isDeathAnniversary = eventType === "death_anniversary";
 
   const handleFormAction = (formData: FormData) => {
+    formData.set("place_id", selectedPlaceId ?? "");
+
     if (isDeathAnniversary) {
       const parsed = parseLunarDeathAnniversaryText(deathAnniversaryText);
       if (!parsed) {
-        window.alert("Ngày giỗ âm lịch phải có dạng dd/mm/yyyy, ví dụ 11/03/1971.");
+        window.alert(
+          "Ngày giỗ âm lịch phải có dạng dd/mm/yyyy, ví dụ 11/03/1971.",
+        );
         return;
       }
 
@@ -421,7 +468,9 @@ function EventForm({
       });
 
       if (!iso) {
-        window.alert("Không chuyển đổi được ngày giỗ âm lịch sang dương lịch. Vui lòng kiểm tra lại.");
+        window.alert(
+          "Không chuyển đổi được ngày giỗ âm lịch sang dương lịch. Vui lòng kiểm tra lại.",
+        );
         return;
       }
 
@@ -433,7 +482,10 @@ function EventForm({
       formData.set("lunar_year", String(parsed.year));
       formData.set("lunar_month", String(parsed.month));
       formData.set("lunar_day", String(parsed.day));
-      formData.set("lunar_is_leap_month", deathAnniversaryLeapMonth ? "true" : "false");
+      formData.set(
+        "lunar_is_leap_month",
+        deathAnniversaryLeapMonth ? "true" : "false",
+      );
     }
 
     onSubmit(formData);
@@ -445,6 +497,8 @@ function EventForm({
       className="mb-5 rounded-2xl border border-amber-200/70 bg-white p-4 shadow-sm ring-1 ring-amber-50"
     >
       {event ? <input type="hidden" name="event_id" value={event.id} /> : null}
+      <input type="hidden" name="place_id" value={selectedPlaceId ?? ""} />
+
       {showSpouseSelector && spousePersonId ? (
         <input type="hidden" name="spouse_person_id" value={spousePersonId} />
       ) : null}
@@ -459,10 +513,12 @@ function EventForm({
               {editing.mode === "edit" ? "Sửa sự kiện" : "Thêm sự kiện"}
             </h3>
             <p className="text-xs text-stone-500">
-              Ngày dương lịch chọn bằng lịch hoặc nhập dạng dd/mm/yyyy, mm/yyyy hoặc yyyy.
+              Ngày dương lịch chọn bằng lịch hoặc nhập dạng dd/mm/yyyy, mm/yyyy
+              hoặc yyyy.
             </p>
           </div>
         </div>
+
         <button
           type="button"
           onClick={onCancel}
@@ -494,21 +550,21 @@ function EventForm({
         </label>
 
         {!isDeathAnniversary ? (
-        <label className="block text-sm font-medium text-stone-700">
-          Độ chính xác ngày
-          <select
-            name="date_precision"
-            value={precision}
-            onChange={(event) => setPrecision(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-          >
-            {PRECISIONS.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
+          <label className="block text-sm font-medium text-stone-700">
+            Độ chính xác ngày
+            <select
+              name="date_precision"
+              value={precision}
+              onChange={(event) => setPrecision(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            >
+              {PRECISIONS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
         ) : null}
 
         {showSpouseSelector ? (
@@ -522,21 +578,23 @@ function EventForm({
               className="w-full"
             />
             <p className="mt-2 text-xs leading-5 text-stone-500">
-              Khi lưu, sự kiện kết hôn sẽ được ghi vào timeline của cả hai người. Nếu hai người đã có family trong Family Model, event sẽ tự gắn với family đó.
+              Khi lưu, sự kiện kết hôn sẽ được ghi vào timeline của cả hai
+              người. Nếu hai người đã có family trong Family Model, event sẽ tự
+              gắn với family đó.
             </p>
           </div>
         ) : null}
 
         {!isDeathAnniversary ? (
-        <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
-          Tiêu đề
-          <input
-            name="title"
-            defaultValue={event?.title ?? ""}
-            placeholder="Ví dụ: Lễ cưới, Nhập học..."
-            className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-          />
-        </label>
+          <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
+            Tiêu đề
+            <input
+              name="title"
+              defaultValue={event?.title ?? ""}
+              placeholder="Ví dụ: Lễ cưới, Nhập học..."
+              className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            />
+          </label>
         ) : (
           <div className="rounded-2xl border border-amber-200/70 bg-amber-50/60 p-4 sm:col-span-2">
             <label className="block text-sm font-semibold text-amber-900">
@@ -549,94 +607,122 @@ function EventForm({
                 className="mt-2 w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
               />
             </label>
+
             <label className="mt-3 flex items-center gap-2 text-xs font-medium text-amber-900/80">
               <input
                 type="checkbox"
                 checked={deathAnniversaryLeapMonth}
-                onChange={(event) => setDeathAnniversaryLeapMonth(event.target.checked)}
+                onChange={(event) =>
+                  setDeathAnniversaryLeapMonth(event.target.checked)
+                }
                 className="size-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
               />
               Tháng âm nhuận
             </label>
+
             <p className="mt-2 text-xs leading-5 text-amber-800/70">
-              Ngày giỗ được lưu thành event riêng, lịch âm, và dùng để nhắc hằng năm. Ngày mất không dùng để nhắc sự kiện.
+              Ngày giỗ được lưu thành event riêng, lịch âm, và dùng để nhắc hằng
+              năm. Ngày mất không dùng để nhắc sự kiện.
             </p>
           </div>
         )}
 
         {!isDeathAnniversary ? (
-        <label className="block text-sm font-medium text-stone-700">
-          Ngày dương lịch
-          <input
-            name="date_text"
-            type={precision === "day" ? "date" : precision === "month" ? "month" : "text"}
-            inputMode="numeric"
-            defaultValue={getEventDateInputValue(event)}
-            disabled={precision === "unknown"}
-            placeholder={precisionInfo.placeholder}
-            className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:bg-stone-100 disabled:text-stone-400"
-          />
-        </label>
+          <label className="block text-sm font-medium text-stone-700">
+            Ngày dương lịch
+            <input
+              name="date_text"
+              type={
+                precision === "day"
+                  ? "date"
+                  : precision === "month"
+                    ? "month"
+                    : "text"
+              }
+              inputMode="numeric"
+              defaultValue={getEventDateInputValue(event)}
+              disabled={precision === "unknown"}
+              placeholder={precisionInfo.placeholder}
+              className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:bg-stone-100 disabled:text-stone-400"
+            />
+          </label>
         ) : null}
 
-        <label className="block text-sm font-medium text-stone-700">
-          Địa điểm
-          <input
-            name="place_text"
-            defaultValue={event?.place_text ?? ""}
-            placeholder="Nơi diễn ra nếu có"
-            className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+        <div className="sm:col-span-2">
+          <PlaceSelector
+            value={selectedPlaceId}
+            onChange={(placeId) => setSelectedPlaceId(placeId)}
+            label="Địa điểm chuẩn"
+            placeholder="Tìm hoặc tạo địa điểm theo tỉnh/xã hiện tại..."
+            disabled={disabled}
           />
-        </label>
 
-        {!isDeathAnniversary ? (
-        <>
-        <div className="grid grid-cols-3 gap-2 sm:col-span-2">
-          <label className="block text-sm font-medium text-stone-700">
-            Năm âm
+          <label className="mt-3 block text-sm font-medium text-stone-700">
+            Địa điểm ghi chú / fallback
             <input
-              name="lunar_year"
-              type="number"
-              min="1"
-              defaultValue={event?.lunar_year ?? ""}
-              className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              name="place_text"
+              defaultValue={event?.place_text ?? ""}
+              placeholder="Ghi chú địa điểm tự do nếu chưa chọn địa điểm chuẩn"
+              className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
           </label>
-          <label className="block text-sm font-medium text-stone-700">
-            Tháng âm
-            <input
-              name="lunar_month"
-              type="number"
-              min="1"
-              max="12"
-              defaultValue={event?.lunar_month ?? ""}
-              className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-            />
-          </label>
-          <label className="block text-sm font-medium text-stone-700">
-            Ngày âm
-            <input
-              name="lunar_day"
-              type="number"
-              min="1"
-              max="30"
-              defaultValue={event?.lunar_day ?? ""}
-              className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-            />
-          </label>
+
+          <p className="mt-2 text-xs leading-5 text-stone-500">
+            Nếu đã chọn địa điểm chuẩn, hệ thống lưu place_id để mở Google Maps
+            và dẫn đường. Ô ghi chú vẫn được giữ làm fallback cho dữ liệu cũ/GEDCOM.
+          </p>
         </div>
 
-        <label className="flex items-center gap-2 text-sm font-medium text-stone-700 sm:col-span-2">
-          <input
-            type="checkbox"
-            name="lunar_is_leap_month"
-            value="true"
-            defaultChecked={!!event?.lunar_is_leap_month}
-            className="size-4 rounded border-stone-300 text-amber-600 focus:ring-amber-500"
-          />
-          Tháng âm nhuận
-        </label>
-        </>
+        {!isDeathAnniversary ? (
+          <>
+            <div className="grid grid-cols-3 gap-2 sm:col-span-2">
+              <label className="block text-sm font-medium text-stone-700">
+                Năm âm
+                <input
+                  name="lunar_year"
+                  type="number"
+                  min="1"
+                  defaultValue={event?.lunar_year ?? ""}
+                  className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </label>
+
+              <label className="block text-sm font-medium text-stone-700">
+                Tháng âm
+                <input
+                  name="lunar_month"
+                  type="number"
+                  min="1"
+                  max="12"
+                  defaultValue={event?.lunar_month ?? ""}
+                  className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </label>
+
+              <label className="block text-sm font-medium text-stone-700">
+                Ngày âm
+                <input
+                  name="lunar_day"
+                  type="number"
+                  min="1"
+                  max="30"
+                  defaultValue={event?.lunar_day ?? ""}
+                  className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </label>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm font-medium text-stone-700 sm:col-span-2">
+              <input
+                type="checkbox"
+                name="lunar_is_leap_month"
+                value="true"
+                defaultChecked={!!event?.lunar_is_leap_month}
+                className="size-4 rounded border-stone-300 text-amber-600 focus:ring-amber-500"
+              />
+              Tháng âm nhuận
+            </label>
+          </>
         ) : null}
 
         <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
@@ -682,6 +768,8 @@ function getEventTypeLabel(type: string) {
 function getEventDateInputValue(event: EditableTimelineEvent | null) {
   if (!event?.start_date) return "";
   if (event.date_precision === "year") return event.start_date.slice(0, 4);
-  if (event.date_precision === "month") return formatIsoMonthForInput(event.start_date);
+  if (event.date_precision === "month") {
+    return formatIsoMonthForInput(event.start_date);
+  }
   return formatIsoDateForInput(event.start_date);
 }
