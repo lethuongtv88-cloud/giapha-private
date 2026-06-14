@@ -1,5 +1,8 @@
 import type React from "react";
 import { CalendarDays, MapPin, Moon } from "lucide-react";
+import PlaceMapLinks, {
+  type PlaceForMapLinks,
+} from "@/components/places/PlaceMapLinks";
 
 export type TimelineEvent = {
   id: string;
@@ -9,6 +12,8 @@ export type TimelineEvent = {
   end_date: string | null;
   date_precision: string | null;
   place_text?: string | null;
+  place_id?: string | null;
+  place?: PlaceForMapLinks | null;
   description?: string | null;
   sort_date?: string | null;
   lunar_year?: number | null;
@@ -23,9 +28,16 @@ type PersonTimelineProps = {
   renderActions?: (event: TimelineEvent) => React.ReactNode;
 };
 
-export function PersonTimeline({ events, className, renderActions }: PersonTimelineProps) {
+export function PersonTimeline({
+  events,
+  className,
+  renderActions,
+}: PersonTimelineProps) {
   const visibleEvents = events
-    .filter((event) => event.start_date || event.sort_date || event.date_precision === "unknown")
+    .filter(
+      (event) =>
+        event.start_date || event.sort_date || event.date_precision === "unknown",
+    )
     .sort((a, b) => getEventSortValue(b).localeCompare(getEventSortValue(a)));
 
   if (visibleEvents.length === 0) {
@@ -74,9 +86,13 @@ export function PersonTimeline({ events, className, renderActions }: PersonTimel
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                           <div className="min-w-0">
-                            <h4 className="text-sm font-bold text-stone-800">{label}</h4>
+                            <h4 className="text-sm font-bold text-stone-800">
+                              {label}
+                            </h4>
+
                             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-stone-500">
                               <span>{formatEventDate(event)}</span>
+
                               {lunarLabel ? (
                                 <span className="inline-flex items-center gap-1 text-amber-700">
                                   <span className="text-stone-300">·</span>
@@ -84,18 +100,31 @@ export function PersonTimeline({ events, className, renderActions }: PersonTimel
                                   <span>ÂL: {lunarLabel}</span>
                                 </span>
                               ) : null}
-                              {event.place_text ? (
+
+                              {event.place ? (
                                 <span className="inline-flex min-w-0 items-center gap-1">
                                   <span className="text-stone-300">·</span>
                                   <MapPin className="size-3.5 shrink-0 text-stone-400" />
-                                  <span className="truncate">{event.place_text}</span>
+                                  <span className="truncate">
+                                    {event.place.name}
+                                  </span>
+                                </span>
+                              ) : event.place_text ? (
+                                <span className="inline-flex min-w-0 items-center gap-1">
+                                  <span className="text-stone-300">·</span>
+                                  <MapPin className="size-3.5 shrink-0 text-stone-400" />
+                                  <span className="truncate">
+                                    {event.place_text}
+                                  </span>
                                 </span>
                               ) : null}
                             </div>
                           </div>
 
                           <div className="flex shrink-0 items-center gap-2">
-                            <span className={`w-fit rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${style.badge}`}>
+                            <span
+                              className={`w-fit rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${style.badge}`}
+                            >
                               {getEventTypeLabel(event.type)}
                             </span>
                             {renderActions ? renderActions(event) : null}
@@ -106,6 +135,12 @@ export function PersonTimeline({ events, className, renderActions }: PersonTimel
                           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-stone-600">
                             {event.description}
                           </p>
+                        ) : null}
+
+                        {event.place ? (
+                          <div className="mt-3">
+                            <PlaceMapLinks place={event.place} compact={false} />
+                          </div>
                         ) : null}
                       </div>
                     </div>
@@ -148,6 +183,7 @@ export function getEventTypeLabel(type: string) {
   const labels: Record<string, string> = {
     birth: "Sinh",
     death: "Mất",
+    death_anniversary: "Ngày giỗ",
     marriage: "Kết hôn",
     wedding: "Đám cưới",
     divorce: "Ly hôn",
@@ -163,12 +199,18 @@ export function getEventTypeLabel(type: string) {
 }
 
 function formatEventDate(event: TimelineEvent) {
-  if (!event.start_date) return event.date_precision === "unknown" ? "Chưa rõ ngày" : "Không có ngày";
+  if (!event.start_date) {
+    return event.date_precision === "unknown" ? "Chưa rõ ngày" : "Không có ngày";
+  }
 
   if (event.date_precision === "year") return event.start_date.slice(0, 4);
   if (event.date_precision === "month") return formatIsoMonth(event.start_date);
 
-  if (event.date_precision === "range" && event.end_date && event.end_date !== event.start_date) {
+  if (
+    event.date_precision === "range" &&
+    event.end_date &&
+    event.end_date !== event.start_date
+  ) {
     return `${formatIsoDate(event.start_date)} – ${formatIsoDate(event.end_date)}`;
   }
 
@@ -191,7 +233,9 @@ function formatLunarDate(event: TimelineEvent) {
   if (!event.lunar_year && !event.lunar_month && !event.lunar_day) return null;
 
   const day = event.lunar_day ? String(event.lunar_day).padStart(2, "0") : "??";
-  const month = event.lunar_month ? String(event.lunar_month).padStart(2, "0") : "??";
+  const month = event.lunar_month
+    ? String(event.lunar_month).padStart(2, "0")
+    : "??";
   const year = event.lunar_year ? String(event.lunar_year) : "????";
   const leap = event.lunar_is_leap_month ? " nhuận" : "";
 
@@ -199,7 +243,10 @@ function formatLunarDate(event: TimelineEvent) {
 }
 
 function getEventTypeStyle(type: string) {
-  const styles: Record<string, { iconWrap: string; icon: string; badge: string }> = {
+  const styles: Record<
+    string,
+    { iconWrap: string; icon: string; badge: string }
+  > = {
     birth: {
       iconWrap: "border-emerald-100 bg-emerald-50 text-emerald-600",
       icon: "text-emerald-600",
@@ -209,6 +256,11 @@ function getEventTypeStyle(type: string) {
       iconWrap: "border-stone-200 bg-stone-100 text-stone-600",
       icon: "text-stone-600",
       badge: "bg-stone-100 text-stone-700",
+    },
+    death_anniversary: {
+      iconWrap: "border-amber-100 bg-amber-50 text-amber-700",
+      icon: "text-amber-700",
+      badge: "bg-amber-50 text-amber-700",
     },
     marriage: {
       iconWrap: "border-rose-100 bg-rose-50 text-rose-600",

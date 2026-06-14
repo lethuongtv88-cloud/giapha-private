@@ -21,6 +21,21 @@ type PersonEventsPanelProps = {
   className?: string;
 };
 
+type PlaceRow = {
+  id: string;
+  name: string;
+  province: string | null;
+  commune: string | null;
+  address_detail: string | null;
+  old_province: string | null;
+  old_district: string | null;
+  old_commune: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  google_maps_url: string | null;
+  note: string | null;
+};
+
 type EditableTimelineEvent = TimelineEvent & {
   lunar_year?: number | null;
   lunar_month?: number | null;
@@ -175,7 +190,38 @@ export default function PersonEventsPanel({
         return;
       }
 
-      setEvents((eventRows ?? []) as EditableTimelineEvent[]);
+      const rawEvents = (eventRows ?? []) as EditableTimelineEvent[];
+      const placeIds = Array.from(
+        new Set(rawEvents.map((event) => event.place_id).filter(Boolean)),
+      ) as string[];
+
+      let placesById = new Map<string, PlaceRow>();
+
+      if (placeIds.length > 0) {
+        const { data: placeRows, error: placesError } = await supabase
+          .from("places")
+          .select(
+            "id, name, province, commune, address_detail, old_province, old_district, old_commune, latitude, longitude, google_maps_url, note",
+          )
+          .in("id", placeIds)
+          .is("deleted_at", null);
+
+        if (placesError) {
+          setError(placesError.message);
+          return;
+        }
+
+        placesById = new Map(
+          ((placeRows ?? []) as PlaceRow[]).map((place) => [place.id, place]),
+        );
+      }
+
+      setEvents(
+        rawEvents.map((event) => ({
+          ...event,
+          place: event.place_id ? placesById.get(event.place_id) ?? null : null,
+        })),
+      );
     } finally {
       setLoading(false);
     }
