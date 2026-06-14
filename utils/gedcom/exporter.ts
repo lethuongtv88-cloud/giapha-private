@@ -181,8 +181,20 @@ export function exportToGedcomWithWarnings(data: ExportData, options?: GedcomExp
       deathEvents: [],
     };
 
-    writeBirthEvent(w, person, bundle.birthEvents[0], warnings);
-    writeDeathEvent(w, person, bundle.deathEvents[0], warnings);
+    writeBirthEvent(
+      w,
+      person,
+      bundle.birthEvents[0],
+      warnings,
+      sourceContext.eventSourcesByEventId.get(bundle.birthEvents[0]?.id ?? "") ?? [],
+    );
+    writeDeathEvent(
+      w,
+      person,
+      bundle.deathEvents[0],
+      warnings,
+      sourceContext.eventSourcesByEventId.get(bundle.deathEvents[0]?.id ?? "") ?? [],
+    );
 
     if (bundle.birthEvents.length > 1) {
       warnings.push(
@@ -458,10 +470,12 @@ function writeBirthEvent(
   person: GedcomPerson,
   event: GedcomEvent | undefined,
   warnings: string[],
+  sourceCitations: SourceCitation[] = [],
 ) {
   if (event) {
     w.addRaw("1 BIRT");
     writeEventDatePlace(w, 2, event, warnings);
+    writeSourceCitations(w, 2, sourceCitations);
     return;
   }
 
@@ -482,11 +496,13 @@ function writeDeathEvent(
   person: GedcomPerson,
   event: GedcomEvent | undefined,
   warnings: string[],
+  sourceCitations: SourceCitation[] = [],
 ) {
   if (event) {
     w.addRaw("1 DEAT");
     writeEventDatePlace(w, 2, event, warnings);
     writeLunarEvent(w, 2, event);
+    writeSourceCitations(w, 2, sourceCitations);
     return;
   }
 
