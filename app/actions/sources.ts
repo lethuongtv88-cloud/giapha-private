@@ -274,3 +274,78 @@ export async function linkExistingPersonSource(input: ExistingPersonSourceLinkIn
 
   return { ok: true as const };
 }
+
+export type UpdatePersonSourceLinkInput = {
+  personId: string;
+  linkId: string;
+  sourceId: string;
+  title: string;
+  sourceType: SourceType;
+  author?: string;
+  repository?: string;
+  url?: string;
+  sourceNote?: string;
+  citationText?: string;
+  linkNote?: string;
+};
+
+export async function updatePersonSourceLink(input: UpdatePersonSourceLinkInput) {
+  const supabase = await getSupabase();
+
+  const personId = cleanText(input.personId);
+  const linkId = cleanText(input.linkId);
+  const sourceId = cleanText(input.sourceId);
+  const title = cleanText(input.title);
+
+  if (!personId) {
+    return { ok: false as const, error: "Thiếu personId." };
+  }
+
+  if (!linkId) {
+    return { ok: false as const, error: "Thiếu linkId." };
+  }
+
+  if (!sourceId) {
+    return { ok: false as const, error: "Thiếu sourceId." };
+  }
+
+  if (!title) {
+    return { ok: false as const, error: "Tên nguồn không được để trống." };
+  }
+
+  const { error: sourceError } = await supabase
+    .from("sources")
+    .update({
+      title,
+      source_type: input.sourceType || "other",
+      author: cleanText(input.author),
+      repository: cleanText(input.repository),
+      url: cleanText(input.url),
+      note: cleanText(input.sourceNote),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", sourceId);
+
+  if (sourceError) {
+    return { ok: false as const, error: sourceError.message };
+  }
+
+  const { error: linkError } = await supabase
+    .from("person_source_links")
+    .update({
+      citation_text: cleanText(input.citationText),
+      note: cleanText(input.linkNote),
+    })
+    .eq("id", linkId)
+    .eq("person_id", personId)
+    .eq("source_id", sourceId);
+
+  if (linkError) {
+    return { ok: false as const, error: linkError.message };
+  }
+
+  revalidatePath("/dashboard/members");
+  revalidatePath(`/dashboard/members/${personId}`);
+
+  return { ok: true as const };
+}

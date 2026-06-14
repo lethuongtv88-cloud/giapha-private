@@ -5,6 +5,7 @@ import {
   createPersonSource,
   linkExistingPersonSource,
   softDeletePersonSourceLink,
+  updatePersonSourceLink,
   type SourceType,
 } from "@/app/actions/sources";
 import { createClient } from "@/utils/supabase/client";
@@ -56,6 +57,7 @@ export default function PersonSourcesPanel({ personId }: PersonSourcesPanelProps
   const [existingSources, setExistingSources] = useState<ExistingSourceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingSource, setEditingSource] = useState<SourceRow | null>(null);
   const [mode, setMode] = useState<"new" | "existing">("new");
   const [isPending, startTransition] = useTransition();
 
@@ -71,6 +73,15 @@ export default function PersonSourcesPanel({ personId }: PersonSourcesPanelProps
   const [selectedSourceId, setSelectedSourceId] = useState("");
   const [existingCitationText, setExistingCitationText] = useState("");
   const [existingNote, setExistingNote] = useState("");
+
+  const [editTitle, setEditTitle] = useState("");
+  const [editSourceType, setEditSourceType] = useState<SourceType>("oral_history");
+  const [editAuthor, setEditAuthor] = useState("");
+  const [editRepository, setEditRepository] = useState("");
+  const [editUrl, setEditUrl] = useState("");
+  const [editSourceNote, setEditSourceNote] = useState("");
+  const [editCitationText, setEditCitationText] = useState("");
+  const [editLinkNote, setEditLinkNote] = useState("");
 
   const [error, setError] = useState<string | null>(null);
 
@@ -247,6 +258,63 @@ export default function PersonSourcesPanel({ personId }: PersonSourcesPanelProps
     });
   };
 
+  const startEdit = (source: SourceRow) => {
+    setError(null);
+    setShowForm(false);
+    setEditingSource(source);
+    setEditTitle(source.title ?? "");
+    setEditSourceType(source.source_type ?? "other");
+    setEditAuthor(source.author ?? "");
+    setEditRepository(source.repository ?? "");
+    setEditUrl(source.url ?? "");
+    setEditSourceNote(source.note ?? "");
+    setEditCitationText(source.citation_text ?? "");
+    setEditLinkNote(source.note ?? "");
+  };
+
+  const cancelEdit = () => {
+    setEditingSource(null);
+    setEditTitle("");
+    setEditSourceType("oral_history");
+    setEditAuthor("");
+    setEditRepository("");
+    setEditUrl("");
+    setEditSourceNote("");
+    setEditCitationText("");
+    setEditLinkNote("");
+  };
+
+  const handleUpdate = () => {
+    if (!editingSource) return;
+
+    setError(null);
+
+    startTransition(async () => {
+      const result = await updatePersonSourceLink({
+        personId,
+        linkId: editingSource.link_id,
+        sourceId: editingSource.source_id,
+        title: editTitle,
+        sourceType: editSourceType,
+        author: editAuthor,
+        repository: editRepository,
+        url: editUrl,
+        sourceNote: editSourceNote,
+        citationText: editCitationText,
+        linkNote: editLinkNote,
+      });
+
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
+      cancelEdit();
+      await loadSources();
+      await loadExistingSources();
+    });
+  };
+
   const handleDelete = (linkId: string) => {
     if (!window.confirm("Xóa liên kết nguồn này khỏi người này?")) return;
 
@@ -278,6 +346,7 @@ export default function PersonSourcesPanel({ personId }: PersonSourcesPanelProps
           type="button"
           onClick={() => {
             setError(null);
+            setEditingSource(null);
             setShowForm((value) => !value);
           }}
           className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-100"
@@ -290,6 +359,127 @@ export default function PersonSourcesPanel({ personId }: PersonSourcesPanelProps
       {error ? (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
+        </div>
+      ) : null}
+
+      {editingSource ? (
+        <div className="mb-5 grid gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-semibold text-stone-900">Sửa nguồn</h4>
+              <p className="mt-1 text-xs text-stone-500">
+                Thông tin nguồn là dùng chung; trích dẫn và ghi chú riêng chỉ áp dụng cho người này.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={cancelEdit}
+              className="rounded-full p-2 text-stone-500 transition hover:bg-white hover:text-stone-900"
+              title="Đóng"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-stone-700">Tên nguồn</span>
+            <input
+              value={editTitle}
+              onChange={(event) => setEditTitle(event.target.value)}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-stone-700">Loại nguồn</span>
+            <select
+              value={editSourceType}
+              onChange={(event) => setEditSourceType(event.target.value as SourceType)}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
+            >
+              {SOURCE_TYPES.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-stone-700">Người cung cấp / tác giả</span>
+            <input
+              value={editAuthor}
+              onChange={(event) => setEditAuthor(event.target.value)}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-stone-700">Nơi lưu / kho lưu trữ</span>
+            <input
+              value={editRepository}
+              onChange={(event) => setEditRepository(event.target.value)}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-stone-700">URL</span>
+            <input
+              value={editUrl}
+              onChange={(event) => setEditUrl(event.target.value)}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-stone-700">Ghi chú nguồn chung</span>
+            <textarea
+              value={editSourceNote}
+              onChange={(event) => setEditSourceNote(event.target.value)}
+              rows={2}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-stone-700">Trích dẫn riêng cho người này</span>
+            <textarea
+              value={editCitationText}
+              onChange={(event) => setEditCitationText(event.target.value)}
+              rows={2}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-stone-700">Ghi chú riêng cho người này</span>
+            <textarea
+              value={editLinkNote}
+              onChange={(event) => setEditLinkNote(event.target.value)}
+              rows={2}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2"
+            />
+          </label>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleUpdate}
+              disabled={isPending || !editTitle.trim()}
+              className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isPending ? "Đang lưu..." : "Lưu thay đổi"}
+            </button>
+
+            <button
+              type="button"
+              onClick={cancelEdit}
+              className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+            >
+              Hủy
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -532,13 +722,23 @@ export default function PersonSourcesPanel({ personId }: PersonSourcesPanelProps
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleDelete(source.link_id)}
-                  className="text-xs font-medium text-red-600 hover:text-red-700"
-                >
-                  Xóa liên kết
-                </button>
+                <div className="flex shrink-0 items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => startEdit(source)}
+                    className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    Sửa
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(source.link_id)}
+                    className="text-xs font-medium text-red-600 hover:text-red-700"
+                  >
+                    Xóa liên kết
+                  </button>
+                </div>
               </div>
 
               {source.citation_text ? (
