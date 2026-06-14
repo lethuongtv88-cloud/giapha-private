@@ -78,6 +78,11 @@ interface BackupPayload {
   family_children?: unknown[];
   events?: unknown[];
   person_events?: unknown[];
+
+  // v5 export-only fields for Source/Citation Model.
+  sources?: unknown[];
+  person_source_links?: unknown[];
+  event_source_links?: unknown[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -250,6 +255,45 @@ export async function exportData(
     };
   }
 
+  const { data: allSources, error: sourcesError } = await supabase
+    .from("sources")
+    .select("*")
+    .is("deleted_at", null);
+
+  if (sourcesError) {
+    return {
+      error: "Lỗi tải dữ liệu sources: " + sourcesError.message,
+    };
+  }
+
+  const { data: allPersonSourceLinks, error: personSourceLinksError } =
+    await supabase
+      .from("person_source_links")
+      .select("*")
+      .is("deleted_at", null);
+
+  if (personSourceLinksError) {
+    return {
+      error:
+        "Lỗi tải dữ liệu person_source_links: " +
+        personSourceLinksError.message,
+    };
+  }
+
+  const { data: allEventSourceLinks, error: eventSourceLinksError } =
+    await supabase
+      .from("event_source_links")
+      .select("*")
+      .is("deleted_at", null);
+
+  if (eventSourceLinksError) {
+    return {
+      error:
+        "Lỗi tải dữ liệu event_source_links: " +
+        eventSourceLinksError.message,
+    };
+  }
+
   let exportPersons = (allPersons ?? []) as PersonExport[];
   let exportRels = (allRels ?? []) as RelationshipExport[];
   let exportPrivateDetails = (allPrivateDetails ??
@@ -262,6 +306,9 @@ export async function exportData(
   let exportFamilyChildren = allFamilyChildren ?? [];
   let exportEvents = allEvents ?? [];
   let exportPersonEvents = allPersonEvents ?? [];
+  let exportSources = allSources ?? [];
+  let exportPersonSourceLinks = allPersonSourceLinks ?? [];
+  let exportEventSourceLinks = allEventSourceLinks ?? [];
 
   // If a root person is selected, filter the export to only their subtree
   if (exportRootId && exportPersons.some((p) => p.id === exportRootId)) {
@@ -374,6 +421,9 @@ export async function exportData(
     family_children: exportFamilyChildren,
     events: exportEvents,
     person_events: exportPersonEvents,
+    sources: exportSources,
+    person_source_links: exportPersonSourceLinks,
+    event_source_links: exportEventSourceLinks,
   };
 }
 
