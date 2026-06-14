@@ -170,44 +170,23 @@ export default function DataImportExport() {
         );
       }
 
-      const result = await importData({
-        persons: payload.persons,
-        relationships: payload.relationships,
-        person_details_private: payload.person_details_private,
-        custom_events: payload.custom_events,
-      });
+        const result = await importData({
+          persons: payload.persons,
+          relationships: payload.relationships,
+          person_details_private: payload.person_details_private,
+          custom_events: payload.custom_events,
+        });
 
-      if ("error" in result) {
         setImportStatus({
           type: "error",
-          message: result.error,
+          message:
+            result.error ||
+            "Chức năng import/restore JSON legacy đã được khóa tạm thời để tránh xóa nhầm dữ liệu. Vui lòng dùng Backup Database để restore an toàn.",
         });
         setShowConfirm(false);
         setSelectedFile(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
-      }
-
-      const parts = [
-        `${result.imported?.persons} thành viên`,
-        `${result.imported?.relationships} quan hệ`,
-      ];
-      if (result.imported?.person_details_private) {
-        parts.push(
-          `${result.imported.person_details_private} thông tin riêng tư`,
-        );
-      }
-      if (result.imported?.custom_events) {
-        parts.push(`${result.imported.custom_events} sự kiện`);
-      }
-
-      setImportStatus({
-        type: "success",
-        message: `Phục hồi thành công! Đã nhập ${parts.join(", ")}.`,
-      });
-      setShowConfirm(false);
-      setSelectedFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error: unknown) {
       setImportStatus({
         type: "error",
