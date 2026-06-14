@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useMemberListView } from "@/context/MemberListContext";
 import { useUser } from "@/components/UserProvider";
-import { PersonSourcesPanel } from "@/components/PersonSourcesPanel";
+import PersonSourcesPanel from "@/components/PersonSourcesPanel";
 
 export default function MemberDetailModal() {
   const {
