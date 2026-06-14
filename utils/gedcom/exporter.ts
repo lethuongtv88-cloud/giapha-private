@@ -266,6 +266,11 @@ export function exportToGedcomWithWarnings(data: ExportData, options?: GedcomExp
       w.addRaw("1 DIV");
       if (fam.divorceEvent) {
         writeEventDatePlace(w, 2, fam.divorceEvent, warnings);
+        writeSourceCitations(
+          w,
+          2,
+          sourceContext.eventSourcesByEventId.get(fam.divorceEvent.id) ?? [],
+        );
       }
     }
 
