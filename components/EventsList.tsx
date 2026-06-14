@@ -3,6 +3,8 @@
 import { createAdminEvent, softDeletePersonEvent } from "@/app/actions/events";
 import CustomEventModal from "@/components/modal/CustomEventModal";
 import PersonSelector from "@/components/PersonSelector";
+import PlaceSelector from "@/components/places/PlaceSelector";
+import PlaceMapLinks, { type PlaceForMapLinks } from "@/components/places/PlaceMapLinks";
 import { useMemberListView } from "@/context/MemberListContext";
 import type { Person } from "@/types";
 import { getZodiacSign } from "@/utils/dateHelpers";
@@ -28,7 +30,8 @@ import {
 } from "lucide-react";
 import { Lunar, Solar } from "lunar-javascript";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { createClient } from "@/utils/supabase/client";
+import { useEffect, useMemo, useState, useTransition } from "react";
 
 interface EventsListProps {
   persons: {
@@ -58,6 +61,7 @@ type EventModelRecord = {
   title?: string | null;
   description?: string | null;
   place_text?: string | null;
+  place_id?: string | null;
   start_date?: string | null;
   sort_date?: string | null;
   date_precision?: string | null;
@@ -77,12 +81,16 @@ type PersonEventLink = {
   role?: string | null;
 };
 
+type StructuredPlace = PlaceForMapLinks & { id: string };
+
 type ExtendedFamilyEvent = Omit<FamilyEvent, "type"> & {
   type: FamilyEvent["type"] | "marriage_upcoming" | "marriage_anniversary" | "death_recent";
   eventModelId?: string;
   eventModelRootPersonId?: string | null;
   eventModelType?: "custom" | "marriage" | "death_anniversary" | "wedding";
   lunarDateLabel?: string | null;
+  eventModelPlaceId?: string | null;
+  structuredPlace?: StructuredPlace | null;
 };
 
 const DAY_LABELS: Record<string, string> = {
@@ -277,6 +285,7 @@ function buildEventModelEvents(input: {
   events: EventModelRecord[];
   personEvents: PersonEventLink[];
   persons: EventsListProps["persons"];
+  placesById: Map<string, StructuredPlace>;
 }): ExtendedFamilyEvent[] {
   const today = startOfLocalDay(new Date());
   const personById = new Map(input.persons.map((person) => [person.id, person.full_name]));
@@ -308,7 +317,10 @@ function buildEventModelEvents(input: {
     const originMonth = eventDate.getMonth() + 1;
     const originDay = eventDate.getDate();
     const lunarDateLabel = formatLunarEventLabel(event);
-
+    const structuredPlace = event.place_id
+      ? input.placesById.get(event.place_id) ?? null
+      : null;
+    const displayLocation = structuredPlace?.name ?? event.place_text ?? undefined;
 
     if (event.type === "death_anniversary") {
       const nextOccurrence = nextMemorialOccurrence(event, eventDate, today);
@@ -331,12 +343,14 @@ function buildEventModelEvents(input: {
         originDay: event.lunar_day ?? originDay,
         eventDateLabel: memorialDateLabel,
         lunarDateLabel,
-        location: event.place_text ?? undefined,
+        location: displayLocation,
         content: event.description ?? undefined,
         isDeceased: true,
         eventModelId: event.id,
         eventModelRootPersonId: rootPersonId ?? fallbackPersonId ?? null,
         eventModelType: "death_anniversary",
+        eventModelPlaceId: event.place_id ?? null,
+        structuredPlace,
       } as ExtendedFamilyEvent);
 
       continue;
@@ -365,12 +379,14 @@ function buildEventModelEvents(input: {
         originDay,
         eventDateLabel: `${String(originDay).padStart(2, "0")}/${String(originMonth).padStart(2, "0")}`,
         lunarDateLabel,
-        location: event.place_text ?? undefined,
+        location: displayLocation,
         content: event.description ?? undefined,
         isDeceased: false,
         eventModelId: event.id,
         eventModelRootPersonId: rootPersonId ?? fallbackPersonId ?? null,
         eventModelType: event.type === "wedding" ? "wedding" : "marriage",
+        eventModelPlaceId: event.place_id ?? null,
+        structuredPlace,
       } as ExtendedFamilyEvent);
 
       continue;
@@ -387,12 +403,14 @@ function buildEventModelEvents(input: {
       originDay,
       eventDateLabel: `${String(originDay).padStart(2, "0")}/${String(originMonth).padStart(2, "0")}/${originYear}`,
       lunarDateLabel,
-      location: event.place_text ?? undefined,
+      location: displayLocation,
       content: event.description ?? undefined,
       isDeceased: false,
       eventModelId: event.id,
       eventModelRootPersonId: rootPersonId ?? fallbackPersonId ?? null,
       eventModelType: "custom",
+      eventModelPlaceId: event.place_id ?? null,
+      structuredPlace,
     } as ExtendedFamilyEvent);
   }
 
@@ -596,12 +614,19 @@ function EventCard({
             </p>
           )}
 
-          {event.location && (
+          {event.structuredPlace ? (
+            <div
+              className="mt-1"
+              onClick={(clickEvent) => clickEvent.stopPropagation()}
+            >
+              <PlaceMapLinks place={event.structuredPlace} compact={false} />
+            </div>
+          ) : event.location ? (
             <p className="text-[13px] sm:text-sm text-stone-500 flex items-center gap-1.5 leading-snug">
               <MapPin className="size-3.5 shrink-0" />
               <span className="truncate">{event.location}</span>
             </p>
-          )}
+          ) : null}
           {event.content && (
             <p className="text-[13px] sm:text-sm text-stone-400 flex items-start gap-1.5 leading-snug mt-0.5">
               <AlignLeft className="size-3.5 shrink-0 mt-0.5" />
@@ -652,6 +677,7 @@ function SharedEventCreateForm({
   const [calendarMode, setCalendarMode] = useState<"gregorian" | "lunar">("gregorian");
   const [lunarDateText, setLunarDateText] = useState("");
   const [lunarIsLeapMonth, setLunarIsLeapMonth] = useState(false);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
 
   const handleSubmit = (formData: FormData) => {
     if (calendarMode === "lunar") {
@@ -686,6 +712,7 @@ function SharedEventCreateForm({
     }
 
     formData.set("type", eventType);
+    formData.set("place_id", selectedPlaceId ?? "");
     if (eventType === "wedding") {
       if (!brideId && !groomId) {
         window.alert("Sự kiện đám cưới cần chọn cô dâu hoặc chú rể.");
@@ -864,14 +891,28 @@ function SharedEventCreateForm({
           </label>
         ) : null}
 
-        <label className={`block text-sm font-medium text-stone-700 ${eventType === "wedding" ? "" : "sm:col-span-2"}`}>
-          Địa điểm
-          <input
-            name="place_text"
-            placeholder="Nơi diễn ra nếu có"
-            className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+        <div className="sm:col-span-2">
+          <PlaceSelector
+            value={selectedPlaceId}
+            onChange={(placeId) => setSelectedPlaceId(placeId)}
+            label="Địa điểm chuẩn"
+            placeholder="Tìm hoặc tạo địa điểm theo tỉnh/xã hiện tại..."
+            disabled={disabled}
           />
-        </label>
+
+          <label className="mt-3 block text-sm font-medium text-stone-700">
+            Địa điểm ghi chú / fallback
+            <input
+              name="place_text"
+              placeholder="Ghi chú địa điểm tự do nếu chưa chọn địa điểm chuẩn"
+              className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            />
+          </label>
+
+          <p className="mt-2 text-xs leading-5 text-stone-500">
+            Nếu đã chọn địa điểm chuẩn, hệ thống lưu place_id để mở Google Maps và dẫn đường. Ô ghi chú vẫn được giữ làm fallback.
+          </p>
+        </div>
 
         {eventType === "wedding" ? (
           <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
@@ -927,6 +968,9 @@ export default function EventsList({
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+  const [placesById, setPlacesById] = useState<Map<string, StructuredPlace>>(
+    () => new Map(),
+  );
   const [isPending, startTransition] = useTransition();
 
   const handleOpenEditModal = (event: ExtendedFamilyEvent) => {
@@ -1007,6 +1051,57 @@ export default function EventsList({
     router.refresh();
   };
 
+  useEffect(() => {
+    const placeIds = Array.from(
+      new Set(
+        eventModelEvents
+          .map((event) => event.place_id)
+          .filter(Boolean),
+      ),
+    ) as string[];
+
+    if (placeIds.length === 0) {
+      setPlacesById(new Map());
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadEventPlaces() {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("places")
+        .select(
+          "id, name, province, commune, address_detail, old_province, old_district, old_commune, latitude, longitude, google_maps_url, note",
+        )
+        .in("id", placeIds)
+        .is("deleted_at", null);
+
+      if (!isMounted) return;
+
+      if (error) {
+        console.error(error);
+        setPlacesById(new Map());
+        return;
+      }
+
+      setPlacesById(
+        new Map(
+          ((data ?? []) as StructuredPlace[]).map((place) => [
+            place.id,
+            place,
+          ]),
+        ),
+      );
+    }
+
+    void loadEventPlaces();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [eventModelEvents]);
+
   const [todayDate] = useState(() => {
     const today = new Date();
     const weekdays = [
@@ -1045,6 +1140,7 @@ export default function EventsList({
       events: eventModelEvents,
       personEvents,
       persons,
+      placesById,
     });
 
     const baseEventsWithoutDeathDates = baseEvents.filter(
@@ -1054,7 +1150,7 @@ export default function EventsList({
     return [...baseEventsWithoutDeathDates, ...modelEvents].sort(
       (a, b) => a.daysUntil - b.daysUntil || a.nextOccurrence.getTime() - b.nextOccurrence.getTime(),
     );
-  }, [persons, customEvents, eventModelEvents, personEvents]);
+  }, [persons, customEvents, eventModelEvents, personEvents, placesById]);
 
   const filtered = useMemo(() => {
     let result = allEvents;

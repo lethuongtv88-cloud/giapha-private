@@ -77,6 +77,7 @@ type PermissionEvent = {
   title?: string | null;
   description?: string | null;
   place_text?: string | null;
+  place_id?: string | null;
   legacy_source?: string | null;
   start_date?: string | null;
   end_date?: string | null;

@@ -2,8 +2,9 @@
 
 import { createAdminEvent } from "@/app/actions/events";
 import PersonSelector from "@/components/PersonSelector";
+import PlaceSelector from "@/components/places/PlaceSelector";
 import type { Person } from "@/types";
-import { CalendarPlus, Loader2, MapPin, Users2, X } from "lucide-react";
+import { CalendarPlus, Loader2, Users2, X } from "lucide-react";
 import { useState, useTransition } from "react";
 
 const EVENT_TYPES = [
@@ -29,6 +30,7 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
   const [rootPersonId, setRootPersonId] = useState<string | null>(null);
   const [brideId, setBrideId] = useState<string | null>(null);
   const [groomId, setGroomId] = useState<string | null>(null);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -39,6 +41,7 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
 
     formData.set("type", eventType);
     formData.set("date_precision", precision);
+    formData.set("place_id", selectedPlaceId ?? "");
 
     if (rootPersonId) formData.set("root_person_id", rootPersonId);
     if (brideId) formData.set("bride_id", brideId);
@@ -66,6 +69,7 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
             ? `Đã thêm sự kiện, nhưng audit log chưa ghi được: ${auditError ?? "không rõ lỗi"}`
             : "Đã thêm sự kiện.",
         );
+        setSelectedPlaceId(null);
         setIsOpen(false);
       })();
     });
@@ -174,17 +178,30 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
               />
             </label>
 
-            <label className="space-y-1.5">
-              <span className="text-xs font-bold uppercase tracking-wide text-stone-500">Địa điểm</span>
-              <div className="relative">
-                <MapPin className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
+            <div className="space-y-3 md:col-span-2">
+              <PlaceSelector
+                value={selectedPlaceId}
+                onChange={(placeId) => setSelectedPlaceId(placeId)}
+                label="Địa điểm chuẩn"
+                placeholder="Tìm hoặc tạo địa điểm theo tỉnh/xã hiện tại..."
+                disabled={isPending}
+              />
+
+              <label className="block space-y-1.5">
+                <span className="text-xs font-bold uppercase tracking-wide text-stone-500">
+                  Địa điểm ghi chú / fallback
+                </span>
                 <input
                   name="place_text"
-                  className="w-full rounded-xl border border-stone-200 py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
-                  placeholder="Nhà hàng, tư gia, địa chỉ tổ chức..."
+                  className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                  placeholder="Nhà hàng, tư gia, địa chỉ tổ chức nếu chưa chọn địa điểm chuẩn..."
                 />
-              </div>
-            </label>
+              </label>
+
+              <p className="text-xs leading-5 text-stone-500">
+                Nếu đã chọn địa điểm chuẩn, hệ thống lưu place_id để mở Google Maps và dẫn đường. Ô ghi chú vẫn được giữ làm fallback.
+              </p>
+            </div>
           </div>
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
