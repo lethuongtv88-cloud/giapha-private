@@ -132,6 +132,51 @@ async function countMissingSources(supabase: Awaited<ReturnType<typeof getSupaba
 }
 
 
+async function countDataCompletenessIssues(supabase: Awaited<ReturnType<typeof getSupabase>>) {
+  const personsRes = await supabase
+    .from("persons")
+    .select("id, full_name, gender, birth_year, death_year, death_lunar_year, death_lunar_month, death_lunar_day, is_deceased")
+    .is("deleted_at", null)
+    .limit(100000);
+
+  if (personsRes.error) {
+    return { count: 0, error: true };
+  }
+
+  const persons = personsRes.data ?? [];
+
+  const isBlankName = (name: string | null) => {
+    const value = (name ?? "").trim().toLowerCase();
+    return !value || value === "unknown" || value === "chưa rõ tên";
+  };
+
+  const hasDeathAnniversary = (person: {
+    death_lunar_year: number | null;
+    death_lunar_month: number | null;
+    death_lunar_day: number | null;
+  }) => {
+    return Boolean(
+      person.death_lunar_year ||
+        person.death_lunar_month ||
+        person.death_lunar_day,
+    );
+  };
+
+  const count = persons.filter((person) => {
+    return (
+      isBlankName(person.full_name) ||
+      !person.birth_year ||
+      (person.is_deceased && !person.death_year) ||
+      (person.is_deceased && !hasDeathAnniversary(person)) ||
+      !person.gender ||
+      !["male", "female", "other"].includes(person.gender)
+    );
+  }).length;
+
+  return { count, error: false };
+}
+
+
 export default async function DataMaintenancePage() {
   const supabase = await getSupabase();
 
@@ -141,6 +186,7 @@ export default async function DataMaintenancePage() {
     emptyFamiliesRes,
     brokenPersonEventsRes,
     missingSourcesRes,
+    dataCompletenessRes,
   ] = await Promise.all([
       supabase
         .from("persons")
@@ -154,6 +200,7 @@ export default async function DataMaintenancePage() {
 
       countBrokenPersonEvents(supabase),
       countMissingSources(supabase),
+      countDataCompletenessIssues(supabase),
     ]);
 
   const unknownCount = unknownRes.count ?? 0;
@@ -163,6 +210,7 @@ export default async function DataMaintenancePage() {
     typeof emptyFamiliesRes.data?.count === "number" ? emptyFamiliesRes.data.count : 0;
   const brokenPersonEventsCount = brokenPersonEventsRes.count;
   const missingSourcesCount = missingSourcesRes.count;
+  const dataCompletenessCount = dataCompletenessRes.count;
 
   return (
     <div className="flex-1 w-full relative flex flex-col pb-12">
@@ -222,6 +270,15 @@ export default async function DataMaintenancePage() {
             icon={<DatabaseZap className="size-6" />}
             count={missingSourcesCount}
             tone={missingSourcesCount > 0 ? "amber" : "emerald"}
+          />
+
+          <ToolCard
+            title="Data completeness"
+            description="Kiểm tra người thiếu tên, giới tính, năm sinh, năm mất hoặc ngày giỗ."
+            href="/dashboard/data-maintenance/data-completeness"
+            icon={<Wrench className="size-6" />}
+            count={dataCompletenessCount}
+            tone={dataCompletenessCount > 0 ? "amber" : "emerald"}
           />
 
           <ToolCard
