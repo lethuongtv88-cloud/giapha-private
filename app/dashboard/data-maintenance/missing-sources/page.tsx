@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createClient } from "@/utils/supabase/server";
+import { getSupabase } from "@/utils/supabase/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +39,7 @@ function eventTypeLabel(type: string) {
 }
 
 export default async function MissingSourcesPage() {
-  const supabase = await createClient();
+  const supabase = await getSupabase();
 
   const { data: persons } = await supabase
     .from("persons_active")
