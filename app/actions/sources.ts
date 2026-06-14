@@ -122,3 +122,103 @@ export async function softDeletePersonSourceLink(linkId: string, personId: strin
 
   return { ok: true as const };
 }
+
+export type EventSourceInput = {
+  eventId: string;
+  title: string;
+  sourceType: SourceType;
+  author?: string;
+  repository?: string;
+  url?: string;
+  citationText?: string;
+  note?: string;
+};
+
+export async function createEventSource(input: EventSourceInput) {
+  const supabase = await getSupabase();
+
+  const eventId = cleanText(input.eventId);
+  const title = cleanText(input.title);
+
+  if (!eventId) {
+    return { ok: false as const, error: "Thiếu eventId." };
+  }
+
+  if (!title) {
+    return { ok: false as const, error: "Tên nguồn không được để trống." };
+  }
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) {
+    return { ok: false as const, error: userError.message };
+  }
+
+  const { data: source, error: sourceError } = await supabase
+    .from("sources")
+    .insert({
+      title,
+      source_type: input.sourceType || "other",
+      author: cleanText(input.author),
+      repository: cleanText(input.repository),
+      url: cleanText(input.url),
+      note: cleanText(input.note),
+      created_by: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+
+  if (sourceError || !source) {
+    return {
+      ok: false as const,
+      error: sourceError?.message ?? "Không tạo được source.",
+    };
+  }
+
+  const { error: linkError } = await supabase.from("event_source_links").insert({
+    event_id: eventId,
+    source_id: source.id,
+    citation_text: cleanText(input.citationText),
+    note: cleanText(input.note),
+    created_by: user?.id ?? null,
+  });
+
+  if (linkError) {
+    await supabase
+      .from("sources")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", source.id);
+
+    return { ok: false as const, error: linkError.message };
+  }
+
+  revalidatePath("/dashboard/members");
+
+  return { ok: true as const, sourceId: source.id };
+}
+
+export async function softDeleteEventSourceLink(linkId: string) {
+  const supabase = await getSupabase();
+
+  const cleanLinkId = cleanText(linkId);
+
+  if (!cleanLinkId) {
+    return { ok: false as const, error: "Thiếu linkId." };
+  }
+
+  const { error } = await supabase
+    .from("event_source_links")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", cleanLinkId);
+
+  if (error) {
+    return { ok: false as const, error: error.message };
+  }
+
+  revalidatePath("/dashboard/members");
+
+  return { ok: true as const };
+}

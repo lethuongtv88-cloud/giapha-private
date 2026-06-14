@@ -6,10 +6,11 @@ import {
   updatePersonEvent,
 } from "@/app/actions/events";
 import PersonSelector from "@/components/PersonSelector";
+import { EventSourcesPanel } from "@/components/EventSourcesPanel";
 import { PersonTimeline, type TimelineEvent } from "@/components/PersonTimeline";
 import type { Person } from "@/types";
 import { createClient } from "@/utils/supabase/client";
-import { CalendarDays, Edit3, Plus, Trash2, X } from "lucide-react";
+import { BookOpen, CalendarDays, Edit3, Plus, Trash2, X } from "lucide-react";
 import { Lunar } from "lunar-javascript";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
@@ -86,6 +87,7 @@ export default function PersonEventsPanel({
   const [persons, setPersons] = useState<Person[]>([]);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<EditingState | null>(null);
+  const [sourceEvent, setSourceEvent] = useState<EditableTimelineEvent | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -274,6 +276,14 @@ export default function PersonEventsPanel({
           persons={persons.filter((person) => person.id !== personId)}
           onCancel={() => setEditing(null)}
           onSubmit={handleSubmit}
+        />
+      ) : null}
+
+      {sourceEvent ? (
+        <EventSourcesPanel
+          eventId={sourceEvent.id}
+          eventTitle={sourceEvent.title || getEventTypeLabel(sourceEvent.type)}
+          onClose={() => setSourceEvent(null)}
         />
       ) : null}
 
