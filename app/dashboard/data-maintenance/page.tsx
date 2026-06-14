@@ -92,6 +92,46 @@ async function countBrokenPersonEvents(supabase: Awaited<ReturnType<typeof getSu
   };
 }
 
+async function countMissingSources(supabase: Awaited<ReturnType<typeof getSupabase>>) {
+  const [personsRes, personLinksRes, eventsRes, eventLinksRes] = await Promise.all([
+    supabase.from("persons").select("id").is("deleted_at", null).limit(100000),
+    supabase.from("person_source_links").select("person_id").is("deleted_at", null).limit(100000),
+    supabase
+      .from("events")
+      .select("id, type")
+      .is("deleted_at", null)
+      .in("type", ["birth", "death", "marriage", "divorce"])
+      .limit(100000),
+    supabase.from("event_source_links").select("event_id").is("deleted_at", null).limit(100000),
+  ]);
+
+  if (personsRes.error || personLinksRes.error || eventsRes.error || eventLinksRes.error) {
+    return { count: 0, error: true };
+  }
+
+  const personIdsWithSource = new Set(
+    (personLinksRes.data ?? []).map((row) => row.person_id).filter(Boolean),
+  );
+
+  const eventIdsWithSource = new Set(
+    (eventLinksRes.data ?? []).map((row) => row.event_id).filter(Boolean),
+  );
+
+  const personsMissingSource = (personsRes.data ?? []).filter(
+    (person) => !personIdsWithSource.has(person.id),
+  ).length;
+
+  const importantEventsMissingSource = (eventsRes.data ?? []).filter(
+    (event) => !eventIdsWithSource.has(event.id),
+  ).length;
+
+  return {
+    count: personsMissingSource + importantEventsMissingSource,
+    error: false,
+  };
+}
+
+
 export default async function DataMaintenancePage() {
   const supabase = await getSupabase();
 
@@ -173,7 +213,8 @@ export default async function DataMaintenancePage() {
             description="Kiểm tra người và sự kiện quan trọng chưa có nguồn xác minh."
             href="/dashboard/data-maintenance/missing-sources"
             icon={<DatabaseZap className="size-6" />}
-            tone="amber"
+            count={missingSourcesCount}
+            tone={missingSourcesCount > 0 ? "amber" : "emerald"}
           />
 
           <ToolCard
