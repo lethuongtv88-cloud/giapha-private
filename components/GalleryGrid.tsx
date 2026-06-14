@@ -30,7 +30,10 @@ export default function GalleryGrid({ items, isAdmin, onEdit, onDeleteSuccess }:
         await supabase.storage.from("gallery").remove([fileName]);
       }
 
-      // Delete from db
+      // NOTE:
+      // Production database currently may not have public.gallery_items.
+      // Keep hard delete here until Gallery schema is formally migrated.
+      // When gallery_items gets deleted_at, convert this to soft delete.
       const { error } = await supabase.from("gallery_items").delete().eq("id", item.id);
       if (error) throw error;
 
