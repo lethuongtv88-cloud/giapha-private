@@ -4,6 +4,7 @@ import PersonCard from "@/components/PersonCard";
 import { Person, Relationship } from "@/types";
 import { ArrowUpDown, Filter, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { includesVietnameseSearch } from "@/utils/search/normalizeVietnameseSearch";
 import { useMemberListView } from "@/context/MemberListContext";
 
 export default function MemberList({
@@ -23,9 +24,10 @@ export default function MemberList({
 
   const filteredPersons = useMemo(() => {
     return initialPersons.filter((person) => {
-      const matchesSearch = person.full_name
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
+      const matchesSearch = includesVietnameseSearch(
+        person.full_name,
+        searchTerm,
+      );
 
       let matchesFilter = true;
       switch (filterOption) {

@@ -15,6 +15,7 @@ import {
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { includesVietnameseSearch } from "@/utils/search/normalizeVietnameseSearch";
 import DefaultAvatar from "./DefaultAvatar";
 import { FemaleIcon, MaleIcon } from "./GenderIcons";
 
@@ -71,7 +72,7 @@ function PersonSelector({
         .filter(
           (p) =>
             p.id !== disabledId &&
-            p.full_name.toLowerCase().includes(search.toLowerCase()),
+            includesVietnameseSearch(p.full_name, search),
         )
         .slice(0, 20),
     [persons, disabledId, search],

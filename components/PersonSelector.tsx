@@ -7,6 +7,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import DefaultAvatar from "./DefaultAvatar";
 import { FemaleIcon, MaleIcon } from "./GenderIcons";
+import { includesVietnameseSearch } from "@/utils/search/normalizeVietnameseSearch";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const getGenderStyle = (gender: string) => {
@@ -48,8 +49,8 @@ export default function PersonSelector({
 
   const filteredPersons = persons
     .filter((p) => {
-      const searchStr = `${p.full_name} ${p.birth_year || ""}`.toLowerCase();
-      return searchStr.includes(searchTerm.toLowerCase());
+      const searchStr = `${p.full_name} ${p.birth_year || ""}`;
+      return includesVietnameseSearch(searchStr, searchTerm);
     })
     .slice(0, 5);
 
