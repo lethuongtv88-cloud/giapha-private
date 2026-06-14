@@ -1,4 +1,5 @@
 import { buildEventMessage } from "@/utils/events/eventMessages";
+import { Lunar, Solar } from "lunar-javascript";
 import {
   buildVisiblePersonSetForProfile,
   filterPersonEventsForVisiblePersons,
@@ -137,6 +138,53 @@ function nextYearlyOccurrence(month: number, day: number) {
   return startOfLocalDay(occurrence);
 }
 
+function nextSolarForLunar(
+  lunarMonth: number,
+  lunarDay: number,
+  fromDate: Date,
+  isLeapMonth = false,
+) {
+  try {
+    const todaySolar = Solar.fromYmd(
+      fromDate.getFullYear(),
+      fromDate.getMonth() + 1,
+      fromDate.getDate(),
+    );
+    const currentLunarYear = todaySolar.getLunar().getYear();
+    const lunarMonthValue = isLeapMonth ? -lunarMonth : lunarMonth;
+
+    for (let offset = 0; offset <= 2; offset += 1) {
+      try {
+        const lunar = Lunar.fromYmd(currentLunarYear + offset, lunarMonthValue, lunarDay);
+        const solar = lunar.getSolar();
+        const candidate = startOfLocalDay(
+          new Date(solar.getYear(), solar.getMonth() - 1, solar.getDay()),
+        );
+        if (candidate.getTime() >= startOfLocalDay(fromDate).getTime()) return candidate;
+      } catch {
+        // Leap lunar months do not exist every year; try the next lunar year.
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function nextMemorialOccurrence(event: HaEvent, eventDate: Date, today: Date) {
+  if (event.lunar_month && event.lunar_day) {
+    return nextSolarForLunar(
+      event.lunar_month,
+      event.lunar_day,
+      today,
+      Boolean(event.lunar_is_leap_month),
+    );
+  }
+
+  return nextYearlyOccurrence(eventDate.getMonth() + 1, eventDate.getDate());
+}
+
 function formatLunar(input: {
   lunar_year?: number | null;
   lunar_month?: number | null;
@@ -244,6 +292,8 @@ export function buildHomeAssistantUpcomingEvents(input: {
     ? input.persons.filter((person) => visiblePersonIds.has(person.id))
     : input.persons;
 
+
+
   for (const person of visiblePersons) {
     if (person.birth_month && person.birth_day) {
       const next = nextYearlyOccurrence(person.birth_month, person.birth_day);
@@ -273,42 +323,19 @@ export function buildHomeAssistantUpcomingEvents(input: {
       }
     }
 
-    const deathMonth = person.death_lunar_month ?? person.death_month;
-    const deathDay = person.death_lunar_day ?? person.death_day;
-    if (person.is_deceased && deathMonth && deathDay) {
-      const next = nextYearlyOccurrence(deathMonth, deathDay);
-      const daysUntil = differenceInDays(today, next);
-      if (daysUntil >= 0 && daysUntil <= maxDays) {
-        const msg = buildEventMessage({
-          type: "death_anniversary",
-          personName: person.full_name,
-          daysUntil,
-        });
-        out.push({
-          id: `death_anniversary:${person.id}`,
-          source: "person_legacy",
-          type: "death_anniversary",
-          title: msg.title,
-          message: `${msg.emoji} ${msg.message}`,
-          emoji: msg.emoji,
-          label: msg.label,
-          date: isoDate(next),
-          daysUntil,
-          personId: person.id,
-          personName: person.full_name,
-          location: null,
-          lunarDate: person.death_lunar_month && person.death_lunar_day
-            ? `${String(person.death_lunar_day).padStart(2, "0")}/${String(person.death_lunar_month).padStart(2, "0")}${person.death_lunar_year ? `/${person.death_lunar_year}` : ""}`
-            : null,
-          eventId: null,
-        });
-      }
-    }
+    // Ngày mất không còn được xuất thành thông báo Home Assistant.
+    // Chỉ event_model type=death_anniversary mới được nhắc hằng năm.
   }
 
   for (const event of eventFilter.events) {
     if (event.deleted_at) continue;
-    if (event.type !== "custom" && event.type !== "marriage" && event.type !== "death") continue;
+    if (
+      event.type !== "custom" &&
+      event.type !== "marriage" &&
+      event.type !== "death_anniversary"
+    ) {
+      continue;
+    }
 
     const eventDate = parseIsoLocalDate(event.start_date || event.sort_date);
     if (!eventDate) continue;
@@ -321,27 +348,32 @@ export function buildHomeAssistantUpcomingEvents(input: {
     const fallbackPersonId = principalIds[0] ?? rootId ?? null;
     const personName = event.title || principalNames.join(" và ") || "Sự kiện gia đình";
 
-    if (event.type === "death") {
-      const daysUntil = differenceInDays(today, eventDate);
-      if (daysUntil < -5 || daysUntil > 0) continue;
+    if (event.type === "death_anniversary") {
+      const memorialPersonName =
+        principalNames.length > 0 ? principalNames.join(" và ") : "người thân";
+      const next = nextMemorialOccurrence(event, eventDate, today);
+      if (!next) continue;
+
+      const daysUntil = differenceInDays(today, next);
+      if (daysUntil < 0 || daysUntil > maxDays) continue;
       const msg = buildEventMessage({
-        type: "death_recent",
-        personName,
+        type: "death_anniversary",
+        personName: memorialPersonName,
         daysUntil,
         content: event.description,
       });
       out.push({
-        id: `event:${event.id}`,
+        id: `event:${event.id}:death_anniversary`,
         source: "event_model",
-        type: "death_recent",
+        type: "death_anniversary",
         title: msg.title,
         message: `${msg.emoji} ${msg.message}`,
         emoji: msg.emoji,
         label: msg.label,
-        date: isoDate(eventDate),
+        date: isoDate(next),
         daysUntil,
         personId: fallbackPersonId,
-        personName,
+        personName: memorialPersonName,
         location: event.place_text ?? null,
         lunarDate: formatLunar(event),
         eventId: event.id,
