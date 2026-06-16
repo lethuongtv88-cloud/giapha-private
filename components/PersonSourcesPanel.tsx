@@ -5,6 +5,7 @@ import {
   createPersonSource,
   linkExistingPersonSource,
   softDeletePersonSourceLink,
+  softDeleteSource,
   updatePersonSourceLink,
   type SourceType,
 } from "@/app/actions/sources";
@@ -315,6 +316,31 @@ export default function PersonSourcesPanel({ personId }: PersonSourcesPanelProps
     });
   };
 
+  const handleDeleteSource = () => {
+    if (!editingSource) return;
+
+    if (
+      !window.confirm(
+        "Xóa nguồn này khỏi toàn bộ hệ thống? Nguồn sẽ bị gỡ khỏi tất cả người và sự kiện đang dùng.",
+      )
+    ) {
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await softDeleteSource(editingSource.source_id);
+
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
+      cancelEdit();
+      await loadSources();
+      await loadExistingSources();
+    });
+  };
+
   const handleDelete = (linkId: string) => {
     if (!window.confirm("Xóa liên kết nguồn này khỏi người này?")) return;
 
@@ -478,6 +504,15 @@ export default function PersonSourcesPanel({ personId }: PersonSourcesPanelProps
               className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
             >
               Hủy
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDeleteSource}
+              disabled={isPending}
+              className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Xóa nguồn
             </button>
           </div>
         </div>

@@ -290,7 +290,10 @@ export default function LineageManager({
 
       const result: ComputedUpdate[] = persons.map((p) => {
         const newGen = genMap.has(p.id) ? genMap.get(p.id)! : null;
-        const newOrder = orderMap.has(p.id) ? orderMap.get(p.id)! : null;
+        const computedOrder = orderMap.has(p.id) ? orderMap.get(p.id)! : null;
+        // Không ghi đè thứ tự sinh đã nhập thủ công.
+        // Nếu birth_order đã có sẵn, giữ nguyên; tự tính chỉ dùng làm fallback khi còn trống.
+        const newOrder = p.birth_order ?? computedOrder;
         const newInLaw = inLawMap.get(p.id) ?? false;
 
         return {
@@ -305,7 +308,7 @@ export default function LineageManager({
           gender: p.gender,
           changed:
             newGen !== p.generation ||
-            newOrder !== p.birth_order ||
+            (p.birth_order == null && computedOrder !== p.birth_order) ||
             newInLaw !== p.is_in_law,
         };
       });
@@ -506,6 +509,15 @@ export default function LineageManager({
                             </span>
                           </>
                         )}
+                        {u.old_birth_order != null ? (
+                          <span className="ml-2 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700 ring-1 ring-sky-100">
+                            thủ công
+                          </span>
+                        ) : u.new_birth_order != null ? (
+                          <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-100">
+                            tự tính
+                          </span>
+                        ) : null}
                       </td>
                         <td className="px-4 py-3 text-center">
                           <span
