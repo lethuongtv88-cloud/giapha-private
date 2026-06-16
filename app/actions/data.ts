@@ -421,7 +421,7 @@ export async function exportData(
   }
 
   return {
-    version: 4, // v4: adds Family/Event Model export fields, still imports legacy-safe payload only
+    version: 6, // v6: adds Family/Event/Source/Place export fields, import remains locked
     timestamp: new Date().toISOString(),
     persons: exportPersons,
     relationships: exportRels,
