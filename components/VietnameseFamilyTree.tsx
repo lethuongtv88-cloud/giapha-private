@@ -1,7 +1,7 @@
 "use client";
 
 import { Person, Relationship } from "@/types";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Check, Clipboard, Minus, Plus } from "lucide-react";
 import { usePanZoom } from "@/hooks/usePanZoom";
 import { useMemberListView } from "@/context/MemberListContext";
@@ -202,6 +202,49 @@ export default function VietnameseFamilyTree({
     DEFAULT_AUTO_COLLAPSE_LEVEL,
   );
 
+  // Hiển thị cây từ từ theo thế hệ (thế hệ 1 trước, rồi 2, 3...) thay vì đợi
+  // tính xong toàn bộ cây mới hiển thị — vừa mượt hơn khi mở nhánh lớn, vừa
+  // giảm khối lượng tính/vẽ ngay lần render đầu tiên.
+  const [renderDepthLimit, setRenderDepthLimit] = useState(1);
+  const rootIdForProgressiveReveal = roots[0]?.id ?? null;
+
+  useEffect(() => {
+    if (!rootIdForProgressiveReveal) return;
+
+    setRenderDepthLimit(1);
+    let cancelled = false;
+    let frame = 0;
+
+    const step = () => {
+      if (cancelled) return;
+      frame += 1;
+      setRenderDepthLimit((prev) => prev + 1);
+      // Dừng lại ở mức đủ sâu để phủ hầu hết trường hợp; sau đó, mở rộng
+      // thủ công (nút +/- hoặc bấm mở nhánh) sẽ dùng renderDepthLimit rất
+      // lớn (xem bên dưới) nên không bị giới hạn nữa.
+      if (frame < 12) {
+        requestAnimationFrame(step);
+      } else {
+        setRenderDepthLimit(Infinity);
+      }
+    };
+
+    const raf = requestAnimationFrame(step);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [rootIdForProgressiveReveal]);
+
+  // Khi người dùng chủ động đổi "Số thế hệ" hoặc bấm mở nhánh, không giới hạn
+  // theo hiệu ứng hiển thị từ từ nữa — hiển thị ngay theo đúng lựa chọn.
+  useEffect(() => {
+    if (manualExpandedIds.size > 0 || autoCollapseLevel > renderDepthLimit) {
+      setRenderDepthLimit(Infinity);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manualExpandedIds, autoCollapseLevel]);
+
   applyTreeSpacing(compactTree);
 
   const { showAvatar, setMemberModalId } = useMemberListView();
@@ -263,6 +306,7 @@ export default function VietnameseFamilyTree({
       filters,
       level: 0,
       visited: new Set(),
+      renderDepthLimit,
     });
 
     const endedAt =
@@ -288,7 +332,13 @@ export default function VietnameseFamilyTree({
     hideMales,
     hideFemales,
     compactTree,
+    renderDepthLimit,
   ]);
+
+  const minimapNodePositions = useMemo(() => {
+    if (!rootBlock) return [];
+    return collectNodePositions(rootBlock, 0, 0);
+  }, [rootBlock]);
 
   const diagnostics = useMemo(() => {
     if (!rootBlock) {
@@ -403,6 +453,16 @@ export default function VietnameseFamilyTree({
         setShow={setShowDiagnostics}
         setAutoCollapseLevel={setAutoCollapseLevel}
       />
+
+      {rootBlock && (
+        <TreeMinimap
+          containerRef={containerRef}
+          nodePositions={minimapNodePositions}
+          contentWidth={rootBlock.width}
+          contentHeight={rootBlock.height}
+          scale={scale}
+        />
+      )}
 
       <div
         ref={containerRef}
@@ -796,6 +856,159 @@ function collectTreeDiagnostics({
     layoutDurationMs: layoutPerformance.durationMs,
     measuredAt: layoutPerformance.measuredAt,
   };
+}
+
+function collectNodePositions(
+  block: TreeBlock,
+  x: number,
+  y: number,
+  out: { x: number; y: number }[] = [],
+): { x: number; y: number }[] {
+  for (const node of block.nodes) {
+    out.push({ x: x + node.x, y: y + node.y });
+  }
+
+  const childTopY = y + NODE_HEIGHT + GENERATION_GAP;
+
+  for (const group of block.groups) {
+    if (!group.expanded) continue;
+    for (const slot of group.visibleChildren) {
+      collectNodePositions(slot.block, x + group.x + slot.x, childTopY, out);
+    }
+  }
+
+  return out;
+}
+
+function TreeMinimap({
+  containerRef,
+  nodePositions,
+  contentWidth,
+  contentHeight,
+  scale,
+}: {
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  nodePositions: { x: number; y: number }[];
+  contentWidth: number;
+  contentHeight: number;
+  scale: number;
+}) {
+  const MINIMAP_WIDTH = 180;
+  const MINIMAP_HEIGHT = 130;
+  const PADDING = 40;
+
+  const [viewport, setViewport] = useState({
+    scrollLeft: 0,
+    scrollTop: 0,
+    clientWidth: 0,
+    clientHeight: 0,
+  });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      setViewport({
+        scrollLeft: el.scrollLeft,
+        scrollTop: el.scrollTop,
+        clientWidth: el.clientWidth,
+        clientHeight: el.clientHeight,
+      });
+    };
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(update);
+    };
+
+    update();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(el);
+
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      resizeObserver.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [containerRef]);
+
+  if (nodePositions.length === 0 || contentWidth <= 0 || contentHeight <= 0) {
+    return null;
+  }
+
+  const totalWidth = contentWidth + PADDING * 2;
+  const totalHeight = contentHeight + PADDING * 2;
+  const mmScale = Math.min(
+    MINIMAP_WIDTH / totalWidth,
+    MINIMAP_HEIGHT / totalHeight,
+  );
+
+  const toMiniX = (worldX: number) => (worldX + PADDING) * mmScale;
+  const toMiniY = (worldY: number) => (worldY + PADDING) * mmScale;
+
+  // Vùng nhìn thấy hiện tại quy đổi từ toạ độ scroll thực (đã nhân theo scale
+  // phóng to/thu nhỏ của canvas) sang toạ độ world của layout cây.
+  const viewX = viewport.scrollLeft / scale;
+  const viewY = viewport.scrollTop / scale;
+  const viewW = viewport.clientWidth / scale;
+  const viewH = viewport.clientHeight / scale;
+
+  function handleMinimapClick(event: React.MouseEvent<SVGSVGElement>) {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+
+    const worldX = clickX / mmScale - PADDING;
+    const worldY = clickY / mmScale - PADDING;
+
+    el.scrollTo({
+      left: Math.max(0, worldX * scale - el.clientWidth / 2),
+      top: Math.max(0, worldY * scale - el.clientHeight / 2),
+      behavior: "smooth",
+    });
+  }
+
+  return (
+    <div
+      className="absolute bottom-4 right-4 z-40 rounded-xl border border-stone-200/70 bg-white/90 backdrop-blur-md shadow-lg p-1.5"
+      title="Vị trí hiện tại trên sơ đồ cây"
+    >
+      <svg
+        width={MINIMAP_WIDTH}
+        height={MINIMAP_HEIGHT}
+        viewBox={`0 0 ${MINIMAP_WIDTH} ${MINIMAP_HEIGHT}`}
+        className="cursor-pointer rounded-lg bg-stone-50"
+        onClick={handleMinimapClick}
+      >
+        {nodePositions.map((pos, i) => (
+          <circle
+            key={i}
+            cx={toMiniX(pos.x + NODE_WIDTH / 2)}
+            cy={toMiniY(pos.y + NODE_HEIGHT / 2)}
+            r={1.4}
+            fill="#a8a29e"
+          />
+        ))}
+
+        <rect
+          x={toMiniX(viewX)}
+          y={toMiniY(viewY)}
+          width={Math.max(4, viewW * mmScale)}
+          height={Math.max(4, viewH * mmScale)}
+          fill="rgba(217,119,6,0.15)"
+          stroke="#d97706"
+          strokeWidth={1.5}
+          rx={2}
+        />
+      </svg>
+    </div>
+  );
 }
 
 function RenderTreeBlock({
@@ -1257,6 +1470,7 @@ function buildTreeBlock({
   filters,
   level,
   visited,
+  renderDepthLimit,
 }: {
   person: Person;
   familyIndex: ReturnType<typeof buildFamilyIndex>;
@@ -1266,6 +1480,7 @@ function buildTreeBlock({
   filters: FilterOptions;
   level: number;
   visited: Set<string>;
+  renderDepthLimit: number;
 }): TreeBlock {
   const nextVisited = new Set(visited);
   nextVisited.add(person.id);
@@ -1301,29 +1516,38 @@ function buildTreeBlock({
       filters,
     }).filter((child) => !nextVisited.has(child.id));
 
-    const childBlocks = children.map((child) =>
-      buildTreeBlock({
-        person: child,
-        familyIndex,
-        manualExpandedIds,
-        manualCollapsedIds,
-        autoCollapseLevel,
-        filters,
-        level: level + 1,
-        visited: nextVisited,
-      }),
-    );
+    // Hiển thị từ từ theo thế hệ: chỉ đệ quy dựng nhánh con khi đã "tới lượt"
+    // (level < renderDepthLimit). Nhờ vậy lần vẽ đầu tiên chỉ cần tính thế hệ
+    // 1, nhẹ và nhanh hơn hẳn so với tính toàn bộ cây rồi mới hiển thị.
+    const canDescend = level < renderDepthLimit;
+    const childBlocks = canDescend
+      ? children.map((child) =>
+          buildTreeBlock({
+            person: child,
+            familyIndex,
+            manualExpandedIds,
+            manualCollapsedIds,
+            autoCollapseLevel,
+            filters,
+            level: level + 1,
+            visited: nextVisited,
+            renderDepthLimit,
+          }),
+        )
+      : [];
 
     const groupId = family.id;
+    const hasChildrenRaw = children.length > 0;
 
     const defaultExpanded =
       autoCollapseLevel > 0 &&
       level < autoCollapseLevel &&
-      childBlocks.length > 0 &&
+      hasChildrenRaw &&
       !manualCollapsedIds.has(groupId);
 
     const expanded =
-      childBlocks.length > 0 &&
+      hasChildrenRaw &&
+      canDescend &&
       (manualExpandedIds.has(groupId) || defaultExpanded) &&
       !manualCollapsedIds.has(groupId);
 
