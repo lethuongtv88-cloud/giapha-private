@@ -52,10 +52,10 @@ function southernBirthOrderLabel(order?: number | null): string | null {
     "Mười Ba",
   ];
 
-  // Nam Bộ gọi con đầu lòng là "Hai" (bỏ qua "Một"), nên labels[order-1] đã
-  // là tên gọi đầy đủ tương ứng với birth_order — không cộng/gắn thêm "thứ"
-  // ở đây nữa, việc đó do personName() đảm nhiệm khi hiển thị.
-  return labels[order - 1] ?? `${order + 1}`;
+  // Dữ liệu birth_order được nhập sẵn theo số thứ tự Nam Bộ (con đầu lòng
+  // nhập là 2, không phải 1), nên lấy trực tiếp labels[order-2] — không dịch
+  // thêm 1 lần nữa (trước đây dịch 2 lần nên hiển thị sai +1).
+  return labels[order - 2] ?? `${order}`;
 }
 
 function personName(person?: KinshipPersonNode | null): string {
