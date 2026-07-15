@@ -1,426 +1,288 @@
--- ==========================================
--- GIAPHA-OS DATABASE SCHEMA
--- ==========================================
+--
+-- PostgreSQL database dump
+--
+-- ============================================================================
+-- docs/schema.sql -- Schema day du dung de cai dat MOI (fresh install).
+--
+-- Nguon: dump that tu Supabase project dang chay (07/2026), da gop them
+-- toan bo cac ban va RLS DA DUOC KIEM CHUNG THUC TE tren production, ap
+-- dung theo dung thu tu:
+--   053 - doc theo nhanh (SELECT co ban)
+--   056 - fix loi infinite recursion 42P17 giua family_parents/family_children
+--   057 - fix hieu nang (visible_family_ids() thay ham scalar theo dong)
+--   058 - don policy cu con sot lai
+--   059 - khoi phuc policy ghi bi thieu
+--   060 - fix INSERT...RETURNING that bai voi ban ghi "tro" chua lien ket
+--   061 - fix UPDATE...RETURNING that bai sau soft-delete
+--   054 - that chat import_sessions/import_staging_records/person_names/
+--         nguon tu lieu (khong con doc rong, ep created_by dung nguoi)
+--   055 - gioi han quyen GHI cua editor theo nhanh (truoc day editor ghi
+--         tu do toan bo cay); da bao gom san ban va RETURNING cho
+--         relationships (allow admin/editor thay quan he khi chi 1 phia
+--         thuoc nhanh, tranh loi RETURNING khi noi voi nguoi hoan toan moi)
+--
+-- Day la trang thai DAY DU, moi nhat, da qua kiem thu thuc te (ca doc lan
+-- ghi, ca admin lan editor lan member) tinh den thoi diem dump.
+--
+-- CACH DUNG: dan toan bo noi dung file nay vao Supabase SQL Editor cua
+-- project MOI (rong), chay 1 lan duy nhat. Voi project DANG CHAY THAT (da
+-- co du lieu), KHONG chay lai file nay -- dung dung cac file migration
+-- rieng le trong supabase/migrations/ theo dung thu tu so.
+-- ============================================================================
+--
 
--- EXTENSIONS
-CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+-- Dumped from database version 17.6
+-- Dumped by pg_dump version 18.4 (Ubuntu 18.4-1.pgdg24.04+1)
 
--- ENUMS
--- Gender types for family members
-DO $$ BEGIN
-    CREATE TYPE public.gender_enum AS ENUM ('male', 'female', 'other');
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
 
--- Relationship types between family members
-DO $$ BEGIN
-    CREATE TYPE public.relationship_type_enum AS ENUM ('marriage', 'biological_child', 'adopted_child');
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
+--
+-- Name: public; Type: SCHEMA; Schema: -; Owner: -
+--
 
--- System user roles
-DO $$ BEGIN
-    CREATE TYPE public.user_role_enum AS ENUM ('admin', 'editor', 'member');
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
+CREATE SCHEMA public;
 
--- ==========================================
--- UTILITY FUNCTIONS
--- ==========================================
 
--- Function to automatically update 'updated_at' timestamps
-CREATE OR REPLACE FUNCTION public.handle_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+--
+-- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
+--
 
--- ==========================================
--- TABLES (Data Preservation: No DROP TABLE commands)
--- ==========================================
+COMMENT ON SCHEMA public IS 'standard public schema';
 
--- PROFILES (Application users linked to Auth)
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
-  role public.user_role_enum DEFAULT 'member' NOT NULL,
-  is_active BOOLEAN NOT NULL DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+
+--
+-- Name: user_role_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.user_role_enum AS ENUM (
+    'admin',
+    'editor',
+    'member'
 );
 
--- PERSONS (Core entity for family tree)
-CREATE TABLE IF NOT EXISTS public.persons (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  full_name TEXT NOT NULL,
-  gender public.gender_enum NOT NULL,
-  
-  -- Date components (allows for partial dates where only year is known)
-  birth_year INT,
-  birth_month INT,
-  birth_day INT,
-  death_year INT,
-  death_month INT,
-  death_day INT,
-  death_lunar_year INT,
-  death_lunar_month INT,
-  death_lunar_day INT,
-  
-  is_deceased BOOLEAN NOT NULL DEFAULT FALSE,
-  is_in_law BOOLEAN NOT NULL DEFAULT FALSE,
-  birth_order INT,
-  generation INT,
-  other_names TEXT,
-  avatar_url TEXT,
-  note TEXT,
-  
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
 
--- PERSON_DETAILS_PRIVATE (Sensitive data with restricted RLS)
-CREATE TABLE IF NOT EXISTS public.person_details_private (
-  person_id UUID REFERENCES public.persons(id) ON DELETE CASCADE PRIMARY KEY,
-  phone_number TEXT,
-  occupation TEXT,
-  current_residence TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+--
+-- Name: admin_user_data; Type: TYPE; Schema: public; Owner: -
+--
 
--- RELATIONSHIPS (Links between persons)
-CREATE TABLE IF NOT EXISTS public.relationships (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  type public.relationship_type_enum NOT NULL,
-  person_a UUID REFERENCES public.persons(id) ON DELETE CASCADE NOT NULL,
-  person_b UUID REFERENCES public.persons(id) ON DELETE CASCADE NOT NULL,
-  note TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  
-  -- Prevent self-relationships
-  CONSTRAINT no_self_relationship CHECK (person_a != person_b),
-  
-  -- Ensure unique relationships between pairs for a specific type
-  UNIQUE(person_a, person_b, type)
-);
-
--- CUSTOM_EVENTS (User-created events)
-CREATE TABLE IF NOT EXISTS public.custom_events (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
-  content TEXT,
-  event_date DATE NOT NULL,
-  location TEXT,
-  created_by UUID REFERENCES public.profiles(id) DEFAULT auth.uid(),
-  
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- ==========================================
--- INDEXES
--- ==========================================
-
--- Relationship lookups
-CREATE INDEX IF NOT EXISTS idx_relationships_person_a ON public.relationships(person_a);
-CREATE INDEX IF NOT EXISTS idx_relationships_person_b ON public.relationships(person_b);
-CREATE INDEX IF NOT EXISTS idx_relationships_type ON public.relationships(type);
-
--- Person filtering and sorting
-CREATE INDEX IF NOT EXISTS idx_persons_full_name ON public.persons(full_name);
-CREATE INDEX IF NOT EXISTS idx_persons_generation ON public.persons(generation);
-CREATE INDEX IF NOT EXISTS idx_persons_gender ON public.persons(gender);
-CREATE INDEX IF NOT EXISTS idx_persons_is_deceased ON public.persons(is_deceased);
-CREATE INDEX IF NOT EXISTS idx_persons_birth_year ON public.persons(birth_year);
-
--- Profile lookups
-CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
-CREATE INDEX IF NOT EXISTS idx_profiles_is_active ON public.profiles(is_active);
-
--- Custom events lookups
-CREATE INDEX IF NOT EXISTS idx_custom_events_date ON public.custom_events(event_date);
-CREATE INDEX IF NOT EXISTS idx_custom_events_created_by ON public.custom_events(created_by);
-
--- ==========================================
--- RLS POLICIES
--- ==========================================
-
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.persons ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.person_details_private ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.relationships ENABLE ROW LEVEL SECURITY;
-
--- Helper function to check if user is admin
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'admin'
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Helper function to check if user is editor
-CREATE OR REPLACE FUNCTION PUBLIC.IS_EDITOR()
-RETURNS BOOLEAN
-LANGUAGE PLPGSQL
-SECURITY DEFINER
-SET SEARCH_PATH = PUBLIC
-AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'editor'
-  );
-END;
-$$;
-revoke all on function public.is_editor() from public;
-grant execute on function public.is_editor() to authenticated;
-
--- PROFILES POLICIES
-DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
-CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
-
-DROP POLICY IF EXISTS "Admins can view all profiles" ON public.profiles;
-CREATE POLICY "Admins can view all profiles" ON public.profiles FOR SELECT USING (public.is_admin());
-
--- PERSONS POLICIES
-DROP POLICY IF EXISTS "Enable read access for authenticated users" ON public.persons;
-CREATE POLICY "Enable read access for authenticated users" ON public.persons FOR SELECT TO authenticated USING (true);
-
-DROP POLICY IF EXISTS "Admins can manage persons" ON public.persons;
-DROP POLICY IF EXISTS "Admins can insert persons" ON public.persons;
-DROP POLICY IF EXISTS "Admins can update persons" ON public.persons;
-DROP POLICY IF EXISTS "Admins can delete persons" ON public.persons;
-
-CREATE POLICY "Admins and Editors can insert persons" ON public.persons FOR INSERT TO authenticated WITH CHECK (public.is_admin() OR public.is_editor());
-CREATE POLICY "Admins and Editors can update persons" ON public.persons FOR UPDATE TO authenticated USING (public.is_admin() OR public.is_editor()) WITH CHECK (public.is_admin() OR public.is_editor());
-CREATE POLICY "Admins and Editors can delete persons" ON public.persons FOR DELETE TO authenticated USING (public.is_admin() OR public.is_editor());
-
--- PERSON_DETAILS_PRIVATE POLICIES
-DROP POLICY IF EXISTS "Admins can view private details" ON public.person_details_private;
-CREATE POLICY "Admins can view private details" ON public.person_details_private FOR SELECT TO authenticated USING (public.is_admin());
-
-DROP POLICY IF EXISTS "Admins can manage private details" ON public.person_details_private;
-CREATE POLICY "Admins can manage private details" ON public.person_details_private FOR ALL TO authenticated USING (public.is_admin());
-
--- RELATIONSHIPS POLICIES
-DROP POLICY IF EXISTS "Enable read access for authenticated users" ON public.relationships;
-CREATE POLICY "Enable read access for authenticated users" ON public.relationships FOR SELECT TO authenticated USING (true);
-
-DROP POLICY IF EXISTS "Admins can manage relationships" ON public.relationships;
-DROP POLICY IF EXISTS "Admins can insert relationships" ON public.relationships;
-DROP POLICY IF EXISTS "Admins can update relationships" ON public.relationships;
-DROP POLICY IF EXISTS "Admins can delete relationships" ON public.relationships;
-
-CREATE POLICY "Admins and Editors can insert relationships" ON public.relationships FOR INSERT TO authenticated WITH CHECK (public.is_admin() OR public.is_editor());
-CREATE POLICY "Admins and Editors can update relationships" ON public.relationships FOR UPDATE TO authenticated USING (public.is_admin() OR public.is_editor()) WITH CHECK (public.is_admin() OR public.is_editor());
-CREATE POLICY "Admins and Editors can delete relationships" ON public.relationships FOR DELETE TO authenticated USING (public.is_admin() OR public.is_editor());
-
--- CUSTOM_EVENTS POLICIES
-ALTER TABLE public.custom_events ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Enable read access for authenticated users" ON public.custom_events;
-CREATE POLICY "Enable read access for authenticated users" ON public.custom_events FOR SELECT TO authenticated USING (true);
-
-DROP POLICY IF EXISTS "Authenticated users can insert custom events" ON public.custom_events;
-CREATE POLICY "Authenticated users can insert custom events" ON public.custom_events FOR INSERT TO authenticated WITH CHECK (auth.uid() = created_by);
-
-DROP POLICY IF EXISTS "Users can update own custom events" ON public.custom_events;
-CREATE POLICY "Users can update own custom events" ON public.custom_events FOR UPDATE TO authenticated USING (auth.uid() = created_by OR public.is_admin());
-
-DROP POLICY IF EXISTS "Users can delete own custom events" ON public.custom_events;
-CREATE POLICY "Users can delete own custom events" ON public.custom_events FOR DELETE TO authenticated USING (auth.uid() = created_by OR public.is_admin());
-
--- ==========================================
--- TRIGGERS
--- ==========================================
-
--- 1. Updated At Triggers
-DROP TRIGGER IF EXISTS tr_profiles_updated_at ON public.profiles;
-CREATE TRIGGER tr_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE PROCEDURE public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS tr_persons_updated_at ON public.persons;
-CREATE TRIGGER tr_persons_updated_at BEFORE UPDATE ON public.persons FOR EACH ROW EXECUTE PROCEDURE public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS tr_person_details_private_updated_at ON public.person_details_private;
-CREATE TRIGGER tr_person_details_private_updated_at BEFORE UPDATE ON public.person_details_private FOR EACH ROW EXECUTE PROCEDURE public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS tr_relationships_updated_at ON public.relationships;
-CREATE TRIGGER tr_relationships_updated_at BEFORE UPDATE ON public.relationships FOR EACH ROW EXECUTE PROCEDURE public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS tr_custom_events_updated_at ON public.custom_events;
-CREATE TRIGGER tr_custom_events_updated_at BEFORE UPDATE ON public.custom_events FOR EACH ROW EXECUTE PROCEDURE public.handle_updated_at();
-
--- 2. Handle new user signup (Profile creation)
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger 
-LANGUAGE plpgsql
-SECURITY DEFINER SET search_path = public, auth
-AS $$
-DECLARE
-  is_first_user boolean;
-BEGIN
-  -- Check if this is the first user (count will be 1 as this is AFTER INSERT)
-  SELECT count(*) = 1 FROM auth.users INTO is_first_user;
-
-  INSERT INTO public.profiles (id, role, is_active)
-  VALUES (
-    new.id, 
-    CASE WHEN is_first_user THEN 'admin'::public.user_role_enum ELSE 'member'::public.user_role_enum END,
-    true
-  );
-
-  UPDATE public.profiles 
-  SET is_active = true 
-  WHERE id = new.id AND is_first_user = true;
-
-  RETURN new;
-END;
-$$;
-
--- 3. Auto-confirm first user (Email verification)
-CREATE OR REPLACE FUNCTION public.handle_first_user_confirmation()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER SET search_path = auth
-AS $$
-BEGIN
-  -- If no users exist yet, auto-confirm this first one
-  IF NOT EXISTS (SELECT 1 FROM auth.users) THEN
-    NEW.email_confirmed_at := NOW();
-    NEW.last_sign_in_at := NOW();
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
--- Trigger for profile creation
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
-
--- Trigger for auto-confirmation
-DROP TRIGGER IF EXISTS on_auth_user_created_confirm ON auth.users;
-CREATE TRIGGER on_auth_user_created_confirm
-  BEFORE INSERT ON auth.users
-  FOR EACH ROW EXECUTE PROCEDURE public.handle_first_user_confirmation();
-
--- ==========================================
--- STORAGE POLICIES
--- ==========================================
-
--- Initialize 'avatars' bucket
-INSERT INTO storage.buckets (id, name, public) 
-VALUES ('avatars', 'avatars', true) 
-ON CONFLICT (id) DO UPDATE SET public = true;
-
-DROP POLICY IF EXISTS "Avatar images are publicly accessible." ON storage.objects;
-CREATE POLICY "Avatar images are publicly accessible." ON storage.objects FOR SELECT USING ( bucket_id = 'avatars' );
-
-DROP POLICY IF EXISTS "Users can upload avatars." ON storage.objects;
-CREATE POLICY "Users can upload avatars." ON storage.objects FOR INSERT WITH CHECK ( bucket_id = 'avatars' AND auth.role() = 'authenticated' );
-
-DROP POLICY IF EXISTS "Users can update avatars." ON storage.objects;
-CREATE POLICY "Users can update avatars." ON storage.objects FOR UPDATE USING ( bucket_id = 'avatars' AND auth.role() = 'authenticated' );
-
-DROP POLICY IF EXISTS "Users can delete avatars." ON storage.objects;
-CREATE POLICY "Users can delete avatars." ON storage.objects FOR DELETE USING ( bucket_id = 'avatars' AND auth.role() = 'authenticated' );
-
--- ==========================================
--- ADMIN RPC FUNCTIONS
--- ==========================================
-
--- Custom type for get_admin_users
-DROP TYPE IF EXISTS public.admin_user_data CASCADE;
 CREATE TYPE public.admin_user_data AS (
-    id uuid,
-    email text,
-    role public.user_role_enum,
-    created_at timestamptz,
-    is_active boolean
+	id uuid,
+	email text,
+	role public.user_role_enum,
+	created_at timestamp with time zone,
+	is_active boolean
 );
 
--- 1. Get List of Users for Admin
-CREATE OR REPLACE FUNCTION public.get_admin_users()
-RETURNS SETOF public.admin_user_data
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, auth
-AS $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') THEN
-        RAISE EXCEPTION 'Access denied.';
-    END IF;
 
-    RETURN QUERY
-    SELECT au.id, au.email::text, p.role, au.created_at, p.is_active
-    FROM auth.users au
-    LEFT JOIN public.profiles p ON au.id = p.id
-    ORDER BY au.created_at DESC;
-END;
-$$;
+--
+-- Name: calendar_type_enum; Type: TYPE; Schema: public; Owner: -
+--
 
--- 2. Update User Role
-CREATE OR REPLACE FUNCTION public.set_user_role(target_user_id uuid, new_role text)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, auth
-AS $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') THEN
-        RAISE EXCEPTION 'Access denied.';
-    END IF;
+CREATE TYPE public.calendar_type_enum AS ENUM (
+    'gregorian',
+    'lunar',
+    'text',
+    'unknown'
+);
 
-    UPDATE public.profiles
-    SET role = new_role::public.user_role_enum
-    WHERE id = target_user_id;
-END;
-$$;
 
--- 3. Delete User Account
-CREATE OR REPLACE FUNCTION public.delete_user(target_user_id uuid)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, auth
-AS $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') THEN
-        RAISE EXCEPTION 'Access denied.';
-    END IF;
-    
-    IF auth.uid() = target_user_id THEN
-        RAISE EXCEPTION 'Cannot delete yourself.';
-    END IF;
+--
+-- Name: child_type_enum; Type: TYPE; Schema: public; Owner: -
+--
 
-    DELETE FROM auth.users WHERE id = target_user_id;
-END;
-$$;
+CREATE TYPE public.child_type_enum AS ENUM (
+    'biological',
+    'adopted',
+    'foster',
+    'stepchild',
+    'unknown'
+);
 
--- 4. Admin Create New User
--- IMPORTANT: All token/string columns MUST be set to '' (empty string), NOT NULL.
--- Supabase Auth's Go scanner crashes with "converting NULL to string is unsupported"
--- if any of these fields are NULL.
-CREATE OR REPLACE FUNCTION public.admin_create_user(
-  new_email text, 
-  new_password text, 
-  new_role text,
-  new_active boolean
-)
- RETURNS uuid
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'auth', 'extensions'
-AS $function$
+
+--
+-- Name: date_modifier_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.date_modifier_enum AS ENUM (
+    'exact',
+    'about',
+    'before',
+    'after',
+    'between',
+    'from_to',
+    'estimated',
+    'calculated',
+    'interpreted',
+    'phrase',
+    'unknown'
+);
+
+
+--
+-- Name: date_precision_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.date_precision_enum AS ENUM (
+    'day',
+    'month',
+    'year',
+    'decade',
+    'range',
+    'text',
+    'unknown'
+);
+
+
+--
+-- Name: event_role_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.event_role_enum AS ENUM (
+    'principal',
+    'child',
+    'husband',
+    'wife',
+    'witness',
+    'officiant',
+    'deceased',
+    'participant',
+    'visibility_root'
+);
+
+
+--
+-- Name: event_type_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.event_type_enum AS ENUM (
+    'birth',
+    'death',
+    'marriage',
+    'divorce',
+    'burial',
+    'baptism',
+    'confirmation',
+    'ordination',
+    'graduation',
+    'occupation',
+    'residence',
+    'migration',
+    'military',
+    'award',
+    'retirement',
+    'custom',
+    'death_anniversary',
+    'wedding'
+);
+
+
+--
+-- Name: family_status_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.family_status_enum AS ENUM (
+    'active',
+    'divorced',
+    'widowed',
+    'separated',
+    'ended',
+    'unknown'
+);
+
+
+--
+-- Name: family_type_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.family_type_enum AS ENUM (
+    'marriage',
+    'partnership',
+    'unknown'
+);
+
+
+--
+-- Name: gender_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.gender_enum AS ENUM (
+    'male',
+    'female',
+    'other'
+);
+
+
+--
+-- Name: name_type_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.name_type_enum AS ENUM (
+    'birth',
+    'courtesy',
+    'posthumous',
+    'religious',
+    'married',
+    'nickname',
+    'alias'
+);
+
+
+--
+-- Name: parent_role_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.parent_role_enum AS ENUM (
+    'husband',
+    'wife',
+    'partner',
+    'parent'
+);
+
+
+--
+-- Name: relationship_type_enum; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.relationship_type_enum AS ENUM (
+    'marriage',
+    'biological_child',
+    'adopted_child'
+);
+
+
+--
+-- Name: source_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.source_type AS ENUM (
+    'document',
+    'photo',
+    'oral_history',
+    'book',
+    'website',
+    'archive',
+    'other'
+);
+
+
+--
+-- Name: admin_create_user(text, text, text, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.admin_create_user(new_email text, new_password text, new_role text, new_active boolean) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'auth', 'extensions'
+    AS $$
 DECLARE
     new_id uuid;
 BEGIN
@@ -457,84 +319,460 @@ BEGIN
     
     RETURN new_id;
 END;
-$function$;
+$$;
 
--- 5. Set User Active Status (Approve/Block)
-CREATE OR REPLACE FUNCTION public.set_user_active_status(target_user_id uuid, new_status boolean)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, auth
-AS $$
+
+--
+-- Name: check_family_parent_limit(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.check_family_parent_limit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') THEN
-        RAISE EXCEPTION 'Access denied.';
-    END IF;
 
-    UPDATE public.profiles
-    SET is_active = new_status
-    WHERE id = target_user_id;
+  IF (
+    SELECT count(*)
+    FROM family_parents
+    WHERE family_id = NEW.family_id
+  ) >= 2 THEN
+
+    RAISE EXCEPTION
+      'family % already has 2 parents',
+      NEW.family_id;
+
+  END IF;
+
+  RETURN NEW;
 END;
 $$;
 
--- ========================================================
--- 9. GALLERY MODULE
--- ========================================================
 
--- Add gallery table
-CREATE TABLE public.gallery_items (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  title text NOT NULL,
-  description text,
-  image_url text NOT NULL,
-  event_date date,
-  created_at timestamptz DEFAULT now() NOT NULL,
-  created_by uuid REFERENCES auth.users(id)
-);
+--
+-- Name: commit_gedcom_merge_suggestions(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
 
--- Enable RLS
-ALTER TABLE public.gallery_items ENABLE ROW LEVEL SECURITY;
+CREATE FUNCTION public.commit_gedcom_merge_suggestions(p_session_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+DECLARE
+  v_suggestion RECORD;
+  v_event_id UUID;
+  v_approved_count INTEGER := 0;
+  v_inserted_events INTEGER := 0;
+  v_inserted_person_events INTEGER := 0;
+  v_skipped_existing INTEGER := 0;
+  v_errors JSONB := '[]'::jsonb;
+  v_event_type public.event_type_enum;
+  v_event_role public.event_role_enum;
+BEGIN
+  SELECT COUNT(*)
+  INTO v_approved_count
+  FROM public.import_merge_suggestions
+  WHERE session_id = p_session_id
+    AND status = 'approved'
+    AND suggestion_type = 'create_event';
 
--- Policy: Ai cũng xem được
-CREATE POLICY "Enable read access for all users" ON public.gallery_items FOR SELECT USING (true);
+  IF v_approved_count = 0 THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'message', 'Không có approved merge suggestions để commit.',
+      'approved', 0,
+      'inserted_events', 0,
+      'inserted_person_events', 0,
+      'skipped_existing', 0,
+      'errors', v_errors
+    );
+  END IF;
 
--- Policy: User đăng nhập mới được thêm
-CREATE POLICY "Enable insert for authenticated users only" ON public.gallery_items FOR INSERT WITH CHECK (auth.uid() = created_by);
+  FOR v_suggestion IN
+    SELECT *
+    FROM public.import_merge_suggestions
+    WHERE session_id = p_session_id
+      AND status = 'approved'
+      AND suggestion_type = 'create_event'
+    ORDER BY created_at ASC
+  LOOP
+    BEGIN
+      IF v_suggestion.matched_person_id IS NULL THEN
+        v_errors := v_errors || jsonb_build_array(
+          jsonb_build_object(
+            'suggestion_id', v_suggestion.id,
+            'error', 'missing_matched_person_id'
+          )
+        );
+        CONTINUE;
+      END IF;
 
--- Policy: Chỉ admin hoặc người tạo mới được sửa
-CREATE POLICY "Enable update for admin and owner" ON public.gallery_items FOR UPDATE USING (
-  auth.uid() = created_by OR 
-  EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')
-);
+      IF v_suggestion.payload->>'type' NOT IN ('birth', 'death') THEN
+        v_errors := v_errors || jsonb_build_array(
+          jsonb_build_object(
+            'suggestion_id', v_suggestion.id,
+            'error', 'unsupported_event_type',
+            'type', v_suggestion.payload->>'type'
+          )
+        );
+        CONTINUE;
+      END IF;
 
--- Policy: Chỉ admin hoặc người tạo mới được xóa
-CREATE POLICY "Enable delete for admin and owner" ON public.gallery_items FOR DELETE USING (
-  auth.uid() = created_by OR 
-  EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')
-);
+      IF NULLIF(v_suggestion.payload->>'start_date', '') IS NULL THEN
+        v_errors := v_errors || jsonb_build_array(
+          jsonb_build_object(
+            'suggestion_id', v_suggestion.id,
+            'error', 'missing_start_date'
+          )
+        );
+        CONTINUE;
+      END IF;
 
--- ========================================================
--- 10. STORAGE BUCKETS
--- ========================================================
+      v_event_type := (v_suggestion.payload->>'type')::public.event_type_enum;
 
--- Create storage bucket for gallery
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('gallery', 'gallery', true)
-ON CONFLICT (id) DO NOTHING;
+      v_event_role :=
+        CASE
+          WHEN v_suggestion.payload->>'type' = 'death'
+          THEN 'deceased'::public.event_role_enum
+          ELSE 'principal'::public.event_role_enum
+        END;
 
--- Storage policies
-CREATE POLICY "Public Access"
-ON storage.objects FOR SELECT
-USING ( bucket_id = 'gallery' );
+      SELECT e.id
+      INTO v_event_id
+      FROM public.events e
+      WHERE e.deleted_at IS NULL
+        AND e.legacy_person_id = v_suggestion.matched_person_id
+        AND e.type = v_event_type
+        AND (
+          e.start_date = NULLIF(v_suggestion.payload->>'start_date', '')::DATE
+          OR e.sort_date = NULLIF(v_suggestion.payload->>'sort_date', '')::DATE
+        )
+      LIMIT 1;
 
-CREATE POLICY "Authenticated users can upload"
-ON storage.objects FOR INSERT
-WITH CHECK ( bucket_id = 'gallery' AND auth.role() = 'authenticated' );
+      IF v_event_id IS NOT NULL THEN
+        UPDATE public.import_merge_suggestions
+        SET
+          status = 'committed',
+          committed_at = NOW(),
+          committed_by = auth.uid(),
+          updated_at = NOW(),
+          reason = COALESCE(reason, '') || ' | skipped_existing_event'
+        WHERE id = v_suggestion.id;
 
-CREATE POLICY "Admin and owner can update"
-ON storage.objects FOR UPDATE
-USING ( bucket_id = 'gallery' AND (auth.uid() = owner OR EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')) );
+        v_skipped_existing := v_skipped_existing + 1;
+        CONTINUE;
+      END IF;
 
-CREATE POLICY "Admin and owner can delete"
-ON storage.objects FOR DELETE
-USING ( bucket_id = 'gallery' AND (auth.uid() = owner OR EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')) );
+      INSERT INTO public.events (
+        type,
+        start_date,
+        end_date,
+        sort_date,
+        legacy_person_id,
+        legacy_source,
+        confidence,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        v_event_type,
+        NULLIF(v_suggestion.payload->>'start_date', '')::DATE,
+        NULLIF(v_suggestion.payload->>'end_date', '')::DATE,
+        NULLIF(v_suggestion.payload->>'sort_date', '')::DATE,
+        v_suggestion.matched_person_id,
+        COALESCE(NULLIF(v_suggestion.payload->>'legacy_source', ''), 'gedcom.merge'),
+        'review'::public.confidence_enum,
+        NOW(),
+        NOW()
+      )
+      RETURNING id INTO v_event_id;
+
+      v_inserted_events := v_inserted_events + 1;
+
+      INSERT INTO public.person_events (
+        person_id,
+        event_id,
+        role
+      )
+      VALUES (
+        v_suggestion.matched_person_id,
+        v_event_id,
+        v_event_role
+      )
+      ON CONFLICT DO NOTHING;
+
+      v_inserted_person_events := v_inserted_person_events + 1;
+
+      UPDATE public.import_merge_suggestions
+      SET
+        status = 'committed',
+        committed_at = NOW(),
+        committed_by = auth.uid(),
+        updated_at = NOW()
+      WHERE id = v_suggestion.id;
+
+    EXCEPTION WHEN OTHERS THEN
+      v_errors := v_errors || jsonb_build_array(
+        jsonb_build_object(
+          'suggestion_id', v_suggestion.id,
+          'error', SQLERRM,
+          'code', SQLSTATE
+        )
+      );
+    END;
+  END LOOP;
+
+  RETURN jsonb_build_object(
+    'ok', jsonb_array_length(v_errors) = 0,
+    'approved', v_approved_count,
+    'inserted_events', v_inserted_events,
+    'inserted_person_events', v_inserted_person_events,
+    'skipped_existing', v_skipped_existing,
+    'errors', v_errors
+  );
+END;
+$$;
+
+
+--
+-- Name: commit_gedcom_staging_session(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.commit_gedcom_staging_session(p_session_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+DECLARE
+  v_session public.import_sessions%ROWTYPE;
+  v_record public.import_staging_records%ROWTYPE;
+  v_payload JSONB;
+
+  v_new_person_id UUID;
+  v_new_family_id UUID;
+  v_new_event_id UUID;
+
+  v_person_id UUID;
+  v_family_id UUID;
+  v_event_id UUID;
+
+  v_approved_count INT := 0;
+  v_error_count INT := 0;
+
+  v_person_count INT := 0;
+  v_name_count INT := 0;
+  v_family_count INT := 0;
+  v_family_parent_count INT := 0;
+  v_family_child_count INT := 0;
+  v_event_count INT := 0;
+  v_person_event_count INT := 0;
+  v_staging_count INT := 0;
+
+  v_result JSONB;
+BEGIN
+  IF NOT (public.is_admin() OR public.is_editor()) THEN
+    RAISE EXCEPTION 'not_allowed: chỉ admin/editor mới được commit GEDCOM staging';
+  END IF;
+
+  SELECT *
+  INTO v_session
+  FROM public.import_sessions
+  WHERE id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'import_session_not_found: %', p_session_id;
+  END IF;
+
+  IF v_session.status = 'committed' THEN
+    RAISE EXCEPTION 'session_already_committed: %', p_session_id;
+  END IF;
+
+  SELECT COUNT(*)
+  INTO v_approved_count
+  FROM public.import_staging_records
+  WHERE session_id = p_session_id
+    AND status = 'approved'
+    AND action = 'create';
+
+  IF v_approved_count = 0 THEN
+    RAISE EXCEPTION 'no_approved_records: session % chưa có record approved để commit', p_session_id;
+  END IF;
+
+  SELECT COUNT(*)
+  INTO v_error_count
+  FROM public.import_staging_records
+  WHERE session_id = p_session_id
+    AND record_type = 'person'
+    AND action = 'match'
+    AND status = 'pending';
+
+  IF v_error_count > 0 THEN
+    RAISE EXCEPTION 'pending_possible_matches: còn % person possible matches chưa duyệt. Hãy xử lý trong Match Review trước khi commit', v_error_count;
+  END IF;
+
+  SELECT COUNT(*)
+  INTO v_error_count
+  FROM public.import_staging_records
+  WHERE session_id = p_session_id
+    AND status = 'approved'
+    AND action = 'create'
+    AND jsonb_array_length(COALESCE(errors, '[]'::jsonb)) > 0;
+
+  IF v_error_count > 0 THEN
+    RAISE EXCEPTION 'approved_records_have_errors: còn % approved records có errors', v_error_count;
+  END IF;
+
+  CREATE TEMP TABLE IF NOT EXISTS tmp_gedcom_person_map (
+    session_id UUID NOT NULL,
+    external_id TEXT NOT NULL,
+    person_id UUID NOT NULL,
+    PRIMARY KEY (session_id, external_id)
+  ) ON COMMIT DROP;
+
+  CREATE TEMP TABLE IF NOT EXISTS tmp_gedcom_family_map (
+    session_id UUID NOT NULL,
+    external_id TEXT NOT NULL,
+    family_id UUID NOT NULL,
+    PRIMARY KEY (session_id, external_id)
+  ) ON COMMIT DROP;
+
+  CREATE TEMP TABLE IF NOT EXISTS tmp_gedcom_event_map (
+    session_id UUID NOT NULL,
+    external_id TEXT NOT NULL,
+    event_id UUID NOT NULL,
+    PRIMARY KEY (session_id, external_id)
+  ) ON COMMIT DROP;
+
+  DELETE FROM tmp_gedcom_person_map WHERE session_id = p_session_id;
+  DELETE FROM tmp_gedcom_family_map WHERE session_id = p_session_id;
+  DELETE FROM tmp_gedcom_event_map WHERE session_id = p_session_id;
+
+  UPDATE public.import_sessions
+  SET
+    status = 'committing',
+    updated_at = NOW()
+  WHERE id = p_session_id;
+
+  -- 1. persons
+  FOR v_record IN
+    SELECT *
+    FROM public.import_staging_records
+    WHERE session_id = p_session_id
+      AND status = 'approved'
+      AND action = 'create'
+      AND record_type = 'person'
+    ORDER BY sort_order ASC, created_at ASC
+  LOOP
+    v_payload := COALESCE(v_record.normalized_payload, '{}'::jsonb);
+
+    INSERT INTO public.persons (
+      full_name,
+      gender,
+      birth_year,
+      birth_month,
+      birth_day,
+      death_year,
+      death_month,
+      death_day,
+      is_deceased,
+      note
+    )
+    VALUES (
+      COALESCE(NULLIF(v_payload->>'full_name', ''), 'Chưa rõ tên'),
+      CASE
+        WHEN v_payload->>'gender' IN ('male', 'female', 'other')
+        THEN (v_payload->>'gender')::public.gender_enum
+        ELSE 'other'::public.gender_enum
+      END,
+      NULLIF(v_payload->>'birth_year', '')::INT,
+      NULLIF(v_payload->>'birth_month', '')::INT,
+      NULLIF(v_payload->>'birth_day', '')::INT,
+      NULLIF(v_payload->>'death_year', '')::INT,
+      NULLIF(v_payload->>'death_month', '')::INT,
+      NULLIF(v_payload->>'death_day', '')::INT,
+      COALESCE((v_payload->>'is_deceased')::BOOLEAN, FALSE),
+      NULLIF(v_payload->>'note', '')
+    )
+    RETURNING id INTO v_new_person_id;
+
+    IF v_record.external_id IS NULL THEN
+      RAISE EXCEPTION 'person_record_missing_external_id: %', v_record.id;
+    END IF;
+
+    INSERT INTO tmp_gedcom_person_map (session_id, external_id, person_id)
+    VALUES (p_session_id, v_record.external_id, v_new_person_id);
+
+    v_person_count := v_person_count + 1;
+  END LOOP;
+
+  -- 2. person_names
+  FOR v_record IN
+    SELECT *
+    FROM public.import_staging_records
+    WHERE session_id = p_session_id
+      AND status = 'approved'
+      AND action = 'create'
+      AND record_type = 'name'
+    ORDER BY sort_order ASC, created_at ASC
+  LOOP
+    v_payload := COALESCE(v_record.normalized_payload, '{}'::jsonb);
+
+    SELECT person_id
+    INTO v_person_id
+    FROM tmp_gedcom_person_map
+    WHERE session_id = p_session_id
+      AND external_id = v_payload->>'person_external_id';
+
+    IF v_person_id IS NULL THEN
+      RAISE EXCEPTION 'name_missing_person_mapping: record %, person_external_id %',
+        v_record.id,
+        v_payload->>'person_external_id';
+    END IF;
+
+    INSERT INTO public.person_names (
+      person_id,
+      type,
+      full_text,
+      surname,
+      given_name,
+      language,
+      is_primary,
+      note
+    )
+    VALUES (
+      v_person_id,
+      CASE
+        WHEN v_payload->>'name_type' IN (
+          'birth', 'courtesy', 'posthumous', 'religious',
+          'married', 'nickname', 'alias'
+        )
+        THEN (v_payload->>'name_type')::public.name_type_enum
+        ELSE 'birth'::public.name_type_enum
+      END,
+      COALESCE(NULLIF(v_payload->>'full_name', ''), 'Chưa rõ tên'),
+      NULLIF(v_payload->>'surname', ''),
+      NULLIF(v_payload->>'given_name', ''),
+      COALESCE(NULLIF(v_payload->>'language', ''), 'vi'),
+      COALESCE((v_payload->>'is_primary')::BOOLEAN, TRUE),
+      NULLIF(v_payload->>'note', '')
+    );
+
+    v_name_count := v_name_count + 1;
+  END LOOP;
+
+  -- 3. families
+  FOR v_record IN
+    SELECT *
+    FROM public.import_staging_records
+    WHERE session_id = p_session_id
+      AND status = 'approved'
+      AND action = 'create'
+      AND record_type = 'family'
+    ORDER BY sort_order ASC, created_at ASC
+  LOOP
+    v_payload := COALESCE(v_record.normalized_payload, '{}'::jsonb);
+
+    INSERT INTO public.families (
+      status
+    )
+    VALUES (
+      CASE
+        WHEN v_payload->>'status' IN ('active', 'divorced', 'separat
