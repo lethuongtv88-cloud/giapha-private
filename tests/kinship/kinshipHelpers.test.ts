@@ -40,7 +40,7 @@ describe("computeKinship", () => {
 
     const result = computeKinship(persons[0], persons[4], persons, relationships);
 
-    expect(result?.aCallsB).toBe("ông cậu ngoại");
+    expect(result?.aCallsB).toBe("ông cậu");
     expect(result?.bCallsA).toBe("cháu");
   });
 
@@ -61,7 +61,7 @@ describe("computeKinship", () => {
 
     const result = computeKinship(persons[0], persons[4], persons, relationships);
 
-    expect(result?.aCallsB).toBe("chị họ bên nội");
+    expect(result?.aCallsB).toBe("chế họ");
   });
 
   it("uses Vietnamese affinal terms for spouses of aunt/uncle/siblings/nephews", () => {
@@ -142,7 +142,7 @@ describe("computeKinship", () => {
 
     expect(computeKinship(persons[0], persons[4], persons, relationships)?.aCallsB).toBe("dượng");
     expect(computeKinship(persons[0], persons[6], persons, relationships)?.aCallsB).toBe("thím");
-    expect(computeKinship(persons[0], persons[8], persons, relationships)?.aCallsB).toBe("em dâu");
+    expect(computeKinship(persons[0], persons[8], persons, relationships)?.aCallsB).toBe("em dâu họ");
   });
 
   it("uses branch birth order before birth year for same-generation cousins", () => {
@@ -162,7 +162,7 @@ describe("computeKinship", () => {
 
     const result = computeKinship(persons[0], persons[4], persons, relationships);
 
-    expect(result?.aCallsB).toBe("anh họ bên nội");
+    expect(result?.aCallsB).toBe("anh họ");
   });
 
   it("uses grandparent branch seniority for same-generation distant cousins", () => {
@@ -186,7 +186,7 @@ describe("computeKinship", () => {
 
     const result = computeKinship(persons[0], persons[6], persons, relationships);
 
-    expect(result?.aCallsB).toBe("chị họ xa bên nội");
+    expect(result?.aCallsB).toBe("chế họ");
   });
 
   it("uses southern direct ancestor and grandchild terms", () => {
@@ -244,6 +244,91 @@ describe("computeKinship", () => {
     expect(computeKinship(persons[0], persons[6], persons, relationships)?.aCallsB).toBe("con dâu");
     expect(computeKinship(persons[0], persons[7], persons, relationships)?.aCallsB).toBe("ông sui");
     expect(computeKinship(persons[0], persons[8], persons, relationships)?.aCallsB).toBe("bà sui");
+  });
+
+  it("resolves nested spouse-side in-law terms correctly (sui gia bên vợ)", () => {
+    const persons = [
+      person("root", "Người gốc", { gender: "male" }),
+      person("wife", "Vợ", { gender: "female" }),
+      person("wifeMother", "Mẹ vợ", { gender: "female" }),
+      person("wifeGrandparent", "Ông ngoại vợ", { gender: "male" }),
+      person("wifeUncle", "Cậu vợ", { gender: "male", birth_year: 1965 }),
+      person("wifeUncleWife", "Mợ vợ", { gender: "female" }),
+      person("wifeAunt", "Dì vợ", { gender: "female", birth_year: 1968 }),
+      person("wifeAuntHusband", "Dượng vợ", { gender: "male" }),
+    ];
+    const relationships = [
+      { person_a: "root", person_b: "wife", type: "marriage" },
+      child("wifeMother", "wife"),
+      child("wifeGrandparent", "wifeMother"),
+      child("wifeGrandparent", "wifeUncle"),
+      child("wifeGrandparent", "wifeAunt"),
+      { person_a: "wifeUncle", person_b: "wifeUncleWife", type: "marriage" },
+      { person_a: "wifeAunt", person_b: "wifeAuntHusband", type: "marriage" },
+    ];
+
+    expect(computeKinship(persons[0], persons[4], persons, relationships)?.aCallsB).toBe("cậu bên vợ");
+    expect(computeKinship(persons[0], persons[5], persons, relationships)?.aCallsB).toBe("mợ bên vợ");
+    expect(computeKinship(persons[0], persons[7], persons, relationships)?.aCallsB).toBe("dượng bên vợ");
+  });
+
+  it("resolves a spouse only linked via marriage to a direct ancestor (bà ngoại vợ qua hôn nhân)", () => {
+    const persons = [
+      person("root", "Người gốc", { gender: "male" }),
+      person("wife", "Vợ", { gender: "female" }),
+      person("wifeMother", "Mẹ vợ", { gender: "female" }),
+      person("wifeGrandfather", "Ông ngoại vợ", { gender: "male" }),
+      person("wifeGrandmother", "Bà ngoại vợ", { gender: "female" }),
+    ];
+    const relationships = [
+      { person_a: "root", person_b: "wife", type: "marriage" },
+      child("wifeMother", "wife"),
+      child("wifeGrandfather", "wifeMother"),
+      { person_a: "wifeGrandfather", person_b: "wifeGrandmother", type: "marriage" },
+    ];
+
+    expect(computeKinship(persons[0], persons[4], persons, relationships)?.aCallsB).toBe("bà ngoại bên vợ");
+  });
+
+  it("resolves vợ của bác (bác gái) — previously missing from the affinal term map", () => {
+    const persons = [
+      person("root", "Người gốc", { gender: "male" }),
+      person("father", "Cha", { gender: "male", birth_year: 1960 }),
+      person("grandfather", "Ông nội", { gender: "male" }),
+      person("bac", "Bác", { gender: "male", birth_year: 1955 }),
+      person("bacWife", "Bác gái", { gender: "female" }),
+    ];
+    const relationships = [
+      child("father", "root"),
+      child("grandfather", "father"),
+      child("grandfather", "bac"),
+      { person_a: "bac", person_b: "bacWife", type: "marriage" },
+    ];
+
+    expect(computeKinship(persons[0], persons[4], persons, relationships)?.aCallsB).toBe("bác gái");
+  });
+
+  it("uses correct seniority direction for cột chèo (anh/em cột chèo)", () => {
+    const persons = [
+      person("root", "Người gốc", { gender: "male" }),
+      person("wife", "Vợ", { gender: "female", birth_year: 1990 }),
+      person("wifeOlderSister", "Chị vợ", { gender: "female", birth_year: 1985 }),
+      person("brotherInLaw", "Anh cột chèo", { gender: "male" }),
+      person("father", "Cha vợ", { gender: "male" }),
+      person("mother", "Mẹ vợ", { gender: "female" }),
+    ];
+    const relationships = [
+      { person_a: "root", person_b: "wife", type: "marriage" },
+      child("father", "wife"),
+      child("mother", "wife"),
+      child("father", "wifeOlderSister"),
+      child("mother", "wifeOlderSister"),
+      { person_a: "wifeOlderSister", person_b: "brotherInLaw", type: "marriage" },
+    ];
+
+    // Root's wife is the YOUNGER sister, so root is the junior (em) in the cột chèo pair.
+    expect(computeKinship(persons[0], persons[3], persons, relationships)?.aCallsB).toBe("em cột chèo");
+    expect(computeKinship(persons[3], persons[0], persons, relationships)?.aCallsB).toBe("anh cột chèo");
   });
 
 });
