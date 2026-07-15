@@ -149,20 +149,44 @@ export default function BaseToolbar({
                 </label>
               )}
               {setAutoCollapseLevel && (
-                <label className="flex items-center justify-between gap-2 text-sm text-stone-600 cursor-pointer hover:text-stone-900 transition-colors select-none">
+                <div className="flex items-center justify-between gap-2 text-sm text-stone-600 select-none">
                   <span>Số thế hệ</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={99}
-                    value={autoCollapseLevel ?? 0}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      setAutoCollapseLevel(isNaN(val) ? 0 : val);
-                    }}
-                    className="w-14 px-2 py-1 text-center text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-400"
-                  />
-                </label>
+                  <div className="flex items-center rounded-lg border border-stone-200 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAutoCollapseLevel(Math.max(0, (autoCollapseLevel ?? 0) - 1))
+                      }
+                      className="flex items-center justify-center w-7 h-7 text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+                      disabled={(autoCollapseLevel ?? 0) <= 0}
+                      title="Giảm số thế hệ"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min={0}
+                      max={99}
+                      value={autoCollapseLevel ?? 0}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setAutoCollapseLevel(isNaN(val) ? 0 : val);
+                      }}
+                      className="w-10 h-7 px-1 text-center text-sm border-x border-stone-200 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAutoCollapseLevel(Math.min(99, (autoCollapseLevel ?? 0) + 1))
+                      }
+                      className="flex items-center justify-center w-7 h-7 text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+                      disabled={(autoCollapseLevel ?? 0) >= 99}
+                      title="Tăng số thế hệ"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
               )}
 
               <div className="h-px w-full bg-stone-100 my-1 font-bold text-stone-400 uppercase tracking-wider flex items-center gap-2"></div>
