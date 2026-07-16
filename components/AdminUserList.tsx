@@ -13,6 +13,7 @@ import { AdminUserData, Person, UserRole } from "@/types";
 import { AnimatePresence, motion } from "framer-motion";
 import { KeyRound, Pencil, Trash, UserRound, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import PersonSelector from "./PersonSelector";
 
 interface AdminUserListProps {
@@ -667,7 +668,15 @@ function ModalShell({
   children: React.ReactNode;
   onClose: () => void;
 }) {
-  return (
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm transition-opacity duration-300">
       <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-stone-200/60 w-full max-w-xl max-h-[80vh] overflow-hidden transform transition-all flex flex-col">
         <div className="px-6 py-5 border-b border-stone-100/80 flex justify-between items-center bg-stone-50/50">
@@ -685,7 +694,8 @@ function ModalShell({
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
