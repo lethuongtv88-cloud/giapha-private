@@ -166,13 +166,12 @@ export default function MemberDetailModal() {
 
           {/* Modal Content */}
           <motion.div
-            layout
             initial={{ scale: 0.96, opacity: 0, y: 15 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.96, opacity: 0, y: 15 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            layoutDependency={false}
-            className="relative bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl w-full max-w-4xl max-h-[85dvh] my-auto overflow-hidden flex flex-col border border-stone-200"
+            style={{ maxHeight: "75vh" }}
+            className="relative bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl w-full max-w-4xl my-auto overflow-hidden flex flex-col border border-stone-200"
           >
             {/* Sticky Header Actions */}
             <div className="absolute top-4 right-4 sm:top-5 sm:right-5 z-20 flex items-center gap-2">
@@ -258,7 +257,12 @@ export default function MemberDetailModal() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.2 }}
-                  className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 sm:px-8 pt-16 pb-8"
+                  style={{
+                    overflowY: "auto",
+                    WebkitOverflowScrolling: "touch",
+                    overscrollBehavior: "contain",
+                  }}
+                  className="flex-1 min-h-0 custom-scrollbar px-4 sm:px-8 pt-16 pb-8"
                 >
                   <h2 className="text-xl font-serif font-bold text-stone-800 mb-6">
                     Chỉnh sửa thành viên
@@ -283,7 +287,12 @@ export default function MemberDetailModal() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.2 }}
-                  className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 sm:px-8 pt-16 pb-8"
+                  style={{
+                    overflowY: "auto",
+                    WebkitOverflowScrolling: "touch",
+                    overscrollBehavior: "contain",
+                  }}
+                  className="flex-1 min-h-0 custom-scrollbar px-4 sm:px-8 pt-16 pb-8"
                 >
                   <h2 className="text-xl font-serif font-bold text-stone-800 mb-6">
                     Thêm thành viên mới
@@ -302,7 +311,12 @@ export default function MemberDetailModal() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.3 }}
-                  className="flex-1 min-h-0 overflow-y-auto custom-scrollbar"
+                  style={{
+                    overflowY: "auto",
+                    WebkitOverflowScrolling: "touch",
+                    overscrollBehavior: "contain",
+                  }}
+                  className="flex-1 min-h-0 custom-scrollbar"
                 >
                   <div className="px-4 sm:px-8 pt-16 pb-8 space-y-6">
                     <MemberDetailContent
