@@ -106,15 +106,30 @@ export default function MemberDetailModal() {
     };
   }, [memberId, showCreateMember, fetchData]);
 
-  // Prevent background scrolling when modal is open
+  // Khoá cuộn trang nền khi popup mở. Dùng overflow:hidden trên <body> KHÔNG
+  // đủ trên iOS Safari — vuốt tay vẫn cuộn được trang nền phía sau vì Safari
+  // không tôn trọng overflow:hidden với thao tác chạm. Cách đáng tin cậy hơn:
+  // "đóng băng" body bằng position:fixed tại đúng vị trí cuộn hiện tại, rồi
+  // trả lại đúng vị trí đó khi đóng popup.
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
+    if (!isOpen) return;
+
+    const scrollY = window.scrollY;
+    const body = document.body;
+
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+
     return () => {
-      document.body.style.overflow = "unset";
+      body.style.position = "";
+      body.style.top = "";
+      body.style.left = "";
+      body.style.right = "";
+      body.style.width = "";
+      window.scrollTo(0, scrollY);
     };
   }, [isOpen]);
 
