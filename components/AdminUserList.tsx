@@ -669,7 +669,7 @@ function ModalShell({
 }) {
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm transition-opacity duration-300">
-      <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-stone-200/60 w-full max-w-xl overflow-hidden transform transition-all">
+      <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-stone-200/60 w-full max-w-xl max-h-[90vh] overflow-hidden transform transition-all flex flex-col">
         <div className="px-6 py-5 border-b border-stone-100/80 flex justify-between items-center bg-stone-50/50">
           <h3 className="text-xl font-serif font-bold text-stone-800">
             {title}
@@ -681,7 +681,9 @@ function ModalShell({
             <X className="size-5" />
           </button>
         </div>
-        {children}
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {children}
+        </div>
       </div>
     </div>
   );
