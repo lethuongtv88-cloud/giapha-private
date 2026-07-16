@@ -258,7 +258,7 @@ export default function MemberDetailModal() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.2 }}
-                  className="flex-1 overflow-y-auto custom-scrollbar px-4 sm:px-8 pt-16 pb-8"
+                  className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 sm:px-8 pt-16 pb-8"
                 >
                   <h2 className="text-xl font-serif font-bold text-stone-800 mb-6">
                     Chỉnh sửa thành viên
@@ -283,7 +283,7 @@ export default function MemberDetailModal() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.2 }}
-                  className="flex-1 overflow-y-auto custom-scrollbar px-4 sm:px-8 pt-16 pb-8"
+                  className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 sm:px-8 pt-16 pb-8"
                 >
                   <h2 className="text-xl font-serif font-bold text-stone-800 mb-6">
                     Thêm thành viên mới
@@ -302,7 +302,7 @@ export default function MemberDetailModal() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.3 }}
-                  className="flex-1 overflow-y-auto custom-scrollbar"
+                  className="flex-1 min-h-0 overflow-y-auto custom-scrollbar"
                 >
                   <div className="px-4 sm:px-8 pt-16 pb-8 space-y-6">
                     <MemberDetailContent
