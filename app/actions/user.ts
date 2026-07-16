@@ -27,6 +27,31 @@ function getSupabaseAdmin() {
   });
 }
 
+// "User not allowed" / "not_admin" là lỗi Supabase trả về trực tiếp khi
+// SUPABASE_SERVICE_ROLE_KEY không phải là service_role key hợp lệ (ví dụ bị
+// dán nhầm anon key, hoặc key đã bị revoke/xoay vòng trong Supabase Dashboard
+// nhưng biến môi trường trên server chưa được cập nhật lại). Đây KHÔNG phải
+// lỗi phân quyền admin trong ứng dụng — dịch lại cho rõ để dễ chẩn đoán.
+function describeSupabaseAdminError(error: { message?: string; status?: number }): string {
+  const message = error.message || "";
+  if (
+    message.toLowerCase().includes("not allowed") ||
+    message.toLowerCase().includes("not_admin") ||
+    error.status === 403
+  ) {
+    return (
+      "Máy chủ chưa có quyền quản trị tài khoản (SUPABASE_SERVICE_ROLE_KEY " +
+      "đang sai hoặc đã hết hiệu lực). Vào Supabase Dashboard → Project " +
+      "Settings → API, sao chép lại đúng \"service_role\" key (không phải " +
+      "\"anon\"/\"public\" key), cập nhật vào biến môi trường " +
+      "SUPABASE_SERVICE_ROLE_KEY trên server, rồi khởi động lại ứng dụng. " +
+      `(Chi tiết lỗi gốc: ${message || "không rõ"})`
+    );
+  }
+
+  return message || "Có lỗi không xác định từ Supabase.";
+}
+
 function normalizeRole(role: string | null | undefined): UserRole | null {
   if (role === "admin" || role === "editor" || role === "member") return role;
   return null;
@@ -246,7 +271,7 @@ export async function adminCreateUser(formData: FormData) {
         return {
           error:
             "Đã tạo người dùng, nhưng chưa lưu được tên hiển thị: " +
-            metadataError.message,
+            describeSupabaseAdminError(metadataError),
         };
       }
     }
@@ -348,7 +373,7 @@ export async function adminUpdateUser(formData: FormData) {
 
   if (authError) {
     console.error("Failed to update user auth profile:", authError);
-    return { error: authError.message };
+    return { error: describeSupabaseAdminError(authError) };
   }
 
   const { error: roleError } = await supabase.rpc("set_user_role", {
@@ -437,7 +462,7 @@ export async function adminResetUserPassword(formData: FormData) {
 
   if (error) {
     console.error("Failed to reset user password:", error);
-    return { error: error.message };
+    return { error: describeSupabaseAdminError(error) };
   }
 
   await recordAuditLog({
