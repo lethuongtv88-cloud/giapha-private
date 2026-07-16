@@ -185,7 +185,7 @@ export default function MemberDetailModal() {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.96, opacity: 0, y: 15 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            style={{ maxHeight: "75vh" }}
+            style={{ maxHeight: "85vh" }}
             className="relative bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl w-full max-w-4xl my-auto overflow-hidden flex flex-col border border-stone-200"
           >
             {/* Sticky Header Actions */}
