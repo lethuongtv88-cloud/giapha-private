@@ -1,5 +1,22 @@
 import { Lunar, Solar } from "lunar-javascript";
 
+/**
+ * Trả về "hôm nay" theo giờ Việt Nam (Asia/Ho_Chi_Minh), bất kể code đang
+ * chạy trên server (thường ở múi giờ UTC) hay trên trình duyệt của người
+ * dùng. Dùng hàm này ở MỌI nơi cần biết "hôm nay là ngày mấy" để tính sự
+ * kiện sắp tới (sinh nhật, ngày giỗ...) — tránh lệch 1 ngày giữa dashboard
+ * (server) và trang Sự kiện (client) vào những giờ đầu/cuối ngày.
+ */
+export function getVietnamToday(): Date {
+  const now = new Date();
+  const vnTimeStr = now.toLocaleString("en-US", {
+    timeZone: "Asia/Ho_Chi_Minh",
+  });
+  const vnDate = new Date(vnTimeStr);
+  vnDate.setHours(0, 0, 0, 0);
+  return vnDate;
+}
+
 export function formatDisplayDate(
   year: number | null,
   month: number | null,
