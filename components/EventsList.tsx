@@ -7,7 +7,7 @@ import PlaceSelector from "@/components/places/PlaceSelector";
 import PlaceMapLinks, { type PlaceForMapLinks } from "@/components/places/PlaceMapLinks";
 import { useMemberListView } from "@/context/MemberListContext";
 import type { Person } from "@/types";
-import { getZodiacSign } from "@/utils/dateHelpers";
+import { getVietnamToday, getZodiacSign } from "@/utils/dateHelpers";
 import { buildEventMessage } from "@/utils/events/eventMessages";
 import {
   computeEvents,
@@ -200,7 +200,7 @@ function differenceInDays(from: Date, to: Date) {
 }
 
 function nextYearlyOccurrence(month: number, day: number) {
-  const today = startOfLocalDay(new Date());
+  const today = startOfLocalDay(getVietnamToday());
   let occurrence = new Date(today.getFullYear(), month - 1, day);
   occurrence = startOfLocalDay(occurrence);
 
@@ -288,7 +288,7 @@ function buildEventModelEvents(input: {
   persons: EventsListProps["persons"];
   placesById: Map<string, StructuredPlace>;
 }): ExtendedFamilyEvent[] {
-  const today = startOfLocalDay(new Date());
+  const today = startOfLocalDay(getVietnamToday());
   const personById = new Map(input.persons.map((person) => [person.id, person.full_name]));
   const out: ExtendedFamilyEvent[] = [];
 
@@ -1103,6 +1103,31 @@ export default function EventsList({
     };
   }, [eventModelEvents]);
 
+  // Khoá cuộn trang nền khi popup "Thêm sự kiện" mở. overflow:hidden trên
+  // <body> không đủ trên iOS Safari — dùng position:fixed để thực sự chặn
+  // cuộn nền (giống MemberDetailModal/CustomEventModal/UploadModal).
+  useEffect(() => {
+    if (!isCreateOpen) return;
+
+    const scrollY = window.scrollY;
+    const body = document.body;
+
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+
+    return () => {
+      body.style.position = "";
+      body.style.top = "";
+      body.style.left = "";
+      body.style.right = "";
+      body.style.width = "";
+      window.scrollTo(0, scrollY);
+    };
+  }, [isCreateOpen]);
+
   const [todayDate] = useState(() => {
     const today = new Date();
     const weekdays = [
@@ -1249,9 +1274,12 @@ export default function EventsList({
 
       {isCreateOpen
         ? createPortal(
-            <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm transition-opacity duration-300">
-              <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-stone-200/60 w-full max-w-2xl max-h-[80vh] overflow-hidden transform transition-all flex flex-col">
-                <div className="px-6 py-5 border-b border-stone-100/80 flex justify-between items-center bg-stone-50/50">
+            <div className="fixed inset-0 z-100 flex items-start sm:items-center justify-center overflow-y-auto p-4 py-8 sm:p-6 bg-stone-900/40 backdrop-blur-sm transition-opacity duration-300">
+              <div
+                style={{ maxHeight: "75vh" }}
+                className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-stone-200/60 w-full max-w-2xl my-auto overflow-hidden transform transition-all flex flex-col"
+              >
+                <div className="px-6 py-5 border-b border-stone-100/80 flex justify-between items-center bg-stone-50/50 shrink-0">
                   <h3 className="text-xl font-serif font-bold text-stone-800">
                     Thêm sự kiện
                   </h3>
@@ -1262,7 +1290,14 @@ export default function EventsList({
                     <X className="size-5" />
                   </button>
                 </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <div
+                  style={{
+                    overflowY: "auto",
+                    WebkitOverflowScrolling: "touch",
+                    overscrollBehavior: "contain",
+                  }}
+                  className="flex-1 min-h-0 custom-scrollbar"
+                >
                   {createMessage ? (
                     <div className="m-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                       {createMessage}
