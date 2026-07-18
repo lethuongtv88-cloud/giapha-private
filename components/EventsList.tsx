@@ -258,6 +258,50 @@ function nextMemorialOccurrence(event: EventModelRecord, eventDate: Date, today:
   return nextYearlyOccurrence(eventDate.getMonth() + 1, eventDate.getDate());
 }
 
+// Lần giỗ gần nhất ĐÃ QUA (khác với nextMemorialOccurrence luôn trả về lần
+// sắp tới). Dùng để hiển thị ngày giỗ trong tab "Đã qua" — nếu không có hàm
+// này, ngày giỗ sẽ không bao giờ xuất hiện ở tab đó vì daysUntil luôn >= 0.
+function previousMemorialOccurrence(
+  event: EventModelRecord,
+  eventDate: Date,
+  nextOccurrence: Date,
+) {
+  if (event.lunar_month && event.lunar_day) {
+    try {
+      const nextLunarYear = Solar.fromYmd(
+        nextOccurrence.getFullYear(),
+        nextOccurrence.getMonth() + 1,
+        nextOccurrence.getDate(),
+      )
+        .getLunar()
+        .getYear();
+      const lunarMonthValue = event.lunar_is_leap_month
+        ? -event.lunar_month
+        : event.lunar_month;
+
+      for (let offset = 1; offset <= 3; offset += 1) {
+        try {
+          const lunar = Lunar.fromYmd(nextLunarYear - offset, lunarMonthValue, event.lunar_day);
+          const solar = lunar.getSolar();
+          return startOfLocalDay(
+            new Date(solar.getYear(), solar.getMonth() - 1, solar.getDay()),
+          );
+        } catch {
+          // Tháng nhuận không xuất hiện mỗi năm; thử lùi thêm 1 năm âm lịch.
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  }
+
+  return startOfLocalDay(
+    new Date(nextOccurrence.getFullYear() - 1, eventDate.getMonth(), eventDate.getDate()),
+  );
+}
+
 function getPrincipalNames(input: {
   eventId: string;
   personEvents: PersonEventLink[];
@@ -354,6 +398,36 @@ function buildEventModelEvents(input: {
         structuredPlace,
       } as ExtendedFamilyEvent);
 
+      // Thêm 1 bản ghi riêng cho lần giỗ gần nhất ĐÃ QUA, để ngày giỗ cũng
+      // xuất hiện được ở tab "Đã qua" (nextOccurrence ở trên luôn là lần sắp
+      // tới nên daysUntil luôn >= 0, không bao giờ lọt vào tab "Đã qua").
+      const previousOccurrence = previousMemorialOccurrence(event, eventDate, nextOccurrence);
+      if (previousOccurrence) {
+        const previousDaysUntil = differenceInDays(today, previousOccurrence);
+        if (previousDaysUntil < 0 && previousDaysUntil >= -365) {
+          out.push({
+            type: "death_anniversary",
+            personId: fallbackPersonId ?? rootPersonId ?? undefined,
+            personName: principalName,
+            nextOccurrence: previousOccurrence,
+            daysUntil: previousDaysUntil,
+            originYear: event.lunar_year ?? originYear,
+            originMonth: event.lunar_month ?? originMonth,
+            originDay: event.lunar_day ?? originDay,
+            eventDateLabel: memorialDateLabel,
+            lunarDateLabel,
+            location: displayLocation,
+            content: event.description ?? undefined,
+            isDeceased: true,
+            eventModelId: event.id,
+            eventModelRootPersonId: rootPersonId ?? fallbackPersonId ?? null,
+            eventModelType: "death_anniversary",
+            eventModelPlaceId: event.place_id ?? null,
+            structuredPlace,
+          } as ExtendedFamilyEvent);
+        }
+      }
+
       continue;
     }
 
@@ -432,12 +506,14 @@ function EventCard({
   onEditCustomEvent,
   onDeleteEventModel,
   deletingEventId,
+  canDelete,
 }: {
   event: ExtendedFamilyEvent;
   index: number;
   onEditCustomEvent: (e: ExtendedFamilyEvent) => void;
   onDeleteEventModel: (e: ExtendedFamilyEvent) => void;
   deletingEventId: string | null;
+  canDelete: boolean;
 }) {
   const isBirthday = event.type === "birthday";
   const isCustom = event.type === "custom_event";
@@ -457,7 +533,12 @@ function EventCard({
   const shouldShowEventMessage =
     (event.daysUntil >= 0 && event.daysUntil < 5) ||
     (event.type === "death_recent" && event.daysUntil >= -5);
-  const canDeleteEventModel = Boolean(event.eventModelId && event.eventModelRootPersonId);
+  // Ngày giỗ (death_anniversary) dùng UI giống ngày mất: không có nút xoá ở
+  // danh sách sự kiện. Các loại sự kiện khác chỉ hiện nút xoá cho admin/
+  // editor (canDelete) — trước đây thiếu kiểm tra này nên bất kỳ user nào
+  // xem trang cũng bấm xoá được.
+  const canDeleteEventModel =
+    !isMemorial && canDelete && Boolean(event.eventModelId && event.eventModelRootPersonId);
 
   const { setMemberModalId } = useMemberListView();
 
@@ -1372,12 +1453,13 @@ export default function EventsList({
         <div className="space-y-2.5">
           {visible.map((event, i) => (
             <EventCard
-              key={`${event.eventModelId ?? event.personId}-${event.type}-${event.eventDateLabel}`}
+              key={`${event.eventModelId ?? event.personId}-${event.type}-${event.nextOccurrence.getTime()}`}
               event={event}
               index={i}
               onEditCustomEvent={handleOpenEditModal}
               onDeleteEventModel={handleDeleteEventModel}
               deletingEventId={deletingEventId}
+              canDelete={canCreateEvent}
             />
           ))}
         </div>
