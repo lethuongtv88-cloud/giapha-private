@@ -154,6 +154,17 @@ export default function RelationshipManager({
   const [newSpouseNote, setNewSpouseNote] = useState("");
   const [newSpouseMarriageDate, setNewSpouseMarriageDate] = useState("");
   const [newSpouseMarriageDatePrecision, setNewSpouseMarriageDatePrecision] = useState<"day" | "month" | "year" | "unknown">("unknown");
+
+  // Add Parent State
+  const [isAddingParent, setIsAddingParent] = useState(false);
+  const [newParentName, setNewParentName] = useState("");
+  const [newParentGender, setNewParentGender] = useState<"male" | "female">("male");
+  const [newParentBirthYear, setNewParentBirthYear] = useState("");
+  const [newParentRelType, setNewParentRelType] = useState<
+    "biological_child" | "adopted_child"
+  >("biological_child");
+  const [newParentNote, setNewParentNote] = useState("");
+
   const [divorceRel, setDivorceRel] = useState<EnrichedRelationship | null>(null);
   const [divorceDate, setDivorceDate] = useState("");
   const [divorceDatePrecision, setDivorceDatePrecision] = useState<"day" | "month" | "year" | "unknown">("unknown");
@@ -1017,6 +1028,92 @@ export default function RelationshipManager({
     }
   };
 
+  const handleAddParent = async () => {
+    if (!canWriteCurrentPerson()) return;
+    if (!canAddParent) {
+      setError("Người này đã có đủ 2 cha/mẹ.");
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+    if (!newParentName.trim()) {
+      setError("Vui lòng nhập tên Cha/Mẹ.");
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+
+    setProcessing(true);
+    setError(null);
+    try {
+      const personPayload: {
+        full_name: string;
+        gender: "male" | "female" | "other";
+        birth_year?: number;
+        is_in_law?: boolean;
+        generation?: number;
+      } = {
+        full_name: newParentName.trim(),
+        gender: newParentGender,
+        is_in_law: false,
+      };
+
+      if (person.generation != null) {
+        personPayload.generation = person.generation - 1;
+      }
+
+      if (newParentBirthYear.trim() !== "") {
+        const year = parseInt(newParentBirthYear);
+        if (!isNaN(year)) personPayload.birth_year = year;
+      }
+
+      // 1. Insert Person
+      const { data: newPersonData, error: insertError } = await supabase
+        .from("persons")
+        .insert(personPayload)
+        .select("id")
+        .single();
+
+      if (insertError || !newPersonData) throw insertError;
+
+      const newParentId = newPersonData.id;
+
+      // Nếu người này đã có 1 cha/mẹ, gộp chung vào cùng gia đình với
+      // cha/mẹ đã có thay vì tạo family unit tách rời.
+      const otherParentId =
+        existingParentRelationships[0]?.targetPerson?.id ?? null;
+
+      // 2. Insert Relationship (người mới là Cha/Mẹ -> personId là Con)
+      const { error: relError } = await supabase.from("relationships").insert({
+        person_a: newParentId,
+        person_b: personId,
+        type: newParentRelType,
+        note: newParentNote.trim() || null,
+      });
+
+      if (relError) throw relError;
+
+      await ensureFamilyModelChild({
+        supabase,
+        parentAId: newParentId,
+        parentBId: otherParentId,
+        childId: personId,
+      });
+
+      setIsAddingParent(false);
+      setNewParentName("");
+      setNewParentBirthYear("");
+      setNewParentNote("");
+      setNewParentRelType("biological_child");
+      fetchRelationships();
+      router.refresh();
+    } catch (err: unknown) {
+      const e = err as Error;
+      setError("Không thể thêm cha/mẹ: " + e.message);
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handleDelete = async (rel: EnrichedRelationship) => {
     if (!canWriteCurrentPerson()) return;
     if (!isAllowedPerson(rel.targetPerson.id)) {
@@ -1304,6 +1401,20 @@ export default function RelationshipManager({
         return yearA - yearB;
       });
 
+  // "Thêm Cha/Mẹ" chỉ hiển thị khi người này CHƯA có đủ 2 cha/mẹ (dù ruột
+  // hay nuôi). Không cần phân biệt giới tính chính xác - chỉ cần đếm số
+  // quan hệ cha/mẹ đã có.
+  const existingParentRelationships = relationships.filter(
+    (r) => r.direction === "parent",
+  );
+  const hasExistingFather = existingParentRelationships.some(
+    (r) => r.targetPerson?.gender === "male",
+  );
+  const hasExistingMother = existingParentRelationships.some(
+    (r) => r.targetPerson?.gender === "female",
+  );
+  const canAddParent = existingParentRelationships.length < 2;
+
   if (loading)
     return (
       <div className="text-stone-500 text-sm">
@@ -1477,7 +1588,7 @@ export default function RelationshipManager({
       })}
 
       {/* Add Button (Admin) */}
-      {canEdit && !isAdding && !isAddingBulk && !isAddingSpouse && (
+      {canEdit && !isAdding && !isAddingBulk && !isAddingSpouse && !isAddingParent && (
         <div className="flex flex-col sm:flex-row gap-3 mt-4">
           <button
             onClick={() => setIsAdding(true)}
@@ -1499,10 +1610,24 @@ export default function RelationshipManager({
           >
             + Thêm Vợ/Chồng
           </button>
+
+          {canAddParent && (
+            <button
+              onClick={() => {
+                setNewParentGender(
+                  hasExistingFather ? "female" : hasExistingMother ? "male" : "male",
+                );
+                setIsAddingParent(true);
+              }}
+              className="flex-1 py-3 border-2 border-dashed border-stone-200 bg-stone-50/50 hover:bg-stone-50 rounded-xl sm:rounded-2xl text-stone-500 font-medium text-sm hover:border-emerald-400 hover:text-emerald-700 transition-all duration-200"
+            >
+              + Thêm Cha/Mẹ
+            </button>
+          )}
         </div>
       )}
 
-      {error && !isAdding && !isAddingBulk && !isAddingSpouse && (
+      {error && !isAdding && !isAddingBulk && !isAddingSpouse && !isAddingParent && (
         <div className="mt-4 text-sm text-red-600 bg-red-50 p-3 rounded-xl border border-red-100 flex items-center justify-between gap-2 animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center gap-2">
             <svg
@@ -2074,6 +2199,159 @@ export default function RelationshipManager({
                   setNewSpouseNote("");
                   setNewSpouseMarriageDate("");
                   setNewSpouseMarriageDatePrecision("unknown");
+                }}
+                className="px-4 py-2 sm:py-2.5 bg-white border border-stone-300 text-stone-700 rounded-md sm:rounded-lg text-sm hover:bg-stone-50 transition-colors"
+              >
+                Hủy
+              </button>
+            </div>
+            {error && (
+              <div className="mt-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100 flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                <svg
+                  className="w-4 h-4 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                {error}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {canEdit && isAddingParent && (
+        <div className="mt-4 bg-emerald-50/50 p-4 sm:p-5 rounded-xl border border-emerald-200 shadow-sm">
+          <h4 className="font-bold text-emerald-800 mb-3 text-sm">
+            Thêm Cha/Mẹ
+          </h4>
+
+          <div className="space-y-3">
+            <div>
+              <label
+                htmlFor="parent-name"
+                className="block text-xs font-medium text-stone-600 mb-1"
+              >
+                Họ và Tên <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="parent-name"
+                name="parent-name"
+                type="text"
+                placeholder="Nhập họ và tên..."
+                value={newParentName}
+                onChange={(e) => setNewParentName(e.target.value)}
+                className="bg-white text-stone-900 placeholder-stone-400 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label
+                  htmlFor="parent-gender"
+                  className="block text-xs font-medium text-stone-600 mb-1"
+                >
+                  Giới tính
+                </label>
+                <select
+                  id="parent-gender"
+                  value={newParentGender}
+                  onChange={(e) =>
+                    setNewParentGender(e.target.value as "male" | "female")
+                  }
+                  className="bg-white text-stone-900 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
+                >
+                  <option value="male">Nam (Cha)</option>
+                  <option value="female">Nữ (Mẹ)</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="parent-birth-year"
+                  className="block text-xs font-medium text-stone-600 mb-1"
+                >
+                  Năm sinh (Tuỳ chọn)
+                </label>
+                <input
+                  id="parent-birth-year"
+                  name="parent-birth-year"
+                  type="number"
+                  placeholder="VD: 1950"
+                  value={newParentBirthYear}
+                  onChange={(e) => setNewParentBirthYear(e.target.value)}
+                  className="bg-white text-stone-900 placeholder-stone-400 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label
+                htmlFor="parent-rel-type"
+                className="block text-xs font-medium text-stone-600 mb-1"
+              >
+                Quan hệ
+              </label>
+              <select
+                id="parent-rel-type"
+                value={newParentRelType}
+                onChange={(e) =>
+                  setNewParentRelType(
+                    e.target.value as "biological_child" | "adopted_child",
+                  )
+                }
+                className="bg-white text-stone-900 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
+              >
+                <option value="biological_child">Cha/Mẹ ruột</option>
+                <option value="adopted_child">Cha/Mẹ nuôi</option>
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="parent-note"
+                className="block text-xs font-medium text-stone-600 mb-1"
+              >
+                Ghi chú (Tuỳ chọn)
+              </label>
+              <input
+                id="parent-note"
+                name="parent-note"
+                type="text"
+                placeholder="Tuỳ chọn..."
+                value={newParentNote}
+                onChange={(e) => setNewParentNote(e.target.value)}
+                className="bg-white text-stone-900 placeholder-stone-400 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
+              />
+            </div>
+
+            <p className="text-xs text-stone-500 italic mt-1">
+              * Đây là thêm NGƯỜI MỚI làm cha/mẹ của {person.full_name}, không
+              phải chọn người đã có sẵn trong gia phả.
+            </p>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={handleAddParent}
+                disabled={!newParentName.trim() || processing}
+                className="flex-1 bg-emerald-600 text-white py-2 sm:py-2.5 rounded-md sm:rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+              >
+                {processing ? "Đang lưu..." : "Lưu"}
+              </button>
+              <button
+                onClick={() => {
+                  setIsAddingParent(false);
+                  setNewParentName("");
+                  setNewParentBirthYear("");
+                  setNewParentNote("");
+                  setNewParentRelType("biological_child");
                 }}
                 className="px-4 py-2 sm:py-2.5 bg-white border border-stone-300 text-stone-700 rounded-md sm:rounded-lg text-sm hover:bg-stone-50 transition-colors"
               >

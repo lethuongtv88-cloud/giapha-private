@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Database, KeyRound, RotateCcw, Save } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Database, KeyRound, PlugZap, RotateCcw, Save } from "lucide-react";
 import type { Person } from "@/types";
 import PersonSelector from "@/components/PersonSelector";
 import HomeAssistantTokenPanel from "@/components/home-assistant/HomeAssistantTokenPanel";
@@ -56,6 +56,14 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
   const [linkedPersonId, setLinkedPersonId] = useState<string | null>(null);
   const [linkedPersonLoaded, setLinkedPersonLoaded] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
+  const [isHaOpen, setIsHaOpen] = useState(false);
+
+  // "Gốc gia phả cũng là gốc thống kê mặc định" - không hiển thị picker
+  // "Gốc Thống kê" riêng nữa, chỉ còn 3 lựa chọn cho người dùng tự chọn.
+  const editableRootPreferenceKinds = useMemo(
+    () => ROOT_PREFERENCE_KINDS.filter((item) => item.kind !== "stats"),
+    [],
+  );
 
   useEffect(() => {
     let ignore = false;
@@ -138,9 +146,11 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
   };
 
   const savePreferences = async () => {
-    writeAllRootPreferences(accountKey, preferences);
+    // Gốc gia phả cũng là gốc thống kê mặc định - luôn đồng bộ 2 giá trị này.
+    const toSave: RootPreferences = { ...preferences, stats: preferences.tree };
+    writeAllRootPreferences(accountKey, toSave);
 
-    const dbResult = await writeAllRootPreferencesToDb(user?.id, preferences);
+    const dbResult = await writeAllRootPreferencesToDb(user?.id, toSave);
     if (dbResult.ok) {
       setSavedMessage("Đã lưu cài đặt gốc mặc định vào tài khoản của bạn.");
       setSaveWarning(null);
@@ -247,6 +257,73 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
         </p>
       </div>
 
+      <div className="rounded-2xl border border-stone-200 bg-white/90 p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-stone-100 p-2 text-stone-600">
+            <KeyRound className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-stone-900">Đổi mật khẩu</h2>
+            <p className="mt-1 text-sm text-stone-500">
+              Thành viên có thể tự đổi mật khẩu đăng nhập của mình tại đây.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={changePassword} className="mt-5 grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-stone-700">
+              Mật khẩu mới
+            </label>
+            <input
+              type="password"
+              name="password"
+              required
+              minLength={6}
+              className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition-colors focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+              placeholder="Ít nhất 6 ký tự"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-stone-700">
+              Nhập lại mật khẩu mới
+            </label>
+            <input
+              type="password"
+              name="confirm_password"
+              required
+              minLength={6}
+              className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition-colors focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+            />
+          </div>
+
+          <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-2">
+              {passwordMessage ? (
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+                  {passwordMessage}
+                </p>
+              ) : null}
+              {passwordError ? (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                  {passwordError}
+                </p>
+              ) : null}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isChangingPassword}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-stone-800 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-stone-900 disabled:opacity-50"
+            >
+              <KeyRound className="size-4" />
+              {isChangingPassword ? "Đang cập nhật..." : "Cập nhật mật khẩu"}
+            </button>
+          </div>
+        </form>
+      </div>
+
       <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-4 text-sm text-sky-900">
         <p className="font-semibold">Người trong gia phả gắn với tài khoản</p>
         <p className="mt-1 text-sky-800/80">
@@ -324,7 +401,7 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
         ) : null}
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
-          {ROOT_PREFERENCE_KINDS.map((item) => (
+          {editableRootPreferenceKinds.map((item) => (
             <div
               key={item.kind}
               className="rounded-2xl border border-stone-200 bg-stone-50/60 p-4"
@@ -345,75 +422,6 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
         </div>
       </div>
 
-      <HomeAssistantTokenPanel />
-
-      <div className="rounded-2xl border border-stone-200 bg-white/90 p-5 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="rounded-xl bg-stone-100 p-2 text-stone-600">
-            <KeyRound className="size-5" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-stone-900">Đổi mật khẩu</h2>
-            <p className="mt-1 text-sm text-stone-500">
-              Thành viên có thể tự đổi mật khẩu đăng nhập của mình tại đây.
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={changePassword} className="mt-5 grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-stone-700">
-              Mật khẩu mới
-            </label>
-            <input
-              type="password"
-              name="password"
-              required
-              minLength={6}
-              className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition-colors focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-              placeholder="Ít nhất 6 ký tự"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-stone-700">
-              Nhập lại mật khẩu mới
-            </label>
-            <input
-              type="password"
-              name="confirm_password"
-              required
-              minLength={6}
-              className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none transition-colors focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-            />
-          </div>
-
-          <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-2">
-              {passwordMessage ? (
-                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
-                  {passwordMessage}
-                </p>
-              ) : null}
-              {passwordError ? (
-                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
-                  {passwordError}
-                </p>
-              ) : null}
-            </div>
-
-            <button
-              type="submit"
-              disabled={isChangingPassword}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-stone-800 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-stone-900 disabled:opacity-50"
-            >
-              <KeyRound className="size-4" />
-              {isChangingPassword ? "Đang cập nhật..." : "Cập nhật mật khẩu"}
-            </button>
-          </div>
-        </form>
-      </div>
-
       <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-4 text-sm text-sky-900">
         <div className="flex gap-3">
           <Database className="mt-0.5 size-5 shrink-0" />
@@ -425,6 +433,35 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
             </p>
           </div>
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-stone-200 bg-white/90 shadow-sm overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsHaOpen((value) => !value)}
+          className="w-full flex items-center justify-between gap-3 p-5 text-left"
+        >
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl bg-stone-100 p-2 text-stone-600">
+              <PlugZap className="size-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-stone-900">API cho Home Assistant</h2>
+              <p className="mt-1 text-sm text-stone-500">
+                Ít người dùng đến - bấm để mở rộng khi cần tạo hoặc quản lý token.
+              </p>
+            </div>
+          </div>
+          <ChevronDown
+            className={`size-5 shrink-0 text-stone-400 transition-transform ${isHaOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+
+        {isHaOpen && (
+          <div className="border-t border-stone-100 p-5 pt-4">
+            <HomeAssistantTokenPanel />
+          </div>
+        )}
       </div>
     </div>
   );

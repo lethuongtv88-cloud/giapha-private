@@ -13,7 +13,7 @@ export const ROOT_PREFERENCE_KINDS: Array<{
     kind: "tree",
     label: "Gốc sơ đồ",
     description:
-      "Dùng chung khi mở Cây gia phả, Mindmap và Bong bóng vì các màn này cùng dùng rootId của trang thành viên.",
+      "Dùng chung khi mở Cây gia phả, Mindmap, Bong bóng và Thống kê (gốc gia phả cũng là gốc thống kê mặc định).",
   },
   {
     kind: "dualAncestry",

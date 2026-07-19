@@ -708,7 +708,7 @@ function EventCard({
             {yearsInfo && <span className="text-stone-400">· {yearsInfo}</span>}
           </p>
 
-          {shouldShowEventMessage && (
+          {shouldShowEventMessage && eventMessage.message && (
             <p className="mt-1 rounded-xl border border-stone-100 bg-white/70 px-3 py-2 text-[13px] leading-5 text-stone-600">
               <span className="mr-1">{eventMessage.emoji}</span>
               {eventMessage.message}

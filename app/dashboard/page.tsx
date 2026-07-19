@@ -410,17 +410,34 @@ export default async function DashboardLaunchpad() {
                           <Icon className={`size-4 ${cfg.color}`} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <span className="text-sm font-semibold text-stone-700 truncate block">
-                            {evt.personName}
-                          </span>
-                          <span className="text-xs text-stone-500 font-medium pt-0.5 block">
-                            {evt.daysUntil === 0
-                              ? "Hôm nay"
-                              : evt.daysUntil === 1
-                                ? "Ngày mai"
-                                : `${evt.daysUntil} ngày nữa`}{" "}
-                            · {evt.eventDateLabel}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                            <span className="text-sm font-semibold text-stone-700 truncate">
+                              {evt.personName}
+                            </span>
+                            <span className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                              {cfg.label}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 pt-1">
+                            <span
+                              className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-bold leading-tight whitespace-nowrap ${
+                                evt.daysUntil === 0
+                                  ? "bg-amber-400 text-white"
+                                  : evt.daysUntil > 0 && evt.daysUntil <= 7
+                                    ? "bg-red-100 text-red-600"
+                                    : "bg-stone-100 text-stone-500"
+                              }`}
+                            >
+                              {evt.daysUntil === 0
+                                ? "Hôm nay"
+                                : evt.daysUntil === 1
+                                  ? "Ngày mai"
+                                  : `${evt.daysUntil} ngày nữa`}
+                            </span>
+                            <span className="text-xs text-stone-500 font-medium truncate">
+                              {evt.eventDateLabel}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );

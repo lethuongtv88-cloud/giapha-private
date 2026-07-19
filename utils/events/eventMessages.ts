@@ -54,9 +54,8 @@ export function buildEventMessage(input: EventMessageInput): EventMessage {
         title: isToday(input.daysUntil)
           ? `Hôm nay là sinh nhật ${name}`
           : `Sắp đến sinh nhật ${name}`,
-        message: isToday(input.daysUntil)
-          ? `Chúc ${name} luôn mạnh khỏe, bình an, hạnh phúc và gặp nhiều may mắn.`
-          : `${name} có sinh nhật ${when}. Chuẩn bị gửi một lời chúc thật ấm áp cho ngày đặc biệt này.`,
+        // Bỏ lời chúc cho đơn giản - chỉ giữ tiêu đề + nhãn "Sinh nhật".
+        message: "",
         tone: "birthday",
       };
 
@@ -78,9 +77,8 @@ export function buildEventMessage(input: EventMessageInput): EventMessage {
         title: isToday(input.daysUntil)
           ? `Hôm nay là ngày giỗ của ${name}`
           : `Sắp đến ngày giỗ của ${name}`,
-        message: isToday(input.daysUntil)
-          ? `Kính nhớ và tưởng niệm ${name}. Mong con cháu luôn ghi nhớ công ơn người đi trước.`
-          : `Ngày giỗ của ${name} ${when}. Gia đình có thể chuẩn bị hương hoa và cùng nhau tưởng nhớ.`,
+        // Bỏ lời chúc/lời tưởng niệm cho đơn giản - chỉ giữ tiêu đề + nhãn.
+        message: "",
         tone: "memorial",
       };
 

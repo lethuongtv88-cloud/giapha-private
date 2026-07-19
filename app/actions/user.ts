@@ -279,13 +279,21 @@ export async function adminCreateUser(formData: FormData) {
       }
     }
 
-    if (defaultTreeRootId) {
+    // "Gốc gia phả cũng là gốc thống kê mặc định" - đồng bộ luôn stats theo
+    // tree. "Gốc nội ngoại và sui gia mặc định là người được liên kết với
+    // tài khoản" - chỉ set khi CHƯA có preference nào được set (upsert này
+    // chỉ chạy lúc tạo mới nên chưa có hàng nào, an toàn để set thẳng).
+    // Người dùng vẫn có thể tự đổi lại sau trong Cài đặt tài khoản.
+    if (defaultTreeRootId || linkedPersonId) {
       const { error: preferenceError } = await admin
         .from("user_preferences")
         .upsert(
           {
             user_id: createdUser.id,
             default_tree_root_id: defaultTreeRootId,
+            default_stats_root_id: defaultTreeRootId,
+            default_dual_ancestry_root_id: linkedPersonId,
+            default_in_law_root_id: linkedPersonId,
           },
           { onConflict: "user_id" },
         );
