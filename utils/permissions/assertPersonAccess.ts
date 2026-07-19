@@ -8,6 +8,7 @@ export type PersonAccessCheck = {
   isAdmin: boolean;
   viewerPersonId: string | null;
   visiblePersonIds: Set<string>;
+  editablePersonIds: Set<string>;
 };
 
 export type PermissionTarget = {
@@ -82,6 +83,7 @@ export async function getCurrentPersonAccess(): Promise<PersonAccessCheck> {
       isAdmin: false,
       viewerPersonId: profile?.person_id ?? null,
       visiblePersonIds: new Set(),
+      editablePersonIds: new Set(),
     };
   }
 
@@ -91,6 +93,7 @@ export async function getCurrentPersonAccess(): Promise<PersonAccessCheck> {
       isAdmin: true,
       viewerPersonId: permission.viewerPersonId,
       visiblePersonIds: permission.visiblePersonIds,
+      editablePersonIds: permission.editablePersonIds,
     };
   }
 
@@ -101,6 +104,7 @@ export async function getCurrentPersonAccess(): Promise<PersonAccessCheck> {
       isAdmin: false,
       viewerPersonId: null,
       visiblePersonIds: permission.visiblePersonIds,
+      editablePersonIds: permission.editablePersonIds,
     };
   }
 
@@ -111,6 +115,7 @@ export async function getCurrentPersonAccess(): Promise<PersonAccessCheck> {
       isAdmin: false,
       viewerPersonId: permission.viewerPersonId,
       visiblePersonIds: permission.visiblePersonIds,
+      editablePersonIds: permission.editablePersonIds,
     };
   }
 
@@ -119,6 +124,7 @@ export async function getCurrentPersonAccess(): Promise<PersonAccessCheck> {
     isAdmin: false,
     viewerPersonId: permission.viewerPersonId,
     visiblePersonIds: permission.visiblePersonIds,
+    editablePersonIds: permission.editablePersonIds,
   };
 }
 
@@ -138,14 +144,14 @@ export async function assertCanEditPerson(
     return { ok: false as const, error: access.error ?? "Bạn không có quyền thực hiện thao tác này." };
   }
 
-  if (access.isAdmin || access.visiblePersonIds.has(personId)) {
+  if (access.isAdmin || access.editablePersonIds.has(personId)) {
     return { ok: true as const, access };
   }
 
   await logPermissionDenied({
     ...target,
     entityId: target.entityId ?? personId,
-    reason: "person_outside_visible_scope",
+    reason: "person_outside_editable_scope",
     viewerPersonId: access.viewerPersonId,
     metadata: {
       ...(target.metadata ?? {}),
@@ -155,7 +161,7 @@ export async function assertCanEditPerson(
 
   return {
     ok: false as const,
-    error: "Bạn không có quyền sửa người ngoài nhánh được phép xem.",
+    error: "Bạn không có quyền sửa người ngoài phạm vi được phép chỉnh sửa.",
   };
 }
 
@@ -182,14 +188,14 @@ export async function assertCanEditRelationship(
 
   if (
     access.isAdmin ||
-    (access.visiblePersonIds.has(personAId) && access.visiblePersonIds.has(personBId))
+    (access.editablePersonIds.has(personAId) && access.editablePersonIds.has(personBId))
   ) {
     return { ok: true as const, access };
   }
 
   await logPermissionDenied({
     ...target,
-    reason: "relationship_outside_visible_scope",
+    reason: "relationship_outside_editable_scope",
     viewerPersonId: access.viewerPersonId,
     metadata: {
       ...(target.metadata ?? {}),
@@ -200,7 +206,7 @@ export async function assertCanEditRelationship(
 
   return {
     ok: false as const,
-    error: "Bạn không có quyền sửa quan hệ có người ngoài nhánh được phép xem.",
+    error: "Bạn không có quyền sửa quan hệ có người ngoài phạm vi được phép chỉnh sửa.",
   };
 }
 

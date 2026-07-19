@@ -43,6 +43,8 @@ export default async function MemberDetailPage({ params }: PageProps) {
   const supabase = await getSupabase();
 
   let allowedPersonIds: string[] | null = null;
+  let editablePersonIds: string[] | null = null;
+  let canEditThisPerson = canEdit;
 
   if (!isAdminProfile(profile)) {
     const [
@@ -72,7 +74,11 @@ export default async function MemberDetailPage({ params }: PageProps) {
       return <AccessDenied />;
     }
 
+    // allowedPersonIds: phạm vi XEM (hiển thị danh sách quan hệ/tìm kiếm).
+    // editablePersonIds: phạm vi được phép THAY ĐỔI - hẹp hơn khi có rootedit.
     allowedPersonIds = Array.from(permission.visiblePersonIds);
+    editablePersonIds = Array.from(permission.editablePersonIds);
+    canEditThisPerson = canEdit && permission.editablePersonIds.has(id);
   }
 
   // Fetch Person Public Data
@@ -110,7 +116,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
           </Link>
           <h1 className="title">Chi Tiết Thành Viên</h1>
         </div>
-        {canEdit && (
+        {canEditThisPerson && (
           <div className="flex items-center gap-2.5">
             <Link
               href={`/dashboard/members/${id}/edit`}
@@ -129,8 +135,9 @@ export default async function MemberDetailPage({ params }: PageProps) {
             person={person}
             privateData={privateData}
             isAdmin={isAdmin}
-            canEdit={canEdit}
+            canEdit={canEditThisPerson}
             allowedPersonIds={allowedPersonIds}
+            editablePersonIds={editablePersonIds}
           />
         </div>
       </main>

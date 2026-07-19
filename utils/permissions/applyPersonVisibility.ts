@@ -3,6 +3,8 @@ import { buildVisiblePersons } from "@/utils/permissions/visiblePersons";
 export type PermissionProfile = {
   role?: string | null;
   person_id?: string | null;
+  /** "Gốc chỉnh sửa" (rootedit) do admin gán riêng cho tài khoản này. */
+  edit_root_person_id?: string | null;
 };
 
 export type PersonLike = {
@@ -49,6 +51,7 @@ export type PermissionFilterResult<
   isRestricted: boolean;
   viewerPersonId: string | null;
   visiblePersonIds: Set<string>;
+  editablePersonIds: Set<string>;
   warnings: string[];
   persons: TPerson[];
   relationships: TRelationship[];
@@ -72,11 +75,13 @@ export function buildVisiblePersonSetForProfile(input: {
   const isAdmin = isAdminProfile(input.profile);
 
   if (isAdmin) {
+    const allPersonIds = new Set(input.persons.map((person) => person.id));
     return {
       isAdmin: true,
       isRestricted: false,
       viewerPersonId: input.profile?.person_id ?? null,
-      visiblePersonIds: new Set(input.persons.map((person) => person.id)),
+      visiblePersonIds: allPersonIds,
+      editablePersonIds: new Set(allPersonIds),
       warnings: [] as string[],
     };
   }
@@ -84,6 +89,7 @@ export function buildVisiblePersonSetForProfile(input: {
   const result = buildVisiblePersons({
     viewerPersonId: input.profile?.person_id ?? null,
     role: input.profile?.role,
+    editRootPersonId: input.profile?.edit_root_person_id ?? null,
     persons: input.persons,
     relationships: input.relationships ?? [],
     families: input.families ?? [],
@@ -96,6 +102,7 @@ export function buildVisiblePersonSetForProfile(input: {
     isRestricted: true,
     viewerPersonId: input.profile?.person_id ?? null,
     visiblePersonIds: result.visiblePersonIds,
+    editablePersonIds: result.editablePersonIds,
     warnings: result.warnings,
   };
 }

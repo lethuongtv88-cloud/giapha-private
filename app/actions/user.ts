@@ -201,6 +201,9 @@ export async function adminCreateUser(formData: FormData) {
     formData.get("default_tree_root_id"),
   );
   const linkedPersonId = normalizeOptionalUuid(formData.get("person_id"));
+  const editRootPersonId = normalizeOptionalUuid(
+    formData.get("edit_root_person_id"),
+  );
 
   if (!role) {
     return { error: "Vai trò không hợp lệ." };
@@ -300,10 +303,14 @@ export async function adminCreateUser(formData: FormData) {
       }
     }
 
-    if (linkedPersonId || username) {
+    if (linkedPersonId || editRootPersonId || username) {
       const { error: profileError } = await admin
         .from("profiles")
-        .update({ person_id: linkedPersonId, username })
+        .update({
+          person_id: linkedPersonId,
+          edit_root_person_id: editRootPersonId,
+          username,
+        })
         .eq("id", createdUser.id);
 
       if (profileError) {
@@ -331,6 +338,7 @@ export async function adminCreateUser(formData: FormData) {
       isActive,
       defaultTreeRootId,
       linkedPersonId,
+      editRootPersonId,
     },
   });
 
@@ -349,6 +357,9 @@ export async function adminUpdateUser(formData: FormData) {
     formData.get("default_tree_root_id"),
   );
   const linkedPersonId = normalizeOptionalUuid(formData.get("person_id"));
+  const editRootPersonId = normalizeOptionalUuid(
+    formData.get("edit_root_person_id"),
+  );
 
   if (!userId) return { error: "Thiếu ID người dùng." };
   if (!email) return { error: "Email là bắt buộc." };
@@ -413,7 +424,11 @@ export async function adminUpdateUser(formData: FormData) {
 
   const { error: profileError } = await admin
     .from("profiles")
-    .update({ person_id: linkedPersonId, username })
+    .update({
+      person_id: linkedPersonId,
+      edit_root_person_id: editRootPersonId,
+      username,
+    })
     .eq("id", userId);
 
   if (profileError) {
@@ -435,6 +450,7 @@ export async function adminUpdateUser(formData: FormData) {
       isActive,
       defaultTreeRootId,
       linkedPersonId,
+      editRootPersonId,
     },
   });
 

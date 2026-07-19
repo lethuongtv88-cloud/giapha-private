@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useMemberListView } from "@/context/MemberListContext";
 import { useUser } from "@/components/UserProvider";
+import { getMyPermissionScope } from "@/app/actions/permissionScope";
 
 export default function MemberDetailModal() {
   const {
@@ -31,6 +32,48 @@ export default function MemberDetailModal() {
     string,
     unknown
   > | null>(null);
+
+  // Phạm vi được phép xem/sửa theo tài khoản (bao gồm rootedit nếu có). Modal
+  // này mở trực tiếp từ cây gia phả cho bất kỳ người nào, nên phải tự tải
+  // phạm vi này thay vì tin vào `canEdit` (chỉ dựa trên vai trò).
+  const [visiblePersonIds, setVisiblePersonIds] = useState<string[] | null>(
+    null,
+  );
+  const [editablePersonIds, setEditablePersonIds] = useState<string[] | null>(
+    null,
+  );
+  const [scopeLoaded, setScopeLoaded] = useState(isAdmin);
+
+  useEffect(() => {
+    if (isAdmin) {
+      setScopeLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    getMyPermissionScope()
+      .then((scope) => {
+        if (cancelled) return;
+        setVisiblePersonIds(scope.visiblePersonIds);
+        setEditablePersonIds(scope.editablePersonIds);
+        setScopeLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Nếu tải phạm vi thất bại, an toàn hơn là coi như không có quyền sửa.
+        setVisiblePersonIds([]);
+        setEditablePersonIds([]);
+        setScopeLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
+
+  const canEditThisPerson = Boolean(
+    canEdit &&
+      person &&
+      (isAdmin || (scopeLoaded && editablePersonIds?.includes(person.id))),
+  );
 
   const closeModal = () => {
     setMemberModalId(null);
@@ -212,13 +255,15 @@ export default function MemberDetailModal() {
                       <ExternalLink className="size-4" />
                       <span className="hidden sm:inline">Xem</span>
                     </Link>
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-amber-100/80 text-amber-800 rounded-full hover:bg-amber-200 font-semibold text-sm shadow-sm border border-amber-200/50 transition-colors"
-                    >
-                      <Edit2 className="size-4" />
-                      <span className="hidden sm:inline">Chỉnh sửa</span>
-                    </button>
+                    {canEditThisPerson && (
+                      <button
+                        onClick={() => setIsEditing(true)}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-amber-100/80 text-amber-800 rounded-full hover:bg-amber-200 font-semibold text-sm shadow-sm border border-amber-200/50 transition-colors"
+                      >
+                        <Edit2 className="size-4" />
+                        <span className="hidden sm:inline">Chỉnh sửa</span>
+                      </button>
+                    )}
                   </>
                 )
               )}
@@ -338,7 +383,9 @@ export default function MemberDetailModal() {
                       person={person}
                       privateData={privateData}
                       isAdmin={isAdmin}
-                      canEdit={canEdit}
+                      canEdit={canEditThisPerson}
+                      allowedPersonIds={visiblePersonIds}
+                      editablePersonIds={editablePersonIds}
                     />
                   </div>
                 </motion.div>

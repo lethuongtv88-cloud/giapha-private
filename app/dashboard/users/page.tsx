@@ -19,7 +19,7 @@ export default async function AdminUsersPage() {
       .from("persons_active")
       .select("id, full_name, birth_year, gender, avatar_url, generation")
       .order("full_name", { ascending: true }),
-    supabase.from("profiles").select("id, person_id, username"),
+    supabase.from("profiles").select("id, person_id, edit_root_person_id, username"),
   ]);
 
   if (usersRes.error) {
@@ -35,14 +35,21 @@ export default async function AdminUsersPage() {
   }
 
   const profileByUserId = new Map(
-    ((profilesRes.data as Array<{ id: string; person_id: string | null; username: string | null }> | null) ?? []).map(
-      (item) => [item.id, item] as const,
-    ),
+    (
+      (profilesRes.data as Array<{
+        id: string;
+        person_id: string | null;
+        edit_root_person_id: string | null;
+        username: string | null;
+      }> | null) ?? []
+    ).map((item) => [item.id, item] as const),
   );
 
   const typedUsers = (((usersRes.data as AdminUserData[]) || []).map((user) => ({
     ...user,
     person_id: user.person_id ?? profileByUserId.get(user.id)?.person_id ?? null,
+    edit_root_person_id:
+      user.edit_root_person_id ?? profileByUserId.get(user.id)?.edit_root_person_id ?? null,
     username: user.username ?? profileByUserId.get(user.id)?.username ?? null,
   }))) as AdminUserData[];
   const persons = (personsRes.data as Person[]) || [];

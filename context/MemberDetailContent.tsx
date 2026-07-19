@@ -40,6 +40,7 @@ interface MemberDetailContentProps {
   isAdmin: boolean;
   canEdit?: boolean;
   allowedPersonIds?: string[] | null;
+  editablePersonIds?: string[] | null;
 }
 
 export default function MemberDetailContent({
@@ -48,6 +49,7 @@ export default function MemberDetailContent({
   isAdmin,
   canEdit = false,
   allowedPersonIds = null,
+  editablePersonIds = null,
 }: MemberDetailContentProps) {
   const [isNoteExpanded, setIsNoteExpanded] = useState(false);
   const [relStats, setRelStats] = useState<{
@@ -568,6 +570,7 @@ export default function MemberDetailContent({
                   isAdmin={isAdmin}
                   canEdit={canEdit}
                   allowedPersonIds={allowedPersonIds}
+                  editablePersonIds={editablePersonIds}
                   onStatsLoaded={handleStatsLoaded}
                 />
               </div>

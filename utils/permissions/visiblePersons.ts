@@ -46,6 +46,13 @@ export type PermissionPersonEvent = {
 export type BuildVisiblePersonsInput = {
   viewerPersonId?: string | null;
   role?: PermissionRole;
+  /**
+   * "Gốc chỉnh sửa" (rootedit) do admin gán riêng cho tài khoản (thường là editor),
+   * độc lập với person_id của chính tài khoản đó. Khi có giá trị, tài khoản được
+   * cấp thêm quyền xem/sửa: từ người gốc này trở xuống (con, cháu, ...), vợ/chồng
+   * của những người đó, và toàn bộ gia đình bên vợ/chồng của chính người gốc.
+   */
+  editRootPersonId?: string | null;
   persons: PermissionPerson[];
   relationships?: PermissionRelationship[];
   families?: PermissionFamily[];
@@ -64,10 +71,23 @@ export type VisibleReason =
   | "lineage_spouse"
   | "direct_spouse"
   | "direct_spouse_lineage"
-  | "direct_spouse_lineage_spouse";
+  | "direct_spouse_lineage_spouse"
+  | "edit_root"
+  | "edit_root_spouse"
+  | "edit_root_spouse_family"
+  | "edit_root_spouse_family_spouse";
 
 export type VisiblePersonsResult = {
   visiblePersonIds: Set<string>;
+  /**
+   * Phạm vi được phép THAY ĐỔI dữ liệu (thêm/sửa/xoá) - hẹp hơn hoặc bằng
+   * visiblePersonIds. Khi tài khoản được admin gán editRootPersonId (rootedit),
+   * phạm vi sửa CHỈ giới hạn trong nhánh rootedit (gốc trở xuống + gia đình bên
+   * vợ/chồng của gốc) - KHÔNG bao gồm toàn bộ nhánh cá nhân (nội ngoại) mà tài
+   * khoản đó có thể tự nhiên NHÌN THẤY qua person_id của chính họ. Nếu không có
+   * editRootPersonId, phạm vi sửa mặc định bằng phạm vi xem (hành vi cũ).
+   */
+  editablePersonIds: Set<string>;
   reasonByPersonId: Map<string, VisibleReason>;
   warnings: string[];
 };
@@ -176,6 +196,15 @@ function buildGraphs(input: BuildVisiblePersonsInput) {
   return { activePersonIds, parentToChildren, childToParents, spouseGraph };
 }
 
+/**
+ * Trả về chính người `rootId` và toàn bộ hậu duệ (con, cháu, chắt, ...) của
+ * người đó — KHÔNG bao gồm tổ tiên hay anh chị em cùng hàng. Dùng cho phạm vi
+ * "rootedit": chỉnh sửa từ gốc trở xuống.
+ */
+function buildDescendantScope(rootId: string, graphs: ReturnType<typeof buildGraphs>) {
+  return collectReachable(rootId, graphs.parentToChildren);
+}
+
 function buildLineageScope(personId: string, graphs: ReturnType<typeof buildGraphs>) {
   const ancestors = collectReachable(personId, graphs.childToParents);
   const scope = new Set<string>();
@@ -212,6 +241,56 @@ function addLineageWithSpouses(
   }
 }
 
+function applyEditRootScope(
+  editRootPersonId: string,
+  visiblePersonIds: Set<string>,
+  reasonByPersonId: Map<string, VisibleReason>,
+  warnings: string[],
+  graphs: ReturnType<typeof buildGraphs>,
+  includeSpouses: boolean,
+  includeDirectSpouseLineage: boolean,
+) {
+  if (!graphs.activePersonIds.has(editRootPersonId)) {
+    warnings.push(
+      "Gốc chỉnh sửa (rootedit) được admin gán không tồn tại hoặc đã bị xoá.",
+    );
+    return;
+  }
+
+  // 1. Người gốc + toàn bộ hậu duệ ("từ gốc đó trở xuống").
+  const rootDescendants = buildDescendantScope(editRootPersonId, graphs);
+  for (const personId of rootDescendants) {
+    addReason(visiblePersonIds, reasonByPersonId, personId, "edit_root");
+  }
+
+  // 2. Vợ/chồng của người gốc và của từng hậu duệ (để có thể thêm/sửa dâu, rể).
+  if (includeSpouses) {
+    for (const personId of rootDescendants) {
+      for (const spouseId of graphs.spouseGraph.get(personId) ?? []) {
+        addReason(visiblePersonIds, reasonByPersonId, spouseId, "edit_root_spouse");
+      }
+    }
+  }
+
+  // 3. Toàn bộ gia đình bên vợ/chồng của riêng người gốc (không áp dụng cho
+  // vợ/chồng của các hậu duệ khác), ví dụ: gia đình bên chồng của Chế 2.
+  if (includeDirectSpouseLineage) {
+    for (const spouseId of graphs.spouseGraph.get(editRootPersonId) ?? []) {
+      addReason(visiblePersonIds, reasonByPersonId, spouseId, "edit_root_spouse");
+      const spouseFamilyLineage = buildLineageScope(spouseId, graphs);
+      addLineageWithSpouses(
+        spouseFamilyLineage,
+        visiblePersonIds,
+        reasonByPersonId,
+        graphs.spouseGraph,
+        "edit_root_spouse_family",
+        "edit_root_spouse_family_spouse",
+        includeSpouses,
+      );
+    }
+  }
+}
+
 export function buildVisiblePersons(input: BuildVisiblePersonsInput): VisiblePersonsResult {
   const warnings: string[] = [];
   const visiblePersonIds = new Set<string>();
@@ -222,22 +301,67 @@ export function buildVisiblePersons(input: BuildVisiblePersonsInput): VisiblePer
     for (const personId of graphs.activePersonIds) {
       addReason(visiblePersonIds, reasonByPersonId, personId, "admin");
     }
-    return { visiblePersonIds, reasonByPersonId, warnings };
+    return {
+      visiblePersonIds,
+      editablePersonIds: new Set(visiblePersonIds),
+      reasonByPersonId,
+      warnings,
+    };
   }
 
   const viewerPersonId = input.viewerPersonId;
+  const editRootPersonId = input.editRootPersonId || null;
+  const includeSpouses = input.options?.includeSpousesOfLineage ?? true;
+  const includeDirectSpouseLineage = input.options?.includeDirectSpouseLineage ?? true;
+
+  // Phạm vi rootedit được tính RIÊNG (set/map độc lập) để nó vừa có thể được
+  // gộp vào visiblePersonIds (phục vụ xem/điều hướng), vừa được dùng NGUYÊN
+  // VẸN làm editablePersonIds - không lẫn với phạm vi cá nhân (nội ngoại của
+  // chính tài khoản), vốn chỉ nên cấp quyền XEM chứ không cấp quyền SỬA.
+  const editRootScope = new Set<string>();
+  const editRootReasonByPersonId = new Map<string, VisibleReason>();
+
   if (!viewerPersonId) {
+    // Không có person_id cá nhân, nhưng vẫn có thể được cấp quyền qua rootedit.
+    if (editRootPersonId) {
+      applyEditRootScope(
+        editRootPersonId,
+        editRootScope,
+        editRootReasonByPersonId,
+        warnings,
+        graphs,
+        includeSpouses,
+        includeDirectSpouseLineage,
+      );
+      for (const [personId, reason] of editRootReasonByPersonId) {
+        addReason(visiblePersonIds, reasonByPersonId, personId, reason);
+      }
+      return {
+        visiblePersonIds,
+        editablePersonIds: editRootScope,
+        reasonByPersonId,
+        warnings,
+      };
+    }
+
     warnings.push("Tài khoản chưa được gắn với người trong gia phả.");
-    return { visiblePersonIds, reasonByPersonId, warnings };
+    return {
+      visiblePersonIds,
+      editablePersonIds: new Set(),
+      reasonByPersonId,
+      warnings,
+    };
   }
 
   if (!graphs.activePersonIds.has(viewerPersonId)) {
     warnings.push("Người được gắn với tài khoản không tồn tại hoặc đã bị xoá.");
-    return { visiblePersonIds, reasonByPersonId, warnings };
+    return {
+      visiblePersonIds,
+      editablePersonIds: new Set(),
+      reasonByPersonId,
+      warnings,
+    };
   }
-
-  const includeSpouses = input.options?.includeSpousesOfLineage ?? true;
-  const includeDirectSpouseLineage = input.options?.includeDirectSpouseLineage ?? true;
 
   addReason(visiblePersonIds, reasonByPersonId, viewerPersonId, "self");
 
@@ -268,7 +392,33 @@ export function buildVisiblePersons(input: BuildVisiblePersonsInput): VisiblePer
     }
   }
 
-  return { visiblePersonIds, reasonByPersonId, warnings };
+  let editablePersonIds: Set<string>;
+
+  if (editRootPersonId) {
+    applyEditRootScope(
+      editRootPersonId,
+      editRootScope,
+      editRootReasonByPersonId,
+      warnings,
+      graphs,
+      includeSpouses,
+      includeDirectSpouseLineage,
+    );
+    // Gộp vào visiblePersonIds để tài khoản có thể ĐIỀU HƯỚNG/XEM nhánh
+    // rootedit (kể cả khi nhánh đó nằm ngoài phạm vi cá nhân của họ).
+    for (const [personId, reason] of editRootReasonByPersonId) {
+      addReason(visiblePersonIds, reasonByPersonId, personId, reason);
+    }
+    // Nhưng phạm vi được phép SỬA chỉ giới hạn đúng trong nhánh rootedit này -
+    // KHÔNG cộng thêm phạm vi cá nhân (nội ngoại của chính tài khoản).
+    editablePersonIds = editRootScope;
+  } else {
+    // Chưa được admin gán rootedit -> giữ hành vi cũ: được sửa bất cứ ai
+    // nằm trong phạm vi xem của chính tài khoản (nội ngoại + bên vợ/chồng).
+    editablePersonIds = new Set(visiblePersonIds);
+  }
+
+  return { visiblePersonIds, editablePersonIds, reasonByPersonId, warnings };
 }
 
 export function filterPersonEventsByVisiblePersons<TPersonEvent extends PermissionPersonEvent, TEvent extends PermissionEvent>(input: {

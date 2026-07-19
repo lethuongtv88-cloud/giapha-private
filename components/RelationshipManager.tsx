@@ -17,6 +17,12 @@ interface RelationshipManagerProps {
   isAdmin: boolean;
   canEdit?: boolean;
   allowedPersonIds?: string[] | null;
+  /**
+   * Phạm vi được phép THAY ĐỔI (thêm/sửa/xoá quan hệ) - có thể hẹp hơn
+   * allowedPersonIds (phạm vi xem) khi tài khoản được admin gán rootedit.
+   * Nếu không truyền, mặc định dùng allowedPersonIds (hành vi cũ).
+   */
+  editablePersonIds?: string[] | null;
   onStatsLoaded?: (stats: {
     biologicalChildren: number;
     maleBiologicalChildren: number;
@@ -44,6 +50,7 @@ export default function RelationshipManager({
   isAdmin,
   canEdit = false,
   allowedPersonIds = null,
+  editablePersonIds = null,
   onStatsLoaded,
 }: RelationshipManagerProps) {
   const supabase = createClient();
@@ -63,6 +70,15 @@ export default function RelationshipManager({
     [allowedPersonIdSet],
   );
 
+  const editablePersonIdSet = useMemo(
+    () => (editablePersonIds ? new Set(editablePersonIds) : allowedPersonIdSet),
+    [editablePersonIds, allowedPersonIdSet],
+  );
+  const isEditablePerson = useCallback(
+    (id: string | null | undefined) =>
+      !editablePersonIdSet || Boolean(id && editablePersonIdSet.has(id)),
+    [editablePersonIdSet],
+  );
 
   const denyWrite = useCallback((message = "Bạn không có quyền sửa dữ liệu này.") => {
     setError(message);
@@ -70,12 +86,14 @@ export default function RelationshipManager({
   }, []);
 
   const canWriteCurrentPerson = useCallback(() => {
-    if (!canEdit || !isAllowedPerson(personId)) {
-      denyWrite("Bạn không có quyền sửa người ngoài nhánh được phép xem.");
+    if (!canEdit || !isEditablePerson(personId)) {
+      denyWrite(
+        "Bạn không có quyền sửa người ngoài phạm vi được phép chỉnh sửa (gốc chỉnh sửa).",
+      );
       return false;
     }
     return true;
-  }, [canEdit, denyWrite, isAllowedPerson, personId]);
+  }, [canEdit, denyWrite, isEditablePerson, personId]);
 
   // If inside DashboardProvider → open modal; otherwise → navigate to full page
   const handlePersonClick = (id: string) => {

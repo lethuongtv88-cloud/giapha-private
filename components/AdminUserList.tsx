@@ -54,10 +54,12 @@ export default function AdminUserList({
 
   const [defaultTreeRootId, setDefaultTreeRootId] = useState<string | null>(null);
   const [linkedPersonId, setLinkedPersonId] = useState<string | null>(null);
+  const [rootEditPersonId, setRootEditPersonId] = useState<string | null>(null);
 
   const [editingUser, setEditingUser] = useState<AdminUserData | null>(null);
   const [editRootId, setEditRootId] = useState<string | null>(null);
   const [editPersonId, setEditPersonId] = useState<string | null>(null);
+  const [editRootEditPersonId, setEditRootEditPersonId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
 
   const [resetUser, setResetUser] = useState<AdminUserData | null>(null);
@@ -87,12 +89,14 @@ export default function AdminUserList({
     setEditingUser(user);
     setEditRootId(user.default_tree_root_id ?? null);
     setEditPersonId(user.person_id ?? null);
+    setEditRootEditPersonId(user.edit_root_person_id ?? null);
   };
 
   const closeEditModal = () => {
     setEditingUser(null);
     setEditRootId(null);
     setEditPersonId(null);
+    setEditRootEditPersonId(null);
     setIsEditing(false);
   };
 
@@ -241,6 +245,7 @@ export default function AdminUserList({
       setIsCreateModalOpen(false);
       setDefaultTreeRootId(null);
       setLinkedPersonId(null);
+      setRootEditPersonId(null);
       setTimeout(() => window.location.reload(), 1200);
     } catch (error: unknown) {
       const msg =
@@ -270,12 +275,15 @@ export default function AdminUserList({
     const nextRootId =
       formData.get("default_tree_root_id")?.toString()?.trim() || null;
     const nextPersonId = formData.get("person_id")?.toString()?.trim() || null;
+    const nextEditRootPersonId =
+      formData.get("edit_root_person_id")?.toString()?.trim() || null;
 
     const currentEmail = editingUser.email.trim().toLowerCase();
     const currentName = (editingUser.full_name ?? editingUser.name ?? "").trim();
     const currentUsername = editingUser.username ?? null;
     const currentRootId = editingUser.default_tree_root_id ?? null;
     const currentPersonId = editingUser.person_id ?? null;
+    const currentEditRootPersonId = editingUser.edit_root_person_id ?? null;
 
     const onlySafeDemoProfileLinkChanged =
       nextEmail === currentEmail &&
@@ -283,7 +291,9 @@ export default function AdminUserList({
       nextUsername === currentUsername &&
       nextRole === editingUser.role &&
       nextActive === editingUser.is_active &&
-      (nextRootId !== currentRootId || nextPersonId !== currentPersonId);
+      (nextRootId !== currentRootId ||
+        nextPersonId !== currentPersonId ||
+        nextEditRootPersonId !== currentEditRootPersonId);
 
     const hasNoChange =
       nextEmail === currentEmail &&
@@ -292,7 +302,8 @@ export default function AdminUserList({
       nextRole === editingUser.role &&
       nextActive === editingUser.is_active &&
       nextRootId === currentRootId &&
-      nextPersonId === currentPersonId;
+      nextPersonId === currentPersonId &&
+      nextEditRootPersonId === currentEditRootPersonId;
 
     if (hasNoChange) {
       closeEditModal();
@@ -330,6 +341,7 @@ export default function AdminUserList({
                 is_active: nextActive,
                 default_tree_root_id: nextRootId,
                 person_id: nextPersonId,
+                edit_root_person_id: nextEditRootPersonId,
               }
             : user,
         ),
@@ -459,6 +471,9 @@ export default function AdminUserList({
                   Người trong gia phả
                 </th>
                 <th className="px-6 py-4 text-stone-500 font-semibold text-xs">
+                  Gốc chỉnh sửa (rootedit)
+                </th>
+                <th className="px-6 py-4 text-stone-500 font-semibold text-xs">
                   Trạng thái
                 </th>
                 <th className="px-6 py-4 text-stone-500 font-semibold text-xs">
@@ -529,6 +544,11 @@ export default function AdminUserList({
                     </td>
                     <td className="px-6 py-4 text-stone-600 max-w-[220px] truncate">
                       {getPersonName(persons, user.person_id)}
+                    </td>
+                    <td className="px-6 py-4 text-stone-600 max-w-[220px] truncate">
+                      {user.edit_root_person_id
+                        ? getPersonName(persons, user.edit_root_person_id)
+                        : "-"}
                     </td>
                     <td className="px-6 py-4">
                       <button
@@ -602,7 +622,7 @@ export default function AdminUserList({
               {users.length === 0 && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-6 py-8 text-center text-stone-500"
                   >
                     Không tìm thấy người dùng nào.
@@ -622,10 +642,13 @@ export default function AdminUserList({
           setDefaultTreeRootId={setDefaultTreeRootId}
           linkedPersonId={linkedPersonId}
           setLinkedPersonId={setLinkedPersonId}
+          rootEditPersonId={rootEditPersonId}
+          setRootEditPersonId={setRootEditPersonId}
           onClose={() => {
             setIsCreateModalOpen(false);
             setDefaultTreeRootId(null);
             setLinkedPersonId(null);
+            setRootEditPersonId(null);
           }}
           onSubmit={handleCreateUser}
           submitLabel={isCreating ? "Đang tạo..." : "Tạo người dùng"}
@@ -641,6 +664,8 @@ export default function AdminUserList({
           setEditRootId={setEditRootId}
           editPersonId={editPersonId}
           setEditPersonId={setEditPersonId}
+          editRootEditPersonId={editRootEditPersonId}
+          setEditRootEditPersonId={setEditRootEditPersonId}
           onClose={closeEditModal}
           onSubmit={handleEditUser}
           disabled={isEditing}
@@ -706,6 +731,8 @@ function UserFormModal({
   setDefaultTreeRootId,
   linkedPersonId,
   setLinkedPersonId,
+  rootEditPersonId,
+  setRootEditPersonId,
   onClose,
   onSubmit,
   submitLabel,
@@ -717,6 +744,8 @@ function UserFormModal({
   setDefaultTreeRootId: (id: string | null) => void;
   linkedPersonId: string | null;
   setLinkedPersonId: (id: string | null) => void;
+  rootEditPersonId: string | null;
+  setRootEditPersonId: (id: string | null) => void;
   onClose: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   submitLabel: string;
@@ -817,6 +846,28 @@ function UserFormModal({
               Người này là khóa phân quyền. Thành viên thường sẽ chỉ xem được nhánh gia phả liên quan đến người được gán.
             </p>
           </div>
+
+          <div>
+            <input
+              type="hidden"
+              name="edit_root_person_id"
+              value={rootEditPersonId ?? ""}
+            />
+            <PersonSelector
+              persons={persons}
+              selectedId={rootEditPersonId}
+              onSelect={setRootEditPersonId}
+              label="Gốc chỉnh sửa (rootedit)"
+              placeholder="Chưa gán gốc chỉnh sửa"
+              className="w-full"
+            />
+            <p className="mt-2 text-xs leading-relaxed text-stone-500">
+              Chỉ áp dụng cho vai trò Editor. Editor sẽ được thêm quyền xem/sửa từ
+              người này trở xuống (con, cháu, ...) và toàn bộ gia đình bên vợ/chồng
+              của chính người này — cộng thêm (không thay thế) phạm vi tính theo
+              &quot;Người trong gia phả&quot; ở trên.
+            </p>
+          </div>
         </div>
 
         <div className="mt-8 flex justify-end gap-3 pt-2">
@@ -839,6 +890,8 @@ function EditUserModal({
   setEditRootId,
   editPersonId,
   setEditPersonId,
+  editRootEditPersonId,
+  setEditRootEditPersonId,
   onClose,
   onSubmit,
   disabled,
@@ -849,6 +902,8 @@ function EditUserModal({
   setEditRootId: (id: string | null) => void;
   editPersonId: string | null;
   setEditPersonId: (id: string | null) => void;
+  editRootEditPersonId: string | null;
+  setEditRootEditPersonId: (id: string | null) => void;
   onClose: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   disabled: boolean;
@@ -936,6 +991,28 @@ function EditUserModal({
             />
             <p className="mt-2 text-xs leading-relaxed text-stone-500">
               Chỉ quản trị viên được thay đổi liên kết này vì đây là khóa phân quyền dữ liệu của tài khoản.
+            </p>
+          </div>
+
+          <div>
+            <input
+              type="hidden"
+              name="edit_root_person_id"
+              value={editRootEditPersonId ?? ""}
+            />
+            <PersonSelector
+              persons={persons}
+              selectedId={editRootEditPersonId}
+              onSelect={setEditRootEditPersonId}
+              label="Gốc chỉnh sửa (rootedit)"
+              placeholder="Chưa gán gốc chỉnh sửa"
+              className="w-full"
+            />
+            <p className="mt-2 text-xs leading-relaxed text-stone-500">
+              Chỉ áp dụng cho vai trò Editor. Editor sẽ được thêm quyền xem/sửa từ
+              người này trở xuống (con, cháu, ...) và toàn bộ gia đình bên vợ/chồng
+              của chính người này — cộng thêm (không thay thế) phạm vi tính theo
+              &quot;Người trong gia phả&quot; ở trên.
             </p>
           </div>
         </div>

@@ -73,7 +73,7 @@ export default async function EditMemberPage({ params }: PageProps) {
       familyChildren: familyChildrenRes.data ?? [],
     });
 
-    if (!permission.visiblePersonIds.has(id)) {
+    if (!permission.editablePersonIds.has(id)) {
       return (
         <AccessDenied message="Thành viên này nằm ngoài nhánh gia phả mà tài khoản của bạn được phép chỉnh sửa." />
       );
