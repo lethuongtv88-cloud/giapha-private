@@ -1,4 +1,5 @@
 import { buildEventMessage } from "@/utils/events/eventMessages";
+import { getVietnamToday } from "@/utils/dateHelpers";
 import { Lunar, Solar } from "lunar-javascript";
 import {
   buildVisiblePersonSetForProfile,
@@ -129,7 +130,7 @@ function differenceInDays(from: Date, to: Date) {
 }
 
 function nextYearlyOccurrence(month: number, day: number) {
-  const today = startOfLocalDay(new Date());
+  const today = startOfLocalDay(getVietnamToday());
   let occurrence = new Date(today.getFullYear(), month - 1, day);
   occurrence = startOfLocalDay(occurrence);
   if (occurrence.getTime() < today.getTime()) {
@@ -256,7 +257,7 @@ export function buildHomeAssistantUpcomingEvents(input: {
   maxDays?: number;
 }) {
   const maxDays = input.maxDays ?? 30;
-  const today = startOfLocalDay(new Date());
+  const today = startOfLocalDay(getVietnamToday());
   const personById = new Map(input.persons.map((person) => [person.id, person]));
   const out: HomeAssistantUpcomingEvent[] = [];
 

@@ -1,4 +1,5 @@
 import { Lunar, Solar } from "lunar-javascript";
+import { getVietnamToday } from "@/utils/dateHelpers";
 
 export type EventType = "birthday" | "death_anniversary" | "custom_event";
 
@@ -92,8 +93,10 @@ export function computeEvents(
   }[],
   customEvents: CustomEventRecord[] = []
 ): FamilyEvent[] {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Dùng "hôm nay" theo giờ Việt Nam - giống buildEventModelEvents trong
+  // EventsList.tsx - để dashboard (chạy trên server) và trang Sự kiện
+  // (chạy trên trình duyệt) luôn đếm ngược ra cùng một con số ngày.
+  const today = getVietnamToday();
   const events: FamilyEvent[] = [];
 
   for (const p of persons) {
