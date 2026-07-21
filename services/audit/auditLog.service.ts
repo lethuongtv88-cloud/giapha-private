@@ -20,6 +20,7 @@ export type AuditAction =
   | "gedcom.parse_staging"
   | "gedcom.commit_staging_session"
   | "family_model.repair"
+  | "data_maintenance.sql_console_run"
   | "account.preferences_updated"
   | "event.created"
   | "event.updated"

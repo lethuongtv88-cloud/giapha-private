@@ -1,7 +1,25 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getSupabase } from "@/utils/supabase/queries";
+import { getSupabase, getProfile } from "@/utils/supabase/queries";
+import { getSupabaseServiceRole } from "@/utils/supabase/serviceRole";
+
+/**
+ * Kiểm tra quyền admin/editor bằng code (thay cho việc dựa vào RLS, vì các
+ * hàm ghi dưới đây dùng service-role client để bỏ qua RLS - xem ghi chú ở
+ * softDeletePlace). Đây là nơi DUY NHẤT enforce quyền cho các thao tác ghi
+ * trên bảng places.
+ */
+async function assertCanManagePlaces(): Promise<{ ok: true } | { ok: false; error: string }> {
+  const profile = await getProfile();
+  if (profile?.role === "admin" || profile?.role === "editor") {
+    return { ok: true };
+  }
+  return {
+    ok: false,
+    error: "Bạn không có quyền quản lý địa điểm (chỉ admin/editor).",
+  };
+}
 
 export type PlaceInput = {
   name: string;
@@ -153,7 +171,10 @@ function buildGoogleMapsDirectionsUrl(place: {
 }
 
 export async function createPlace(input: PlaceInput) {
-  const supabase = await getSupabase();
+  const guard = await assertCanManagePlaces();
+  if (!guard.ok) return { ok: false as const, error: guard.error };
+
+  const supabase = getSupabaseServiceRole();
   const payload = toDbPayload(input);
 
   if (!payload.name) {
@@ -186,7 +207,10 @@ export async function createPlace(input: PlaceInput) {
 }
 
 export async function updatePlace(placeId: string, input: PlaceInput) {
-  const supabase = await getSupabase();
+  const guard = await assertCanManagePlaces();
+  if (!guard.ok) return { ok: false as const, error: guard.error };
+
+  const supabase = getSupabaseServiceRole();
   const cleanPlaceId = cleanRequiredText(placeId);
   const payload = toDbPayload(input);
 
@@ -223,21 +247,37 @@ export async function updatePlace(placeId: string, input: PlaceInput) {
 }
 
 export async function softDeletePlace(placeId: string) {
-  const supabase = await getSupabase();
+  const guard = await assertCanManagePlaces();
+  if (!guard.ok) return { ok: false as const, error: guard.error };
+
   const cleanPlaceId = cleanRequiredText(placeId);
 
   if (!cleanPlaceId) {
     return { ok: false as const, error: "Thiếu placeId." };
   }
 
-  const { error } = await supabase
+  // Dùng service-role client: RLS trên bảng "places" đang có lỗi chưa xác
+  // định được nguyên nhân gốc (WITH CHECK từ chối dù is_admin()=true khi
+  // kiểm tra trực tiếp bằng SQL) - tạm thời enforce quyền bằng code ở
+  // assertCanManagePlaces() thay vì dựa vào RLS cho tới khi tìm ra gốc rễ.
+  const supabase = getSupabaseServiceRole();
+
+  const { error, data } = await supabase
     .from("places")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", cleanPlaceId)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .select("id");
 
   if (error) {
     return { ok: false as const, error: error.message };
+  }
+
+  if (!data || data.length === 0) {
+    return {
+      ok: false as const,
+      error: "Không tìm thấy địa điểm để xoá (có thể đã bị xoá trước đó).",
+    };
   }
 
   revalidatePath("/dashboard/places");

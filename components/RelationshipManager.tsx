@@ -157,9 +157,13 @@ export default function RelationshipManager({
 
   // Add Parent State
   const [isAddingParent, setIsAddingParent] = useState(false);
+  const [addBothParents, setAddBothParents] = useState(false);
   const [newParentName, setNewParentName] = useState("");
   const [newParentGender, setNewParentGender] = useState<"male" | "female">("male");
   const [newParentBirthYear, setNewParentBirthYear] = useState("");
+  // Chỉ dùng khi addBothParents = true (nhập thêm người mẹ cùng lúc với cha)
+  const [newMotherName, setNewMotherName] = useState("");
+  const [newMotherBirthYear, setNewMotherBirthYear] = useState("");
   const [newParentRelType, setNewParentRelType] = useState<
     "biological_child" | "adopted_child"
   >("biological_child");
@@ -1035,7 +1039,16 @@ export default function RelationshipManager({
       setTimeout(() => setError(null), 5000);
       return;
     }
-    if (!newParentName.trim()) {
+
+    const doBoth = addBothParents && existingParentRelationships.length === 0;
+
+    if (doBoth) {
+      if (!newParentName.trim() || !newMotherName.trim()) {
+        setError("Vui lòng nhập đủ tên Cha và Mẹ.");
+        setTimeout(() => setError(null), 5000);
+        return;
+      }
+    } else if (!newParentName.trim()) {
       setError("Vui lòng nhập tên Cha/Mẹ.");
       setTimeout(() => setError(null), 5000);
       return;
@@ -1044,63 +1057,196 @@ export default function RelationshipManager({
     setProcessing(true);
     setError(null);
     try {
-      const personPayload: {
-        full_name: string;
-        gender: "male" | "female" | "other";
-        birth_year?: number;
-        is_in_law?: boolean;
-        generation?: number;
-      } = {
-        full_name: newParentName.trim(),
-        gender: newParentGender,
-        is_in_law: false,
+      const buildPersonPayload = (name: string, gender: "male" | "female", birthYear: string) => {
+        const payload: {
+          full_name: string;
+          gender: "male" | "female" | "other";
+          birth_year?: number;
+          is_in_law?: boolean;
+          generation?: number;
+        } = {
+          full_name: name.trim(),
+          gender,
+          is_in_law: false,
+        };
+        if (person.generation != null) {
+          payload.generation = person.generation - 1;
+        }
+        if (birthYear.trim() !== "") {
+          const year = parseInt(birthYear);
+          if (!isNaN(year)) payload.birth_year = year;
+        }
+        return payload;
       };
 
-      if (person.generation != null) {
-        personPayload.generation = person.generation - 1;
+      if (doBoth) {
+        // Tạo cả cha và mẹ trong 1 lần, rồi gọi ensureFamilyModelChild MỘT
+        // LẦN DUY NHẤT với cả 2 id -> đảm bảo cùng family_id ngay từ đầu,
+        // không phụ thuộc thứ tự thêm.
+        const { data: fatherData, error: fatherErr } = await supabase
+          .from("persons")
+          .insert(buildPersonPayload(newParentName, "male", newParentBirthYear))
+          .select("id")
+          .single();
+        if (fatherErr || !fatherData) throw fatherErr;
+
+        const { data: motherData, error: motherErr } = await supabase
+          .from("persons")
+          .insert(buildPersonPayload(newMotherName, "female", newMotherBirthYear))
+          .select("id")
+          .single();
+        if (motherErr || !motherData) {
+          // Cha đã lỡ tạo, mẹ thất bại -> dọn lại cha để không mồ côi.
+          await supabase
+            .from("persons")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("id", fatherData.id);
+          throw motherErr;
+        }
+
+        const fatherId = fatherData.id;
+        const motherId = motherData.id;
+        const createdPersonIds = [fatherId, motherId];
+
+        try {
+          const { error: relError } = await supabase
+            .from("relationships")
+            .insert([
+              {
+                person_a: fatherId,
+                person_b: personId,
+                type: newParentRelType,
+                note: newParentNote.trim() || null,
+              },
+              {
+                person_a: motherId,
+                person_b: personId,
+                type: newParentRelType,
+                note: newParentNote.trim() || null,
+              },
+              // Quan hệ vợ chồng giữa 2 người vừa tạo - thiếu dòng này thì
+              // UI không hiện "vợ/chồng" và cây gia phả bị lệch vì thuật
+              // toán vẽ cây ghép cặp cha mẹ dựa theo quan hệ hôn nhân.
+              {
+                person_a: fatherId,
+                person_b: motherId,
+                type: "marriage",
+                note: null,
+              },
+            ]);
+          if (relError) throw relError;
+
+          await ensureFamilyModelChild({
+            supabase,
+            parentAId: fatherId,
+            parentBId: motherId,
+            childId: personId,
+          });
+        } catch (innerErr) {
+          // Bước sau (quan hệ hoặc gán gia đình) thất bại -> dọn lại toàn bộ
+          // để không để lại người/quan hệ mồ côi trong dữ liệu.
+          await supabase
+            .from("persons")
+            .update({ deleted_at: new Date().toISOString() })
+            .in("id", createdPersonIds);
+          await supabase
+            .from("relationships")
+            .update({ deleted_at: new Date().toISOString() })
+            .or(
+              `and(person_a.eq.${fatherId},person_b.eq.${personId}),and(person_a.eq.${motherId},person_b.eq.${personId}),and(person_a.eq.${fatherId},person_b.eq.${motherId})`,
+            );
+          throw innerErr;
+        }
+      } else {
+        const personPayload = buildPersonPayload(
+          newParentName,
+          newParentGender,
+          newParentBirthYear,
+        );
+
+        // 1. Insert Person
+        const { data: newPersonData, error: insertError } = await supabase
+          .from("persons")
+          .insert(personPayload)
+          .select("id")
+          .single();
+
+        if (insertError || !newPersonData) throw insertError;
+
+        const newParentId = newPersonData.id;
+
+        // Nếu người này đã có 1 cha/mẹ, gộp chung vào cùng gia đình với
+        // cha/mẹ đã có thay vì tạo family unit tách rời.
+        const otherParentId =
+          existingParentRelationships[0]?.targetPerson?.id ?? null;
+
+        try {
+          // 2. Insert Relationship (người mới là Cha/Mẹ -> personId là Con)
+          const relationshipsToInsert: {
+            person_a: string;
+            person_b: string;
+            type: string;
+            note: string | null;
+          }[] = [
+            {
+              person_a: newParentId,
+              person_b: personId,
+              type: newParentRelType,
+              note: newParentNote.trim() || null,
+            },
+          ];
+
+          // Nếu đã có sẵn 1 cha/mẹ kia, tạo luôn quan hệ vợ chồng giữa 2
+          // người - thiếu dòng này thì UI không hiện "vợ/chồng" và cây gia
+          // phả bị lệch vì thuật toán vẽ cây ghép cặp cha mẹ dựa theo quan
+          // hệ hôn nhân, không chỉ dựa vào family_parents.
+          if (otherParentId) {
+            relationshipsToInsert.push({
+              person_a: otherParentId,
+              person_b: newParentId,
+              type: "marriage",
+              note: null,
+            });
+          }
+
+          const { error: relError } = await supabase
+            .from("relationships")
+            .insert(relationshipsToInsert);
+
+          if (relError) throw relError;
+
+          await ensureFamilyModelChild({
+            supabase,
+            parentAId: newParentId,
+            parentBId: otherParentId,
+            childId: personId,
+          });
+        } catch (innerErr) {
+          // Bước sau thất bại -> dọn lại người + quan hệ vừa tạo, tránh để
+          // lại bản ghi mồ côi trong dữ liệu.
+          await supabase
+            .from("persons")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("id", newParentId);
+          await supabase
+            .from("relationships")
+            .update({ deleted_at: new Date().toISOString() })
+            .or(
+              `and(person_a.eq.${newParentId},person_b.eq.${personId})` +
+                (otherParentId
+                  ? `,and(person_a.eq.${otherParentId},person_b.eq.${newParentId})`
+                  : ""),
+            );
+          throw innerErr;
+        }
       }
-
-      if (newParentBirthYear.trim() !== "") {
-        const year = parseInt(newParentBirthYear);
-        if (!isNaN(year)) personPayload.birth_year = year;
-      }
-
-      // 1. Insert Person
-      const { data: newPersonData, error: insertError } = await supabase
-        .from("persons")
-        .insert(personPayload)
-        .select("id")
-        .single();
-
-      if (insertError || !newPersonData) throw insertError;
-
-      const newParentId = newPersonData.id;
-
-      // Nếu người này đã có 1 cha/mẹ, gộp chung vào cùng gia đình với
-      // cha/mẹ đã có thay vì tạo family unit tách rời.
-      const otherParentId =
-        existingParentRelationships[0]?.targetPerson?.id ?? null;
-
-      // 2. Insert Relationship (người mới là Cha/Mẹ -> personId là Con)
-      const { error: relError } = await supabase.from("relationships").insert({
-        person_a: newParentId,
-        person_b: personId,
-        type: newParentRelType,
-        note: newParentNote.trim() || null,
-      });
-
-      if (relError) throw relError;
-
-      await ensureFamilyModelChild({
-        supabase,
-        parentAId: newParentId,
-        parentBId: otherParentId,
-        childId: personId,
-      });
 
       setIsAddingParent(false);
+      setAddBothParents(false);
       setNewParentName("");
       setNewParentBirthYear("");
+      setNewMotherName("");
+      setNewMotherBirthYear("");
       setNewParentNote("");
       setNewParentRelType("biological_child");
       fetchRelationships();
@@ -2234,63 +2380,156 @@ export default function RelationshipManager({
           </h4>
 
           <div className="space-y-3">
-            <div>
-              <label
-                htmlFor="parent-name"
-                className="block text-xs font-medium text-stone-600 mb-1"
-              >
-                Họ và Tên <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="parent-name"
-                name="parent-name"
-                type="text"
-                placeholder="Nhập họ và tên..."
-                value={newParentName}
-                onChange={(e) => setNewParentName(e.target.value)}
-                className="bg-white text-stone-900 placeholder-stone-400 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label
-                  htmlFor="parent-gender"
-                  className="block text-xs font-medium text-stone-600 mb-1"
-                >
-                  Giới tính
-                </label>
-                <select
-                  id="parent-gender"
-                  value={newParentGender}
-                  onChange={(e) =>
-                    setNewParentGender(e.target.value as "male" | "female")
-                  }
-                  className="bg-white text-stone-900 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
-                >
-                  <option value="male">Nam (Cha)</option>
-                  <option value="female">Nữ (Mẹ)</option>
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="parent-birth-year"
-                  className="block text-xs font-medium text-stone-600 mb-1"
-                >
-                  Năm sinh (Tuỳ chọn)
-                </label>
+            {existingParentRelationships.length === 0 && (
+              <label className="flex items-center gap-2 text-sm text-emerald-800 bg-white/70 border border-emerald-200 rounded-lg px-3 py-2 cursor-pointer">
                 <input
-                  id="parent-birth-year"
-                  name="parent-birth-year"
-                  type="number"
-                  placeholder="VD: 1950"
-                  value={newParentBirthYear}
-                  onChange={(e) => setNewParentBirthYear(e.target.value)}
-                  className="bg-white text-stone-900 placeholder-stone-400 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
+                  type="checkbox"
+                  checked={addBothParents}
+                  onChange={(e) => setAddBothParents(e.target.checked)}
+                  className="rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
                 />
-              </div>
-            </div>
+                Thêm cả cha và mẹ cùng lúc (đảm bảo hai người thuộc chung 1
+                gia đình ngay từ đầu)
+              </label>
+            )}
+
+            {addBothParents && existingParentRelationships.length === 0 ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label
+                      htmlFor="father-name"
+                      className="block text-xs font-medium text-stone-600 mb-1"
+                    >
+                      Họ và Tên Cha <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="father-name"
+                      name="father-name"
+                      type="text"
+                      placeholder="Nhập họ và tên cha..."
+                      value={newParentName}
+                      onChange={(e) => setNewParentName(e.target.value)}
+                      className="bg-white text-stone-900 placeholder-stone-400 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="father-birth-year"
+                      className="block text-xs font-medium text-stone-600 mb-1"
+                    >
+                      Năm sinh Cha (Tuỳ chọn)
+                    </label>
+                    <input
+                      id="father-birth-year"
+                      name="father-birth-year"
+                      type="number"
+                      placeholder="VD: 1950"
+                      value={newParentBirthYear}
+                      onChange={(e) => setNewParentBirthYear(e.target.value)}
+                      className="bg-white text-stone-900 placeholder-stone-400 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label
+                      htmlFor="mother-name"
+                      className="block text-xs font-medium text-stone-600 mb-1"
+                    >
+                      Họ và Tên Mẹ <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="mother-name"
+                      name="mother-name"
+                      type="text"
+                      placeholder="Nhập họ và tên mẹ..."
+                      value={newMotherName}
+                      onChange={(e) => setNewMotherName(e.target.value)}
+                      className="bg-white text-stone-900 placeholder-stone-400 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="mother-birth-year"
+                      className="block text-xs font-medium text-stone-600 mb-1"
+                    >
+                      Năm sinh Mẹ (Tuỳ chọn)
+                    </label>
+                    <input
+                      id="mother-birth-year"
+                      name="mother-birth-year"
+                      type="number"
+                      placeholder="VD: 1952"
+                      value={newMotherBirthYear}
+                      onChange={(e) => setNewMotherBirthYear(e.target.value)}
+                      className="bg-white text-stone-900 placeholder-stone-400 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label
+                    htmlFor="parent-name"
+                    className="block text-xs font-medium text-stone-600 mb-1"
+                  >
+                    Họ và Tên <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="parent-name"
+                    name="parent-name"
+                    type="text"
+                    placeholder="Nhập họ và tên..."
+                    value={newParentName}
+                    onChange={(e) => setNewParentName(e.target.value)}
+                    className="bg-white text-stone-900 placeholder-stone-400 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label
+                      htmlFor="parent-gender"
+                      className="block text-xs font-medium text-stone-600 mb-1"
+                    >
+                      Giới tính
+                    </label>
+                    <select
+                      id="parent-gender"
+                      value={newParentGender}
+                      onChange={(e) =>
+                        setNewParentGender(e.target.value as "male" | "female")
+                      }
+                      className="bg-white text-stone-900 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
+                    >
+                      <option value="male">Nam (Cha)</option>
+                      <option value="female">Nữ (Mẹ)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="parent-birth-year"
+                      className="block text-xs font-medium text-stone-600 mb-1"
+                    >
+                      Năm sinh (Tuỳ chọn)
+                    </label>
+                    <input
+                      id="parent-birth-year"
+                      name="parent-birth-year"
+                      type="number"
+                      placeholder="VD: 1950"
+                      value={newParentBirthYear}
+                      onChange={(e) => setNewParentBirthYear(e.target.value)}
+                      className="bg-white text-stone-900 placeholder-stone-400 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-2 sm:p-2.5 border transition-colors"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             <div>
               <label
@@ -2340,7 +2579,13 @@ export default function RelationshipManager({
             <div className="flex gap-2 pt-2">
               <button
                 onClick={handleAddParent}
-                disabled={!newParentName.trim() || processing}
+                disabled={
+                  !newParentName.trim() ||
+                  (addBothParents &&
+                    existingParentRelationships.length === 0 &&
+                    !newMotherName.trim()) ||
+                  processing
+                }
                 className="flex-1 bg-emerald-600 text-white py-2 sm:py-2.5 rounded-md sm:rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
               >
                 {processing ? "Đang lưu..." : "Lưu"}
@@ -2348,8 +2593,11 @@ export default function RelationshipManager({
               <button
                 onClick={() => {
                   setIsAddingParent(false);
+                  setAddBothParents(false);
                   setNewParentName("");
                   setNewParentBirthYear("");
+                  setNewMotherName("");
+                  setNewMotherBirthYear("");
                   setNewParentNote("");
                   setNewParentRelType("biological_child");
                 }}

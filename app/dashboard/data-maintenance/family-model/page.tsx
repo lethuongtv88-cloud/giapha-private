@@ -110,7 +110,9 @@ export default async function FamilyModelMaintenancePage() {
                 <SqlBlock title="Repair missing marriage Family Model" sql={familyModelRepairSql.missingMarriage} />
                 <SqlBlock title="Repair missing child Family Model" sql={familyModelRepairSql.missingChild} />
                 <SqlBlock title="Preview duplicate family_parents" sql={familyModelRepairSql.duplicateParentsPreview} />
+                <SqlBlock title="Repair (xóa) duplicate family_parents - giữ dòng cũ nhất" sql={familyModelRepairSql.dedupeFamilyParents} />
                 <SqlBlock title="Preview duplicate family_children" sql={familyModelRepairSql.duplicateChildrenPreview} />
+                <SqlBlock title="Repair (xóa) duplicate family_children - giữ dòng cũ nhất" sql={familyModelRepairSql.dedupeFamilyChildren} />
                 <SqlBlock title="Preview empty active families" sql={familyModelRepairSql.emptyFamiliesPreview} />
               </div>
             </div>
