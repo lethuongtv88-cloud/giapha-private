@@ -8,6 +8,7 @@ import {
   Wrench,
   Activity,
   GitBranch,
+  Terminal,
 } from "lucide-react";
 import { DataMaintenanceShortcuts } from "@/components/AdminMaintenanceShortcuts";
 import { getSupabase } from "@/utils/supabase/queries";
@@ -330,6 +331,14 @@ export default async function DataMaintenancePage() {
             href="/dashboard/data-maintenance/family-model"
             icon={<Wrench className="size-6" />}
             tone="indigo"
+          />
+
+          <ToolCard
+            title="SQL Console"
+            description="Chạy trực tiếp SQL repair vào database, không cần vào Supabase SQL Editor. Chỉ dành cho admin."
+            href="/dashboard/data-maintenance/sql-console"
+            icon={<Terminal className="size-6" />}
+            tone="red"
           />
         </section>
         
