@@ -1,14 +1,14 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { BarChart2, ChevronDown, Database, GitMerge, Info, Network, UserCircle, Users, DatabaseZap, Activity, Settings } from "lucide-react";
+import { BarChart2, ChevronDown, Database, GitMerge, Info, MapPin, Network, UserCircle, Users, DatabaseZap, Activity, Settings } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import LogoutButton from "./LogoutButton";
 import { useUser } from "./UserProvider";
 
 export default function HeaderMenu() {
-  const { user, isAdmin } = useUser();
+  const { user, isAdmin, isEditor } = useUser();
   const userEmail = user?.email;
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -157,7 +157,22 @@ export default function HeaderMenu() {
                 <Network className="size-4" />
                 Nguồn thông tin
               </Link>
-              
+              </>
+              )}
+
+              {isEditor && (
+                <Link
+                  href="/dashboard/places"
+                  onClick={() => setIsOpen(false)}
+                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-stone-700 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                >
+                  <MapPin className="size-4" />
+                  Địa điểm
+                </Link>
+              )}
+
+              {isAdmin && (
+                <>
                   <Link
                     href="/dashboard/data-maintenance"
                     onClick={() => setIsOpen(false)}
@@ -168,6 +183,7 @@ export default function HeaderMenu() {
                   </Link>
                   <Link
                     href="/dashboard/admin-health"
+                    onClick={() => setIsOpen(false)}
                     className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-stone-700 hover:text-teal-700 hover:bg-teal-50 transition-colors"
                   >
                     <Activity className="size-4" />
