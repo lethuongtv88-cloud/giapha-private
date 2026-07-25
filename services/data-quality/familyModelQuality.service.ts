@@ -6,6 +6,7 @@ export type FamilyModelQualityKind =
   | "duplicate_family_parent"
   | "duplicate_family_child"
   | "family_child_without_parent"
+  | "family_single_parent_needs_review"
   | "active_empty_family"
   | "person_parent_and_child_same_family"
   | "family_more_than_two_parents"
@@ -26,6 +27,7 @@ export interface FamilyModelQualityRelationship {
   type?: string | null;
   person_a?: string | null;
   person_b?: string | null;
+  status?: string | null;
   deleted_at?: string | null;
   created_at?: string | null;
 }
@@ -99,6 +101,7 @@ const allKinds: FamilyModelQualityKind[] = [
   "duplicate_family_parent",
   "duplicate_family_child",
   "family_child_without_parent",
+  "family_single_parent_needs_review",
   "active_empty_family",
   "person_parent_and_child_same_family",
   "family_more_than_two_parents",
@@ -114,6 +117,8 @@ export const familyModelKindLabels: Record<FamilyModelQualityKind, string> = {
   duplicate_family_parent: "Trùng family_parents",
   duplicate_family_child: "Trùng family_children",
   family_child_without_parent: "Family có con không có cha/mẹ",
+  family_single_parent_needs_review:
+    "Family chỉ có 1 cha/mẹ - cần admin xử lý thủ công",
   active_empty_family: "Family rỗng active",
   person_parent_and_child_same_family: "Một người vừa parent vừa child trong family",
   family_more_than_two_parents: "Family có hơn 2 parent",
@@ -202,6 +207,48 @@ export function runFamilyModelQualityChecks(
         personIds: children.map((child) => child.person_id),
         repairHint: "Cần xem chi tiết để gắn đúng cha/mẹ; không nên auto-repair.",
       });
+    }
+
+    // Family chỉ có 1 cha/mẹ + có con: đây chính là trường hợp mà
+    // findSingleSpouse()/get_single_active_spouse() KHÔNG thể tự động áp
+    // dụng (0 vợ/chồng active -> không rõ; >=2 vợ/chồng active -> mập mờ,
+    // không dám đoán). Ghi nhận lại để admin xử lý tay, thay vì để lộ ra
+    // dưới dạng nhãn "(Con)" mập mờ ở trang người còn lại.
+    if (parents.length === 1 && children.length > 0) {
+      const loneParentId = parents[0].person_id;
+      const activeSpouseIds = Array.from(
+        new Set(
+          relationships
+            .filter(
+              (rel) =>
+                !rel.deleted_at &&
+                rel.type === "marriage" &&
+                (rel.status ?? "active") === "active" &&
+                (rel.person_a === loneParentId || rel.person_b === loneParentId),
+            )
+            .map((rel) => (rel.person_a === loneParentId ? rel.person_b : rel.person_a))
+            .filter((id): id is string => !!id && activePersonIds.has(id)),
+        ),
+      );
+
+      if (activeSpouseIds.length !== 1) {
+        const isAmbiguous = activeSpouseIds.length > 1;
+        issues.push({
+          id: `family:${family.id}:single-parent-needs-review`,
+          kind: "family_single_parent_needs_review",
+          severity: isAmbiguous ? "error" : "warning",
+          title: familyModelKindLabels.family_single_parent_needs_review,
+          description: isAmbiguous
+            ? `Family ${family.id} chỉ có 1 cha/mẹ (${formatPerson(loneParentId, personById)}) và ${children.length} con, nhưng người này có ${activeSpouseIds.length} vợ/chồng đang active nên hệ thống không tự chọn được.`
+            : `Family ${family.id} chỉ có 1 cha/mẹ (${formatPerson(loneParentId, personById)}) và ${children.length} con, và không tìm thấy vợ/chồng active nào để tự động bổ sung.`,
+          repairable: false,
+          familyIds: [family.id],
+          personIds: [loneParentId, ...activeSpouseIds, ...children.map((c) => c.person_id)],
+          repairHint: isAmbiguous
+            ? "Admin cần mở trang người này, xác nhận đúng vợ/chồng nào là cha/mẹ còn lại của (các) con trên rồi gắn thủ công."
+            : "Admin cần xác nhận: nếu đây thực sự là cha/mẹ đơn thân thì bỏ qua; nếu thiếu, hãy thêm quan hệ hôn nhân rồi gắn lại cha/mẹ còn lại cho con.",
+        });
+      }
     }
 
     if (parents.length > 2) {

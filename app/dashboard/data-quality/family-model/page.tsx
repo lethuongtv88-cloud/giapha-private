@@ -33,6 +33,7 @@ const orderedKinds: FamilyModelQualityKind[] = [
   "duplicate_family_parent",
   "duplicate_family_child",
   "family_child_without_parent",
+  "family_single_parent_needs_review",
   "active_empty_family",
   "person_parent_and_child_same_family",
   "family_more_than_two_parents",
@@ -188,7 +189,7 @@ export default async function FamilyModelQualityPage() {
       supabase.from("persons").select("id, full_name, gender, deleted_at"),
       supabase
         .from("relationships")
-        .select("id, type, person_a, person_b, deleted_at, created_at"),
+        .select("id, type, person_a, person_b, status, deleted_at, created_at"),
       supabase.from("families").select("id, status, deleted_at, created_at, updated_at"),
       supabase.from("family_parents").select("id, family_id, person_id, role, sort_order"),
       supabase
