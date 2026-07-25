@@ -2,6 +2,8 @@ import { BackToDataQuality } from "@/components/AdminMaintenanceShortcuts";
 import Link from "next/link";
 import { DatabaseZap, ShieldCheck, AlertTriangle, Wrench, Eye } from "lucide-react";
 import { getSupabase } from "@/utils/supabase/queries";
+import { fetchAll } from "@/utils/supabase/fetchAll";
+import { SqlCopyBlock } from "@/components/data-quality/SqlCopyBlock";
 import {
   familyModelKindLabels,
   familyModelRepairSql,
@@ -66,19 +68,6 @@ function SummaryCard({
       <div className="text-sm opacity-80">{label}</div>
       <div className="mt-2 text-3xl font-bold">{value}</div>
     </div>
-  );
-}
-
-function SqlBlock({ title, sql }: { title: string; sql: string }) {
-  return (
-    <details className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
-      <summary className="cursor-pointer text-sm font-bold text-stone-800">
-        {title}
-      </summary>
-      <pre className="mt-3 max-h-80 overflow-auto rounded-xl bg-stone-950 p-4 text-xs leading-relaxed text-stone-100">
-        <code>{sql}</code>
-      </pre>
-    </details>
   );
 }
 
@@ -186,15 +175,19 @@ export default async function FamilyModelQualityPage() {
 
   const [personsRes, relationshipsRes, familiesRes, parentsRes, childrenRes] =
     await Promise.all([
-      supabase.from("persons").select("id, full_name, gender, deleted_at"),
-      supabase
-        .from("relationships")
-        .select("id, type, person_a, person_b, status, deleted_at, created_at"),
-      supabase.from("families").select("id, status, deleted_at, created_at, updated_at"),
-      supabase.from("family_parents").select("id, family_id, person_id, role, sort_order"),
-      supabase
-        .from("family_children")
-        .select("id, family_id, person_id, relationship_type, sort_order, legacy_relationship_id, migration_confidence"),
+      fetchAll(supabase, "persons", "id, full_name, gender, deleted_at"),
+      fetchAll(
+        supabase,
+        "relationships",
+        "id, type, person_a, person_b, status, deleted_at, created_at",
+      ),
+      fetchAll(supabase, "families", "id, status, deleted_at, created_at, updated_at"),
+      fetchAll(supabase, "family_parents", "id, family_id, person_id, role, sort_order"),
+      fetchAll(
+        supabase,
+        "family_children",
+        "id, family_id, person_id, relationship_type, sort_order, legacy_relationship_id, migration_confidence",
+      ),
     ]);
 
   const loadErrors = [
@@ -292,15 +285,51 @@ export default async function FamilyModelQualityPage() {
             <div className="min-w-0 flex-1">
               <h2 className="font-bold">SQL repair an toàn từng bước</h2>
               <p className="mt-1 text-sm text-amber-800">
-                Hai repair đầu dùng RPC ensure_family_model_marriage và
-                ensure_family_model_child. Các nhóm duplicate/empty nên preview trước.
+                Luôn chạy PREVIEW trước, xem kỹ kết quả rồi mới chạy script sửa. Bấm
+                &quot;Copy&quot; ở góc mỗi khối để chép nhanh sang SQL Editor.
               </p>
+
               <div className="mt-4 space-y-3">
-                <SqlBlock title="Repair missing marriage Family Model" sql={familyModelRepairSql.missingMarriage} />
-                <SqlBlock title="Repair missing child Family Model" sql={familyModelRepairSql.missingChild} />
-                <SqlBlock title="Preview duplicate family_parents" sql={familyModelRepairSql.duplicateParentsPreview} />
-                <SqlBlock title="Preview duplicate family_children" sql={familyModelRepairSql.duplicateChildrenPreview} />
-                <SqlBlock title="Preview empty active families" sql={familyModelRepairSql.emptyFamiliesPreview} />
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
+                  Thiếu Family Model (marriage / child)
+                </p>
+                <SqlCopyBlock title="Repair missing marriage Family Model" sql={familyModelRepairSql.missingMarriage} />
+                <SqlCopyBlock title="Repair missing child Family Model" sql={familyModelRepairSql.missingChild} />
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
+                  Trùng lặp family_parents / family_children
+                </p>
+                <SqlCopyBlock title="1. Preview duplicate family_parents" sql={familyModelRepairSql.duplicateParentsPreview} />
+                <SqlCopyBlock title="2. Xóa trùng family_parents (giữ dòng đầu tiên)" sql={familyModelRepairSql.dedupeFamilyParents} />
+                <SqlCopyBlock title="1. Preview duplicate family_children" sql={familyModelRepairSql.duplicateChildrenPreview} />
+                <SqlCopyBlock title="2. Xóa trùng family_children (giữ dòng đầu tiên)" sql={familyModelRepairSql.dedupeFamilyChildren} />
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
+                  Family rỗng (không parent, không children)
+                </p>
+                <SqlCopyBlock title="1. Preview empty active families" sql={familyModelRepairSql.emptyFamiliesPreview} />
+                <SqlCopyBlock title="2. Soft-delete family rỗng (RPC, cần quyền admin)" sql={familyModelRepairSql.softDeleteEmptyFamilies} />
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
+                  family_parents / family_children trỏ tới person đã soft-delete
+                </p>
+                <SqlCopyBlock title="1. Preview edge trỏ tới person đã soft-delete" sql={familyModelRepairSql.deletedPersonFamilyEdgesPreview} />
+                <SqlCopyBlock title="2a. Gỡ edge (nếu soft-delete person là ĐÚNG chủ ý)" sql={familyModelRepairSql.removeDeletedPersonFamilyEdges} />
+                <SqlCopyBlock title="2b. Hoặc khôi phục person (nếu xóa NHẦM)" sql={familyModelRepairSql.restoreSoftDeletedPersonTemplate} />
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
+                  relationships trỏ tới person đã soft-delete
+                </p>
+                <SqlCopyBlock title="1. Preview relationships trỏ tới person đã soft-delete" sql={familyModelRepairSql.deletedPersonRelationshipsPreview} />
+                <SqlCopyBlock title="2. Soft-delete các relationships đó" sql={familyModelRepairSql.softDeleteRelationshipsToDeletedPersons} />
               </div>
             </div>
           </div>

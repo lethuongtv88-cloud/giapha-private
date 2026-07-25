@@ -5,6 +5,7 @@ import {
   type DataQualitySeverity,
 } from "@/services/data-quality/dataQuality.service";
 import { getSupabase } from "@/utils/supabase/queries";
+import { fetchAll } from "@/utils/supabase/fetchAll";
 import Link from "next/link";
 import { DataQualityShortcuts } from "@/components/AdminMaintenanceShortcuts";
 
@@ -163,14 +164,14 @@ export default async function DataQualityPage() {
     personEventsRes,
     migrationReviewRes,
   ] = await Promise.all([
-    supabase.from("persons").select("*"),
-    supabase.from("relationships").select("*"),
-    supabase.from("families").select("*"),
-    supabase.from("family_parents").select("*"),
-    supabase.from("family_children").select("*"),
-    supabase.from("events").select("*"),
-    supabase.from("person_events").select("*"),
-    supabase.from("migration_review").select("*"),
+    fetchAll(supabase, "persons", "*"),
+    fetchAll(supabase, "relationships", "*"),
+    fetchAll(supabase, "families", "*"),
+    fetchAll(supabase, "family_parents", "*"),
+    fetchAll(supabase, "family_children", "*"),
+    fetchAll(supabase, "events", "*"),
+    fetchAll(supabase, "person_events", "*"),
+    fetchAll(supabase, "migration_review", "*"),
   ]);
 
   const loadErrors = [
