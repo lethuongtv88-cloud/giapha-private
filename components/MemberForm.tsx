@@ -3,6 +3,7 @@
 import { Gender, Person } from "@/types";
 import PlaceSelector from "@/components/places/PlaceSelector";
 import { createClient } from "@/utils/supabase/client";
+import { deletePersonAvatar, uploadPersonAvatar } from "@/app/actions/avatar";
 import { AnimatePresence, motion, Variants } from "framer-motion";
 import {
   AlertCircle,
@@ -183,18 +184,6 @@ export default function MemberForm({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData?.id]);
-
-  const slugify = (str: string) => {
-    return str
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[đĐ]/g, "d")
-      .replace(/([^0-9a-z-\s])/g, "")
-      .replace(/(\s+)/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  };
 
   const handleSolarDeathChange = (
     field: "day" | "month" | "year",
@@ -712,30 +701,31 @@ export default function MemberForm({
 
       // 2. Handle Avatar Upload if a new file is selected (now we have currentPersonId)
       if (avatarFile && currentPersonId) {
-        const fileExt = avatarFile.name.split(".").pop();
-        const slugName = slugify(fullName);
-        const fileName = `${currentPersonId}_${slugName}.${fileExt}`;
-        const filePath = `${fileName}`;
+        const uploadForm = new FormData();
+        uploadForm.set("personId", currentPersonId);
+        uploadForm.set("fullName", fullName);
+        uploadForm.set("file", avatarFile);
 
-        const { error: uploadError } = await supabase.storage
-          .from("avatars")
-          .upload(filePath, avatarFile, { upsert: true });
+        const uploadResult = await uploadPersonAvatar(uploadForm);
+        if (uploadResult.error || !uploadResult.url) {
+          throw new Error(
+            uploadResult.error || "Tải ảnh đại diện lên thất bại.",
+          );
+        }
 
-        if (uploadError) throw uploadError;
-
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("avatars").getPublicUrl(filePath);
-
-        currentAvatarUrl = publicUrl;
-
-        // Update the person with the final avatar URL
-        const { error: updateAvatarError } = await supabase
-          .from("persons")
-          .update({ avatar_url: currentAvatarUrl })
-          .eq("id", currentPersonId)
-          .is("deleted_at", null);
-        if (updateAvatarError) throw updateAvatarError;
+        currentAvatarUrl = uploadResult.url;
+      } else if (
+        isEditing &&
+        currentPersonId &&
+        initialData?.avatar_url &&
+        avatarUrl === ""
+      ) {
+        // Người dùng đã bấm "Xóa ảnh" và không chọn ảnh mới: xoá hẳn ảnh
+        // cũ khỏi kho lưu trữ (qua service role để tránh lỗi RLS).
+        const deleteResult = await deletePersonAvatar(currentPersonId);
+        if (deleteResult.error) {
+          throw new Error(deleteResult.error);
+        }
       }
 
       if (!currentPersonId)
@@ -987,37 +977,11 @@ export default function MemberForm({
                   {avatarPreview && (
                     <button
                       type="button"
-                      onClick={async () => {
-                        // If there is an existing URL from Supabase, try to extract the file path to delete it
-                        if (
-                          initialData?.avatar_url &&
-                          avatarUrl === initialData.avatar_url
-                        ) {
-                          try {
-                            // Extract just the filename from the end of the URL
-                            const fileName = initialData.avatar_url
-                              .split("/")
-                              .pop();
-                            if (fileName) {
-                              const { error: removeError } =
-                                await supabase.storage
-                                  .from("avatars")
-                                  .remove([fileName]);
-                              if (removeError) {
-                                console.error(
-                                  "Error removing avatar from storage:",
-                                  removeError,
-                                );
-                              }
-                            }
-                          } catch (err) {
-                            console.error(
-                              "Failed to parse avatar URL for deletion",
-                              err,
-                            );
-                          }
-                        }
-
+                      onClick={() => {
+                        // Chỉ xoá tạm trên form; việc xoá file thật trong
+                        // kho lưu trữ sẽ được thực hiện khi bấm Lưu (qua
+                        // server action, tránh lỗi phân quyền RLS và
+                        // tránh xoá nhầm nếu người dùng huỷ form).
                         setAvatarUrl("");
                         setAvatarFile(null);
                         setAvatarPreview(null);

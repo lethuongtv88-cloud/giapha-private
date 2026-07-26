@@ -92,6 +92,7 @@ type ChildSlot = {
   block: TreeBlock;
   x: number;
   childTopCenterX: number;
+  isAdopted: boolean;
 };
 
 type TreeBlock = {
@@ -128,6 +129,7 @@ type GroupDraft = {
   childLayout: BiologicalChildLayout;
   childrenWidth: number;
   groupWidth: number;
+  adoptedChildIds: Set<string>;
 };
 
 type BiologicalChildLayout = {
@@ -1099,7 +1101,10 @@ function RenderTreeBlock({
                       y2={childTopY}
                       stroke={LINE_COLOR}
                       strokeWidth={2}
-                    />
+                      strokeDasharray={slot.isAdopted ? "6 4" : undefined}
+                    >
+                      {slot.isAdopted ? <title>Con nuôi</title> : null}
+                    </line>
                   );
                 })}
               </g>
@@ -1516,6 +1521,12 @@ function buildTreeBlock({
       filters,
     }).filter((child) => !nextVisited.has(child.id));
 
+    const adoptedChildIds = new Set(
+      childrenRows
+        .filter((row) => row.relationship_type === "adopted")
+        .map((row) => row.person_id),
+    );
+
     // Hiển thị từ từ theo thế hệ: chỉ đệ quy dựng nhánh con khi đã "tới lượt"
     // (level < renderDepthLimit). Nhờ vậy lần vẽ đầu tiên chỉ cần tính thế hệ
     // 1, nhẹ và nhanh hơn hẳn so với tính toàn bộ cây rồi mới hiển thị.
@@ -1567,6 +1578,7 @@ function buildTreeBlock({
       childLayout,
       childrenWidth,
       groupWidth: Math.max(childrenWidth, NODE_WIDTH),
+      adoptedChildIds,
     };
   });
 
@@ -1790,6 +1802,7 @@ function buildTreeBlock({
           block: childBlock,
           x: group.childLayout.childXs[childIndex] ?? 0,
           childTopCenterX: childBlock.nodeTopCenterX,
+          isAdopted: group.adoptedChildIds.has(childBlock.person.id),
         });
       }
     }
@@ -1866,6 +1879,13 @@ function mergeHiddenSpouseGroups({
     : emptyBiologicalChildLayout();
   const childrenWidth = childLayout.width;
 
+  const mergedAdoptedChildIds = new Set<string>();
+  for (const group of withoutVisibleSpouse) {
+    for (const id of group.adoptedChildIds) {
+      mergedAdoptedChildIds.add(id);
+    }
+  }
+
   const merged: GroupDraft = {
     family: withoutVisibleSpouse[0].family,
     groupId: `${person.id}::__visible_single_parent`,
@@ -1877,6 +1897,7 @@ function mergeHiddenSpouseGroups({
     childLayout,
     childrenWidth,
     groupWidth: Math.max(childrenWidth, NODE_WIDTH),
+    adoptedChildIds: mergedAdoptedChildIds,
   };
 
   return [...withVisibleSpouse, merged].sort((a, b) =>

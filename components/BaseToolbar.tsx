@@ -5,6 +5,7 @@ import { Filter } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMemberListView } from "@/context/MemberListContext";
+import { useUser } from "@/components/UserProvider";
 import ExportButton from "./ExportButton";
 
 export interface BaseToolbarProps {
@@ -53,6 +54,7 @@ export default function BaseToolbar({
   children,
 }: BaseToolbarProps) {
   const { showAvatar, setShowAvatar } = useMemberListView();
+  const { isAdmin } = useUser();
   const [showFilters, setShowFilters] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -252,8 +254,8 @@ export default function BaseToolbar({
         </AnimatePresence>
       </div>
 
-      {/* Export Button */}
-      {canEdit && <ExportButton />}
+      {/* Export Button: chỉ admin mới thấy, editor không có quyền xuất file */}
+      {isAdmin && <ExportButton />}
     </div>,
     portalNode,
   );

@@ -9,6 +9,8 @@ export type AuditAction =
   | "user.status_changed"
   | "user.password_reset"
   | "member.deleted"
+  | "person.avatar.updated"
+  | "person.avatar.deleted"
   | "relationship.created"
   | "relationship.deleted"
   | "relationship.divorced"

@@ -6,6 +6,7 @@ import { ArrowUpDown, Filter, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { includesVietnameseSearch } from "@/utils/search/normalizeVietnameseSearch";
 import { useMemberListView } from "@/context/MemberListContext";
+import { useUser } from "@/components/UserProvider";
 
 export default function MemberList({
   initialPersons,
@@ -17,6 +18,7 @@ export default function MemberList({
   canEdit?: boolean;
 }) {
   const { setShowCreateMember } = useMemberListView();
+  const { isAdmin } = useUser();
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOption, setSortOption] = useState("generation_asc");
 
@@ -350,7 +352,7 @@ export default function MemberList({
               </div>
             </div>
           </div>
-          {canEdit && (
+          {isAdmin && (
             <button
               onClick={() => setShowCreateMember(true)}
               className="btn-primary"
