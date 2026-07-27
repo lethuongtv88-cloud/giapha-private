@@ -108,7 +108,7 @@ Dự án phù hợp với người Việt Nam, đặc biệt các gia đình mu�
 
 ## Demo
 
-- Demo: [giapha-demo.thuongle.net](https://giapha-demo.thuongle.net)
+- Demo: [giapha-demo.thuongle2.net](https://giapha-demo.thuongle2.net)
 - Tài khoản: `xem@thuongle.net`
 - Mật khẩu: `giapha`
 
