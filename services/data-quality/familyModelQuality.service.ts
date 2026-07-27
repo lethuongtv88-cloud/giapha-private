@@ -6,6 +6,7 @@ export type FamilyModelQualityKind =
   | "duplicate_family_parent"
   | "duplicate_family_child"
   | "family_child_without_parent"
+  | "family_single_parent_needs_review"
   | "active_empty_family"
   | "person_parent_and_child_same_family"
   | "family_more_than_two_parents"
@@ -26,6 +27,7 @@ export interface FamilyModelQualityRelationship {
   type?: string | null;
   person_a?: string | null;
   person_b?: string | null;
+  status?: string | null;
   deleted_at?: string | null;
   created_at?: string | null;
 }
@@ -99,6 +101,7 @@ const allKinds: FamilyModelQualityKind[] = [
   "duplicate_family_parent",
   "duplicate_family_child",
   "family_child_without_parent",
+  "family_single_parent_needs_review",
   "active_empty_family",
   "person_parent_and_child_same_family",
   "family_more_than_two_parents",
@@ -114,6 +117,8 @@ export const familyModelKindLabels: Record<FamilyModelQualityKind, string> = {
   duplicate_family_parent: "Trùng family_parents",
   duplicate_family_child: "Trùng family_children",
   family_child_without_parent: "Family có con không có cha/mẹ",
+  family_single_parent_needs_review:
+    "Family chỉ có 1 cha/mẹ - cần admin xử lý thủ công",
   active_empty_family: "Family rỗng active",
   person_parent_and_child_same_family: "Một người vừa parent vừa child trong family",
   family_more_than_two_parents: "Family có hơn 2 parent",
@@ -131,6 +136,12 @@ export const familyModelRepairSql = {
   dedupeFamilyParents: `BEGIN;\nWITH ranked AS (\n  SELECT\n    ctid,\n    ROW_NUMBER() OVER (\n      PARTITION BY family_id, person_id\n      ORDER BY id ASC NULLS LAST, ctid ASC\n    ) AS rn\n  FROM public.family_parents\n)\nDELETE FROM public.family_parents fp\nUSING ranked r\nWHERE fp.ctid = r.ctid\n  AND r.rn > 1;\nCOMMIT;`,
   dedupeFamilyChildren: `BEGIN;\nWITH ranked AS (\n  SELECT\n    ctid,\n    ROW_NUMBER() OVER (\n      PARTITION BY family_id, person_id, COALESCE(relationship_type, 'biological')\n      ORDER BY id ASC NULLS LAST, ctid ASC\n    ) AS rn\n  FROM public.family_children\n)\nDELETE FROM public.family_children fc\nUSING ranked r\nWHERE fc.ctid = r.ctid\n  AND r.rn > 1;\nCOMMIT;`,
   emptyFamiliesPreview: `BEGIN;\n\nSELECT f.id, f.status, f.created_at, f.updated_at\nFROM public.families f\nLEFT JOIN public.family_parents fp ON fp.family_id = f.id\nLEFT JOIN public.family_children fc ON fc.family_id = f.id\nWHERE f.deleted_at IS NULL\nGROUP BY f.id, f.status, f.created_at, f.updated_at\nHAVING COUNT(fp.*) = 0 AND COUNT(fc.*) = 0\nORDER BY f.created_at DESC;\n\nCOMMIT;`,
+  softDeleteEmptyFamilies: `-- Cần quyền admin (function tự kiểm tra role).\n-- Chỉ soft-delete family KHÔNG còn parent lẫn children.\nSELECT public.soft_delete_empty_families();`,
+  deletedPersonFamilyEdgesPreview: `BEGIN;\n\nSELECT 'family_parents' AS source, fp.family_id, fp.person_id, p.full_name, p.deleted_at\nFROM public.family_parents fp\nJOIN public.persons p ON p.id = fp.person_id\nWHERE p.deleted_at IS NOT NULL\n\nUNION ALL\n\nSELECT 'family_children' AS source, fc.family_id, fc.person_id, p.full_name, p.deleted_at\nFROM public.family_children fc\nJOIN public.persons p ON p.id = fc.person_id\nWHERE p.deleted_at IS NOT NULL\n\nORDER BY family_id;\n\nCOMMIT;`,
+  removeDeletedPersonFamilyEdges: `-- CHỈ chạy sau khi đã xem PREVIEW ở trên và xác nhận việc soft-delete\n-- (các) person này là ĐÚNG CHỦ Ý (vd. gộp trùng lặp), không phải xóa\n-- nhầm. Nếu xóa nhầm, dùng script "Khôi phục 1 person đã soft-delete"\n-- bên dưới THAY VÌ chạy script này.\nBEGIN;\n\nDELETE FROM public.family_parents fp\nUSING public.persons p\nWHERE fp.person_id = p.id\n  AND p.deleted_at IS NOT NULL;\n\nDELETE FROM public.family_children fc\nUSING public.persons p\nWHERE fc.person_id = p.id\n  AND p.deleted_at IS NOT NULL;\n\nCOMMIT;`,
+  restoreSoftDeletedPersonTemplate: `-- Dùng khi person bị soft-delete NHẦM (thay vì gỡ edge phía trên).\n-- Thay UUID bên dưới bằng person_id thật rồi mới chạy.\nUPDATE public.persons\nSET deleted_at = NULL\nWHERE id = '00000000-0000-0000-0000-000000000000';`,
+  deletedPersonRelationshipsPreview: `BEGIN;\n\nSELECT r.id, r.type, r.person_a, r.person_b, r.created_at\nFROM public.relationships r\nWHERE r.deleted_at IS NULL\n  AND (\n    EXISTS (SELECT 1 FROM public.persons p WHERE p.id = r.person_a AND p.deleted_at IS NOT NULL)\n    OR EXISTS (SELECT 1 FROM public.persons p WHERE p.id = r.person_b AND p.deleted_at IS NOT NULL)\n  )\nORDER BY r.created_at DESC;\n\nCOMMIT;`,
+  softDeleteRelationshipsToDeletedPersons: `-- Chạy sau khi đã xem PREVIEW ở trên. Soft-delete (không hard-delete)\n-- các relationships đang active nhưng trỏ tới person đã soft-delete.\nBEGIN;\n\nUPDATE public.relationships r\nSET deleted_at = NOW(), updated_at = NOW()\nWHERE r.deleted_at IS NULL\n  AND (\n    EXISTS (SELECT 1 FROM public.persons p WHERE p.id = r.person_a AND p.deleted_at IS NOT NULL)\n    OR EXISTS (SELECT 1 FROM public.persons p WHERE p.id = r.person_b AND p.deleted_at IS NOT NULL)\n  );\n\nCOMMIT;`,
 } as const;
 
 export function runFamilyModelQualityChecks(
@@ -202,6 +213,48 @@ export function runFamilyModelQualityChecks(
         personIds: children.map((child) => child.person_id),
         repairHint: "Cần xem chi tiết để gắn đúng cha/mẹ; không nên auto-repair.",
       });
+    }
+
+    // Family chỉ có 1 cha/mẹ + có con: đây chính là trường hợp mà
+    // findSingleSpouse()/get_single_active_spouse() KHÔNG thể tự động áp
+    // dụng (0 vợ/chồng active -> không rõ; >=2 vợ/chồng active -> mập mờ,
+    // không dám đoán). Ghi nhận lại để admin xử lý tay, thay vì để lộ ra
+    // dưới dạng nhãn "(Con)" mập mờ ở trang người còn lại.
+    if (parents.length === 1 && children.length > 0) {
+      const loneParentId = parents[0].person_id;
+      const activeSpouseIds = Array.from(
+        new Set(
+          relationships
+            .filter(
+              (rel) =>
+                !rel.deleted_at &&
+                rel.type === "marriage" &&
+                (rel.status ?? "active") === "active" &&
+                (rel.person_a === loneParentId || rel.person_b === loneParentId),
+            )
+            .map((rel) => (rel.person_a === loneParentId ? rel.person_b : rel.person_a))
+            .filter((id): id is string => !!id && activePersonIds.has(id)),
+        ),
+      );
+
+      if (activeSpouseIds.length !== 1) {
+        const isAmbiguous = activeSpouseIds.length > 1;
+        issues.push({
+          id: `family:${family.id}:single-parent-needs-review`,
+          kind: "family_single_parent_needs_review",
+          severity: isAmbiguous ? "error" : "warning",
+          title: familyModelKindLabels.family_single_parent_needs_review,
+          description: isAmbiguous
+            ? `Family ${family.id} chỉ có 1 cha/mẹ (${formatPerson(loneParentId, personById)}) và ${children.length} con, nhưng người này có ${activeSpouseIds.length} vợ/chồng đang active nên hệ thống không tự chọn được.`
+            : `Family ${family.id} chỉ có 1 cha/mẹ (${formatPerson(loneParentId, personById)}) và ${children.length} con, và không tìm thấy vợ/chồng active nào để tự động bổ sung.`,
+          repairable: false,
+          familyIds: [family.id],
+          personIds: [loneParentId, ...activeSpouseIds, ...children.map((c) => c.person_id)],
+          repairHint: isAmbiguous
+            ? "Admin cần mở trang người này, xác nhận đúng vợ/chồng nào là cha/mẹ còn lại của (các) con trên rồi gắn thủ công."
+            : "Admin cần xác nhận: nếu đây thực sự là cha/mẹ đơn thân thì bỏ qua; nếu thiếu, hãy thêm quan hệ hôn nhân rồi gắn lại cha/mẹ còn lại cho con.",
+        });
+      }
     }
 
     if (parents.length > 2) {

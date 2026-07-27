@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import DefaultAvatar from "./DefaultAvatar";
 import { ensureFamilyModelChild } from "@/utils/family/ensureFamilyModelChild";
+import { linkChildWithFamilySync } from "@/utils/family/linkChildWithFamilySync";
 import { createFamilyEvent } from "@/app/actions/events";
 
 interface RelationshipManagerProps {
@@ -94,6 +95,37 @@ export default function RelationshipManager({
     }
     return true;
   }, [canEdit, denyWrite, isEditablePerson, personId]);
+
+  /**
+   * Tìm vợ/chồng DUY NHẤT (hôn nhân còn hiệu lực, chưa xoá) của 1 người.
+   * Chỉ trả về kết quả khi người đó có ĐÚNG 1 vợ/chồng - tránh tự động gán
+   * sai khi có đa thê/đa phu hoặc tái hôn (nhiều quan hệ hôn nhân).
+   * Dùng để tự động áp "người còn lại" khi thêm con mà chỉ chọn 1 cha/mẹ.
+   */
+  const findSingleSpouse = useCallback(
+    async (forPersonId: string | null | undefined): Promise<string | null> => {
+      if (!forPersonId) return null;
+
+      // Dùng chung 1 nguồn quy tắc "vợ/chồng duy nhất" với SQL repair
+      // script (public.get_single_active_spouse) - chỉ tính hôn nhân
+      // status='active', chưa xoá, và người đó chưa bị soft-delete. Nhờ
+      // vậy UI, repair script, và các luồng khác (import GEDCOM, API...)
+      // sau này đều nhất quán, không bị lệch logic giữa TS và SQL.
+      const { data, error: spouseError } = await supabase.rpc(
+        "get_single_active_spouse",
+        { p_person_id: forPersonId },
+      );
+
+      if (spouseError) {
+        console.error("findSingleSpouse RPC failed:", spouseError);
+        return null;
+      }
+
+      const spouseId = data as string | null;
+      return spouseId && spouseId !== forPersonId ? spouseId : null;
+    },
+    [supabase],
+  );
 
   // If inside DashboardProvider → open modal; otherwise → navigate to full page
   const handlePersonClick = (id: string) => {
@@ -638,6 +670,19 @@ export default function RelationshipManager({
     }
   }, [isAdding, personId, supabase, recentMembers.length, isAllowedPerson]);
 
+  // Khi mở form "Thêm nhanh nhiều con", nếu người hiện tại chỉ có ĐÚNG 1
+  // vợ/chồng, tự động chọn sẵn người đó trong dropdown (thay vì để trống
+  // "Không rõ") - giúp người dùng thấy rõ hệ thống sẽ tự áp dụng người này.
+  useEffect(() => {
+    if (isAddingBulk && !selectedSpouseId) {
+      findSingleSpouse(personId).then((autoSpouseId) => {
+        if (autoSpouseId && isAllowedPerson(autoSpouseId)) {
+          setSelectedSpouseId(autoSpouseId);
+        }
+      });
+    }
+  }, [isAddingBulk, personId, selectedSpouseId, isAllowedPerson, findSingleSpouse]);
+
   const handleAddRelationship = async () => {
     if (!canWriteCurrentPerson()) return;
     if (!selectedTargetId) return;
@@ -676,26 +721,30 @@ export default function RelationshipManager({
       if (newRelDirection === "spouse") type = "marriage";
       else if (newRelType === "adopted_child") type = "adopted_child";
 
-      const { data: insertedRelationship, error } = await supabase
-        .from("relationships")
-        .insert({
-          person_a: personA,
-          person_b: personB,
-          type: type,
-          note: newRelNote ? newRelNote : null,
-        })
-        .select("id")
-        .single();
-
-      if (error) throw error;
+      let insertedRelationshipId: string | null = null;
+      let otherParentId: string | null = null;
 
       if (newRelDirection === "spouse") {
+        const { data: insertedRelationship, error } = await supabase
+          .from("relationships")
+          .insert({
+            person_a: personA,
+            person_b: personB,
+            type: type,
+            note: newRelNote ? newRelNote : null,
+          })
+          .select("id")
+          .single();
+
+        if (error) throw error;
+        insertedRelationshipId = insertedRelationship?.id ?? null;
+
         try {
           const familyId = await ensureFamilyModelMarriage({
             supabase,
             personId,
             targetPersonId: selectedTargetId,
-            legacyRelationshipId: insertedRelationship?.id ?? null,
+            legacyRelationshipId: insertedRelationshipId,
             note: newRelNote ? newRelNote : null,
           });
 
@@ -716,16 +765,23 @@ export default function RelationshipManager({
           throw familyModelError;
         }
       } else if (type === "biological_child" || type === "adopted_child") {
+        // Atomic: ghi quan hệ (cha/mẹ đã biết -> con, và tự động dò/gán
+        // vợ chồng còn lại nếu chỉ có đúng 1 người) + đồng bộ Family Model
+        // trong CÙNG 1 lệnh RPC (public.link_child_with_family_sync) -
+        // nếu bất kỳ bước nào lỗi, mọi thứ tự rollback cùng nhau, tránh
+        // tình trạng có relationships nhưng Family Model chưa đồng bộ.
         try {
-          await ensureFamilyModelChild({
+          const result = await linkChildWithFamilySync({
             supabase,
             parentAId: personA,
             childId: personB,
-            parentBId: null,
+            type,
+            note: newRelNote ? newRelNote : null,
           });
+          otherParentId = result.parent_b_used;
         } catch (familyModelError) {
           console.error(
-            "Created legacy child relationship but failed to create Family Model child:",
+            "Failed to link child with family sync:",
             familyModelError,
           );
           throw familyModelError;
@@ -834,6 +890,15 @@ export default function RelationshipManager({
     let successCount = 0;
 
     try {
+      // Nếu người dùng chọn rõ vợ/chồng trong dropdown thì dùng đúng người
+      // đó; nếu để trống, RPC link_child_with_family_sync bên dưới sẽ tự
+      // dò vợ/chồng DUY NHẤT đang active (cùng 1 quy tắc dùng chung với
+      // repair script) - không cần lặp lại logic ở đây.
+      const explicitSpouseId =
+        selectedSpouseId && selectedSpouseId !== "unknown"
+          ? selectedSpouseId
+          : null;
+
       // For each child row, insert a Person, then insert Relationship(s)
       for (let i = 0; i < validChildren.length; i++) {
         const child = validChildren[i];
@@ -877,32 +942,27 @@ export default function RelationshipManager({
 
         const newChildId = newPersonData.id;
 
-        // 2. Insert Relationship to Main Person (parent)
-        await supabase.from("relationships").insert({
-          person_a: personId,
-          person_b: newChildId,
-          type: "biological_child",
-        });
-
-        // 3. Insert Relationship to Second Parent (spouse), if selected
-        if (selectedSpouseId && selectedSpouseId !== "unknown") {
-          await supabase.from("relationships").insert({
-            person_a: selectedSpouseId,
-            person_b: newChildId,
+        // 2-4. Ghi quan hệ (cha/mẹ chính -> con, tự dò/gán vợ chồng còn
+        // lại nếu không chọn tay) + đồng bộ Family Model - tất cả trong 1
+        // lệnh RPC atomic (public.link_child_with_family_sync). Nếu lỗi,
+        // bỏ qua đứa con này (không tính vào successCount) thay vì để lại
+        // dữ liệu nửa vời (person đã tạo nhưng thiếu relationship/family).
+        try {
+          await linkChildWithFamilySync({
+            supabase,
+            parentAId: personId,
+            childId: newChildId,
             type: "biological_child",
+            parentBId: explicitSpouseId,
           });
+        } catch (linkError) {
+          console.error(
+            "Failed to link bulk-added child with family sync:",
+            child.name,
+            linkError,
+          );
+          continue;
         }
-
-
-        await ensureFamilyModelChild({
-          supabase,
-          parentAId: personId,
-          parentBId:
-            selectedSpouseId && selectedSpouseId !== "unknown"
-              ? selectedSpouseId
-              : null,
-          childId: newChildId,
-        });
 
         successCount++;
       }

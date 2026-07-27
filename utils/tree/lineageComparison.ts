@@ -93,12 +93,12 @@ export interface InLawInput extends LineageInput {
   spousePersonId?: string | null;
 }
 
-interface ParentChildEdge {
+export interface ParentChildEdge {
   parentId: string;
   childId: string;
 }
 
-interface SpouseEdge {
+export interface SpouseEdge {
   personA: string;
   personB: string;
 }
@@ -1095,7 +1095,7 @@ function collectDescendantsIncludingSelf(
   return out;
 }
 
-function getDirectParents(
+export function getDirectParents(
   personId: string,
   parentChildEdges: ParentChildEdge[],
   personsMap: Map<string, Person>,
@@ -1115,7 +1115,7 @@ function getDirectParents(
   return { fatherId, motherId };
 }
 
-function getSpouses(
+export function getSpouses(
   personId: string,
   spouseEdges: SpouseEdge[],
   personsMap: Map<string, Person>,
@@ -1133,7 +1133,7 @@ function getSpouses(
     .sort((a, b) => getPersonName(a).localeCompare(getPersonName(b), "vi"));
 }
 
-function buildParentChildEdges(input: {
+export function buildParentChildEdges(input: {
   relationships?: Relationship[];
   families?: FamilyRow[];
   familyParents?: FamilyParentRow[];
@@ -1171,7 +1171,7 @@ function buildParentChildEdges(input: {
   return dedupeParentChildEdges(out);
 }
 
-function buildSpouseEdges(input: {
+export function buildSpouseEdges(input: {
   relationships?: Relationship[];
   families?: FamilyRow[];
   familyParents?: FamilyParentRow[];
@@ -1208,6 +1208,37 @@ function buildSpouseEdges(input: {
   }
 
   return dedupeSpouseEdges(out);
+}
+
+/**
+ * Chuyển đổi parent-child edges + spouse edges (đã gộp từ family tables VÀ
+ * bảng relationships cũ) thành định dạng KinshipRelationshipEdge mà
+ * computeKinship() cần. computeKinship() chỉ tự đọc được bảng relationships —
+ * nếu dữ liệu chỉ có trong family_parents/family_children (schema mới) thì nó
+ * sẽ không tìm được đường đi nào và trả về "chưa xác định" cho tất cả. Hàm
+ * này "dịch" family tables sang cùng định dạng để danh xưng hoạt động đúng dù
+ * dữ liệu nằm ở nguồn nào.
+ */
+export function buildKinshipRelationshipEdges(input: {
+  relationships?: Relationship[];
+  families?: FamilyRow[];
+  familyParents?: FamilyParentRow[];
+  familyChildren?: FamilyChildRow[];
+}): { type: string; person_a: string; person_b: string }[] {
+  const parentChildEdges = buildParentChildEdges(input);
+  const spouseEdges = buildSpouseEdges(input);
+
+  const edges: { type: string; person_a: string; person_b: string }[] = [];
+
+  for (const edge of parentChildEdges) {
+    edges.push({ type: "biological_child", person_a: edge.parentId, person_b: edge.childId });
+  }
+
+  for (const edge of spouseEdges) {
+    edges.push({ type: "marriage", person_a: edge.personA, person_b: edge.personB });
+  }
+
+  return edges;
 }
 
 function dedupeParentChildEdges(edges: ParentChildEdge[]): ParentChildEdge[] {

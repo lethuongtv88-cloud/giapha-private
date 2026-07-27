@@ -4,7 +4,7 @@ import { useMemberListView } from "@/context/MemberListContext";
 import MemberList from "@/components/MemberList";
 import PersonSelector from "@/components/PersonSelector";
 import { Person, Relationship } from "@/types";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { featureFlags } from "@/lib/featureFlags";
@@ -24,6 +24,9 @@ const VietnameseFamilyTree = dynamic(
   },
 );
 const MindmapTree = dynamic(() => import("@/components/MindmapTree"));
+const CoupleTreeDiagram = dynamic(() => import("@/components/CoupleTreeDiagram"), {
+  ssr: false,
+});
 const BubbleMapTree = dynamic(
   () =>
     import("@/components/BubbleMapTree").catch((err) => {
@@ -152,13 +155,31 @@ export default function MembersViews({
     };
   }, [persons, relationships, rootId]);
 
-  const activeRootId = rootId || defaultRootId;
-
-  // Cây gia phả, Mindmap và Bong bóng dùng chung rootId của trang thành viên,
-  // nên chỉ dùng một gốc mặc định chung: "Gốc sơ đồ".
+  // Cây gia phả, Mindmap và Bong bóng dùng chung 1 gốc mặc định: "Gốc sơ đồ".
+  // Nội Ngoại và Sui gia có gốc mặc định RIÊNG (đã cấu hình sẵn ở Cài đặt),
+  // không ảnh hưởng tới nhau và không ảnh hưởng tới gốc của Sơ đồ cây.
   const currentRootPreferenceKind: RootPreferenceKind = "tree";
+  const activeCoupleKind: "dualAncestry" | "inLaw" | null =
+    currentView === "noi-ngoai" ? "dualAncestry" : currentView === "sui-gia" ? "inLaw" : null;
 
-  // Khôi phục lựa chọn từ localStorage
+  const [coupleRootIdByKind, setCoupleRootIdByKind] = useState<
+    Partial<Record<"dualAncestry" | "inLaw", string>>
+  >({});
+  const coupleRootsRestored = useRef<Partial<Record<"dualAncestry" | "inLaw", boolean>>>({});
+
+  const activeRootId = activeCoupleKind
+    ? (coupleRootIdByKind[activeCoupleKind] ?? defaultRootId)
+    : rootId || defaultRootId;
+
+  const handleRootSelect = (id: string) => {
+    if (activeCoupleKind) {
+      setCoupleRootIdByKind((prev) => ({ ...prev, [activeCoupleKind]: id }));
+    } else {
+      setRootId(id);
+    }
+  };
+
+  // Khôi phục lựa chọn từ localStorage (gốc Sơ đồ cây)
   useEffect(() => {
     if (hasRestored.current) return;
 
@@ -187,9 +208,30 @@ export default function MembersViews({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Lưu lựa chọn vào localStorage
+  // Khôi phục gốc riêng của Nội Ngoại / Sui gia khi lần đầu mở tab đó
+  useEffect(() => {
+    if (!activeCoupleKind) return;
+    if (coupleRootsRestored.current[activeCoupleKind]) return;
+    coupleRootsRestored.current[activeCoupleKind] = true;
+
+    try {
+      const savedRootId = readRootPreference(activeCoupleKind, accountKey);
+      if (
+        savedRootId &&
+        persons.some((person) => person.id === savedRootId) &&
+        (!allowedPersonIdSet || allowedPersonIdSet.has(savedRootId))
+      ) {
+        setCoupleRootIdByKind((prev) => ({ ...prev, [activeCoupleKind]: savedRootId }));
+      }
+    } catch (e) {
+      console.warn("Failed to read root preference:", e);
+    }
+  }, [activeCoupleKind, accountKey, persons, allowedPersonIdSet]);
+
+  // Lưu lựa chọn vào localStorage (gốc Sơ đồ cây)
   useEffect(() => {
     if (!hasRestored.current) return;
+    if (activeCoupleKind) return; // gốc Nội Ngoại/Sui gia lưu ở effect riêng bên dưới
 
     const timeout = setTimeout(() => {
       try {
@@ -202,7 +244,24 @@ export default function MembersViews({
     }, 100);
 
     return () => clearTimeout(timeout);
-  }, [currentView, activeRootId, currentRootPreferenceKind, accountKey]);
+  }, [currentView, activeRootId, currentRootPreferenceKind, accountKey, activeCoupleKind]);
+
+  // Lưu lựa chọn của Nội Ngoại / Sui gia (riêng biệt với gốc Sơ đồ cây)
+  useEffect(() => {
+    if (!activeCoupleKind) return;
+    const value = coupleRootIdByKind[activeCoupleKind];
+    if (!value) return;
+
+    const timeout = setTimeout(() => {
+      try {
+        writeRootPreference(activeCoupleKind, accountKey, value);
+      } catch (e) {
+        console.warn("Failed to write root preference:", e);
+      }
+    }, 100);
+
+    return () => clearTimeout(timeout);
+  }, [activeCoupleKind, coupleRootIdByKind, accountKey]);
 
   return (
     <>
@@ -213,7 +272,7 @@ export default function MembersViews({
               persons={persons}
               selectedId={activeRootId}
               onSelect={(id) => {
-                if (id) setRootId(id);
+                if (id) handleRootSelect(id);
               }}
               label="Người gốc"
               placeholder="Tìm người gốc..."
@@ -270,6 +329,17 @@ export default function MembersViews({
               relationships={relationships}
               roots={roots}
               canEdit={canEdit}
+            />
+          )}
+          {(currentView === "noi-ngoai" || currentView === "sui-gia") && activeRootId && (
+            <CoupleTreeDiagram
+              mode={currentView}
+              rootPersonId={activeRootId}
+              persons={persons}
+              relationships={relationships}
+              families={families}
+              familyParents={familyParents}
+              familyChildren={familyChildren}
             />
           )}
         </div>

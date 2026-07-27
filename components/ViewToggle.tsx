@@ -1,15 +1,30 @@
 "use client";
 
+import { useEffect } from "react";
 import { motion } from "framer-motion";
-import { Circle, List, ListTree, Network } from "lucide-react";
+import { Circle, GitBranch, List, ListTree, Network, Users } from "lucide-react";
 import { useMemberListView } from "@/context/MemberListContext";
+import { useUser } from "@/components/UserProvider";
 
-export type ViewMode = "list" | "tree" | "mindmap" | "bubble";
+export type ViewMode = "list" | "tree" | "mindmap" | "bubble" | "noi-ngoai" | "sui-gia";
+
+// Nội Ngoại và Sui gia chưa hoàn thiện — tạm chỉ cho admin truy cập.
+const ADMIN_ONLY_VIEWS: ViewMode[] = ["noi-ngoai", "sui-gia"];
 
 export default function ViewToggle() {
   const { view: currentView, setView } = useMemberListView();
+  const { profile } = useUser();
+  const isAdmin = profile?.role === "admin";
 
-  const tabs = [
+  // Nếu đang ở 1 view chỉ-dành-cho-admin (ví dụ do URL cũ ?view=noi-ngoai)
+  // nhưng tài khoản không phải admin, tự chuyển về Sơ đồ cây.
+  useEffect(() => {
+    if (!isAdmin && ADMIN_ONLY_VIEWS.includes(currentView)) {
+      setView("tree");
+    }
+  }, [isAdmin, currentView, setView]);
+
+  const allTabs = [
     {
       id: "list",
       label: "Danh sách",
@@ -30,7 +45,19 @@ export default function ViewToggle() {
       label: "Bong bóng",
       icon: <Circle className="size-6 sm:size-4" />,
     },
+    {
+      id: "noi-ngoai",
+      label: "Nội Ngoại",
+      icon: <GitBranch className="size-6 sm:size-4" />,
+    },
+    {
+      id: "sui-gia",
+      label: "Sui gia",
+      icon: <Users className="size-6 sm:size-4" />,
+    },
   ] as const;
+
+  const tabs = allTabs.filter((tab) => isAdmin || !ADMIN_ONLY_VIEWS.includes(tab.id));
 
   return (
     <div className="flex bg-stone-200/50 p-1.5 rounded-full shadow-inner w-fit mx-auto mt-4 mb-2 relative border border-stone-200/60 backdrop-blur-sm z-10">
