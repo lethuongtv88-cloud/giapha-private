@@ -5,7 +5,6 @@ import { Filter } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMemberListView } from "@/context/MemberListContext";
-import { useUser } from "@/components/UserProvider";
 import ExportButton from "./ExportButton";
 
 export interface BaseToolbarProps {
@@ -27,6 +26,10 @@ export interface BaseToolbarProps {
   setCompactTree?: (val: boolean) => void;
   autoCollapseLevel?: number;
   setAutoCollapseLevel?: (val: number) => void;
+  showBirthOrder?: boolean;
+  setShowBirthOrder?: (val: boolean) => void;
+  showAddressHint?: boolean;
+  setShowAddressHint?: (val: boolean) => void;
   canEdit?: boolean;
   children?: React.ReactNode;
 }
@@ -50,11 +53,14 @@ export default function BaseToolbar({
   setCompactTree,
   autoCollapseLevel,
   setAutoCollapseLevel,
+  showBirthOrder,
+  setShowBirthOrder,
+  showAddressHint,
+  setShowAddressHint,
   canEdit,
   children,
 }: BaseToolbarProps) {
   const { showAvatar, setShowAvatar } = useMemberListView();
-  const { isAdmin } = useUser();
   const [showFilters, setShowFilters] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -148,6 +154,28 @@ export default function BaseToolbar({
                     className="rounded text-amber-600 focus:ring-amber-500 cursor-pointer size-4"
                   />
                   Mở rộng sơ đồ cây
+                </label>
+              )}
+              {setShowBirthOrder && (
+                <label className="flex items-center gap-2 text-sm text-stone-600 cursor-pointer hover:text-stone-900 transition-colors select-none">
+                  <input
+                    type="checkbox"
+                    checked={!!showBirthOrder}
+                    onChange={(e) => setShowBirthOrder(e.target.checked)}
+                    className="rounded text-amber-600 focus:ring-amber-500 cursor-pointer size-4"
+                  />
+                  Thứ tự sinh
+                </label>
+              )}
+              {setShowAddressHint && (
+                <label className="flex items-center gap-2 text-sm text-stone-600 cursor-pointer hover:text-stone-900 transition-colors select-none">
+                  <input
+                    type="checkbox"
+                    checked={!!showAddressHint}
+                    onChange={(e) => setShowAddressHint(e.target.checked)}
+                    className="rounded text-amber-600 focus:ring-amber-500 cursor-pointer size-4"
+                  />
+                  Danh xưng
                 </label>
               )}
               {setAutoCollapseLevel && (
@@ -254,8 +282,8 @@ export default function BaseToolbar({
         </AnimatePresence>
       </div>
 
-      {/* Export Button: chỉ admin mới thấy, editor không có quyền xuất file */}
-      {isAdmin && <ExportButton />}
+      {/* Export Button */}
+      {canEdit && <ExportButton />}
     </div>,
     portalNode,
   );

@@ -5,6 +5,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Check, Clipboard, Minus, Plus } from "lucide-react";
 import { usePanZoom } from "@/hooks/usePanZoom";
 import { useMemberListView } from "@/context/MemberListContext";
+import { useUser } from "@/components/UserProvider";
+import { computeKinship, type KinshipPersonNode } from "@/utils/kinshipHelpers";
+import { buildKinshipRelationshipEdges } from "@/utils/tree/lineageComparison";
 import TreeToolbar from "@/components/TreeToolbar";
 import {
   VIET_AVATAR_SIZE,
@@ -92,7 +95,6 @@ type ChildSlot = {
   block: TreeBlock;
   x: number;
   childTopCenterX: number;
-  isAdopted: boolean;
 };
 
 type TreeBlock = {
@@ -129,7 +131,6 @@ type GroupDraft = {
   childLayout: BiologicalChildLayout;
   childrenWidth: number;
   groupWidth: number;
-  adoptedChildIds: Set<string>;
 };
 
 type BiologicalChildLayout = {
@@ -200,6 +201,8 @@ export default function VietnameseFamilyTree({
   const [hideFemales, setHideFemales] = useState(false);
   const [hideExpandButtons, setHideExpandButtons] = useState(false);
   const [compactTree, setCompactTree] = useState(true);
+  const [showBirthOrder, setShowBirthOrder] = useState(true);
+  const [showAddressHint, setShowAddressHint] = useState(false);
   const [autoCollapseLevel, setAutoCollapseLevel] = useState(
     DEFAULT_AUTO_COLLAPSE_LEVEL,
   );
@@ -250,6 +253,73 @@ export default function VietnameseFamilyTree({
   applyTreeSpacing(compactTree);
 
   const { showAvatar, setMemberModalId } = useMemberListView();
+  const { profile } = useUser();
+  const accountPersonId = profile?.person_id ?? null;
+
+  // Con nuôi: family_children.relationship_type = adopted_child (chuẩn hiện tại),
+  // với fallback theo bảng relationships cũ (type = adopted_child) cho dữ liệu
+  // chưa migrate hết family_children. Dùng 1 Set chung, format:
+  // "family:<familyId>:<childId>" cho theo-gia-đình, "person:<childId>" cho fallback.
+  const adoptedChildKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const child of familyChildren) {
+      if (child.relationship_type === "adopted") {
+        keys.add(`family:${child.family_id}:${child.person_id}`);
+      }
+    }
+    for (const rel of _relationships) {
+      if (rel.type === "adopted_child") {
+        keys.add(`person:${rel.person_b}`);
+      }
+    }
+    return keys;
+  }, [familyChildren, _relationships]);
+
+  // Danh xưng: người tài khoản đang đăng nhập gọi từng người trong sơ đồ là gì,
+  // dựa trên person_id đã liên kết với tài khoản (profiles.person_id). Chỉ tính
+  // khi bật tuỳ chọn để tránh tốn kém với cây lớn.
+  const addressHints = useMemo(() => {
+    if (!showAddressHint || !accountPersonId) return null;
+    const accountPerson = personsMap.get(accountPersonId);
+    if (!accountPerson) return null;
+
+    const allPersons = Array.from(personsMap.values());
+    const toKinshipNode = (p: Person): KinshipPersonNode => ({
+      id: p.id,
+      full_name: p.full_name,
+      gender: p.gender,
+      birth_year: p.birth_year,
+      birth_order: p.birth_order,
+      generation: p.generation,
+      is_in_law: p.is_in_law,
+    });
+    const kinshipPersons = allPersons.map(toKinshipNode);
+    const kinshipEdges = buildKinshipRelationshipEdges({
+      relationships: _relationships,
+      families,
+      familyParents,
+      familyChildren,
+    });
+
+    const map = new Map<string, string>();
+    for (const person of allPersons) {
+      if (person.id === accountPersonId) {
+        map.set(person.id, "Tôi");
+        continue;
+      }
+      const result = computeKinship(
+        toKinshipNode(accountPerson),
+        toKinshipNode(person),
+        kinshipPersons,
+        kinshipEdges,
+      );
+      const term = result?.aCallsB?.trim();
+      if (term && term !== "chưa xác định" && term !== "họ hàng cùng nhánh") {
+        map.set(person.id, term.charAt(0).toUpperCase() + term.slice(1));
+      }
+    }
+    return map;
+  }, [showAddressHint, accountPersonId, personsMap, _relationships, families, familyParents, familyChildren]);
 
   const {
     scale,
@@ -446,6 +516,10 @@ export default function VietnameseFamilyTree({
         setHideMales={setHideMales}
         hideFemales={hideFemales}
         setHideFemales={setHideFemales}
+        showBirthOrder={showBirthOrder}
+        setShowBirthOrder={setShowBirthOrder}
+        showAddressHint={showAddressHint}
+        setShowAddressHint={setShowAddressHint}
         canEdit={canEdit}
       />
 
@@ -542,6 +616,9 @@ export default function VietnameseFamilyTree({
                   setHoveredNodeId={setHoveredNodeId}
                   onToggleGroupExpanded={toggleGroupExpanded}
                   onOpenPerson={setMemberModalId}
+                  adoptedChildKeys={adoptedChildKeys}
+                  showBirthOrder={showBirthOrder}
+                  addressHints={addressHints}
                 />
               </g>
             </svg>
@@ -1023,6 +1100,9 @@ function RenderTreeBlock({
   setHoveredNodeId,
   onToggleGroupExpanded,
   onOpenPerson,
+  adoptedChildKeys,
+  showBirthOrder,
+  addressHints,
 }: {
   block: TreeBlock;
   x: number;
@@ -1033,6 +1113,9 @@ function RenderTreeBlock({
   setHoveredNodeId: (id: string | null) => void;
   onToggleGroupExpanded: (groupId: string, currentlyExpanded: boolean) => void;
   onOpenPerson: (personId: string | null) => void;
+  adoptedChildKeys: Set<string>;
+  showBirthOrder: boolean;
+  addressHints: Map<string, string> | null;
 }) {
   const unitCenterY = y + NODE_HEIGHT / 2;
   const childTopY = y + NODE_HEIGHT + GENERATION_GAP;
@@ -1091,6 +1174,11 @@ function RenderTreeBlock({
                 {group.visibleChildren.map((slot) => {
                   const childCenterX =
                     x + group.x + slot.x + slot.childTopCenterX;
+                  const adopted = isAdoptedChild(
+                    adoptedChildKeys,
+                    group.family.id,
+                    slot.childId,
+                  );
 
                   return (
                     <line
@@ -1101,10 +1189,8 @@ function RenderTreeBlock({
                       y2={childTopY}
                       stroke={LINE_COLOR}
                       strokeWidth={2}
-                      strokeDasharray={slot.isAdopted ? "6 4" : undefined}
-                    >
-                      {slot.isAdopted ? <title>Con nuôi</title> : null}
-                    </line>
+                      strokeDasharray={adopted ? "7 5" : undefined}
+                    />
                   );
                 })}
               </g>
@@ -1123,6 +1209,8 @@ function RenderTreeBlock({
             isHovered={hoveredNodeId === node.id}
             setHoveredNodeId={setHoveredNodeId}
             onOpenPerson={onOpenPerson}
+            showBirthOrder={showBirthOrder}
+            addressHint={addressHints?.get(node.person.id) ?? null}
           />
         ))}
 
@@ -1184,6 +1272,9 @@ function RenderTreeBlock({
                 setHoveredNodeId={setHoveredNodeId}
                 onToggleGroupExpanded={onToggleGroupExpanded}
                 onOpenPerson={onOpenPerson}
+                adoptedChildKeys={adoptedChildKeys}
+                showBirthOrder={showBirthOrder}
+                addressHints={addressHints}
               />
             )),
           )}
@@ -1297,6 +1388,17 @@ function isEndedFamily(family: FamilyRow) {
   return family.status === "divorced" || family.status === "separated";
 }
 
+function isAdoptedChild(
+  adoptedChildKeys: Set<string>,
+  familyId: string,
+  childId: string,
+) {
+  return (
+    adoptedChildKeys.has(`family:${familyId}:${childId}`) ||
+    adoptedChildKeys.has(`person:${childId}`)
+  );
+}
+
 function PersonNode({
   node,
   x,
@@ -1305,6 +1407,8 @@ function PersonNode({
   isHovered,
   setHoveredNodeId,
   onOpenPerson,
+  showBirthOrder,
+  addressHint,
 }: {
   node: LayoutNode;
   x: number;
@@ -1313,11 +1417,14 @@ function PersonNode({
   isHovered: boolean;
   setHoveredNodeId: (id: string | null) => void;
   onOpenPerson: (personId: string | null) => void;
+  showBirthOrder: boolean;
+  addressHint: string | null;
 }) {
   const palette = getGenderPalette(node.person);
   const dateParts = getPersonDateParts(node.person);
   const nameLines = splitNameIntoLines(node.person.full_name ?? "", 13);
   const avatarHref = getAvatarHref(node.person);
+  const addressPillWidth = addressHint ? Math.max(40, addressHint.length * 6.4 + 16) : 0;
 
   const scale = isHovered ? 1.055 : 1;
   const translateX = isHovered ? -(NODE_WIDTH * (scale - 1)) / 2 : 0;
@@ -1413,6 +1520,36 @@ function PersonNode({
               </text>
             ) : null}
           </>
+        ) : null}
+
+        {/* Thứ tự sinh — vòng tròn nhỏ giữa cạnh trên */}
+        {showBirthOrder && node.person.birth_order != null ? (
+          <g>
+            <circle cx={NODE_WIDTH / 2} cy={0} r={11} fill="#fffbeb" stroke="#f59e0b" strokeWidth={1.5} />
+            <text x={NODE_WIDTH / 2} y={0} dy="0.32em" textAnchor="middle" fontSize={10.5} fontWeight={800} fill="#b45309">
+              {node.person.birth_order}
+            </text>
+          </g>
+        ) : null}
+
+        {/* Danh xưng — khung nhỏ giữa cạnh dưới, người tài khoản đang đăng nhập gọi người này là gì */}
+        {addressHint ? (
+          <g transform={`translate(${NODE_WIDTH / 2 - addressPillWidth / 2}, ${NODE_HEIGHT - 8})`}>
+            <rect width={addressPillWidth} height={16} rx={5} fill="#fffbeb" stroke="#fde68a" strokeWidth={1} />
+            <text
+              x={addressPillWidth / 2}
+              y={8}
+              dy="0.32em"
+              textAnchor="middle"
+              fontSize={9}
+              fontWeight={700}
+              letterSpacing={0.3}
+              fill="#b45309"
+              style={{ textTransform: "uppercase" }}
+            >
+              {addressHint}
+            </text>
+          </g>
         ) : null}
       </g>
     </g>
@@ -1521,12 +1658,6 @@ function buildTreeBlock({
       filters,
     }).filter((child) => !nextVisited.has(child.id));
 
-    const adoptedChildIds = new Set(
-      childrenRows
-        .filter((row) => row.relationship_type === "adopted")
-        .map((row) => row.person_id),
-    );
-
     // Hiển thị từ từ theo thế hệ: chỉ đệ quy dựng nhánh con khi đã "tới lượt"
     // (level < renderDepthLimit). Nhờ vậy lần vẽ đầu tiên chỉ cần tính thế hệ
     // 1, nhẹ và nhanh hơn hẳn so với tính toàn bộ cây rồi mới hiển thị.
@@ -1578,7 +1709,6 @@ function buildTreeBlock({
       childLayout,
       childrenWidth,
       groupWidth: Math.max(childrenWidth, NODE_WIDTH),
-      adoptedChildIds,
     };
   });
 
@@ -1802,7 +1932,6 @@ function buildTreeBlock({
           block: childBlock,
           x: group.childLayout.childXs[childIndex] ?? 0,
           childTopCenterX: childBlock.nodeTopCenterX,
-          isAdopted: group.adoptedChildIds.has(childBlock.person.id),
         });
       }
     }
@@ -1879,13 +2008,6 @@ function mergeHiddenSpouseGroups({
     : emptyBiologicalChildLayout();
   const childrenWidth = childLayout.width;
 
-  const mergedAdoptedChildIds = new Set<string>();
-  for (const group of withoutVisibleSpouse) {
-    for (const id of group.adoptedChildIds) {
-      mergedAdoptedChildIds.add(id);
-    }
-  }
-
   const merged: GroupDraft = {
     family: withoutVisibleSpouse[0].family,
     groupId: `${person.id}::__visible_single_parent`,
@@ -1897,7 +2019,6 @@ function mergeHiddenSpouseGroups({
     childLayout,
     childrenWidth,
     groupWidth: Math.max(childrenWidth, NODE_WIDTH),
-    adoptedChildIds: mergedAdoptedChildIds,
   };
 
   return [...withVisibleSpouse, merged].sort((a, b) =>

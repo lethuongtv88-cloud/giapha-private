@@ -1,10 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Circle, List, ListTree, Network } from "lucide-react";
+import { Circle, GitBranch, List, ListTree, Network, Users } from "lucide-react";
 import { useMemberListView } from "@/context/MemberListContext";
 
-export type ViewMode = "list" | "tree" | "mindmap" | "bubble";
+export type ViewMode = "list" | "tree" | "mindmap" | "bubble" | "noi-ngoai" | "sui-gia";
 
 export default function ViewToggle() {
   const { view: currentView, setView } = useMemberListView();
@@ -29,6 +29,16 @@ export default function ViewToggle() {
       id: "bubble",
       label: "Bong bóng",
       icon: <Circle className="size-6 sm:size-4" />,
+    },
+    {
+      id: "noi-ngoai",
+      label: "Nội Ngoại",
+      icon: <GitBranch className="size-6 sm:size-4" />,
+    },
+    {
+      id: "sui-gia",
+      label: "Sui gia",
+      icon: <Users className="size-6 sm:size-4" />,
     },
   ] as const;
 
