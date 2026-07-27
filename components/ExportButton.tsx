@@ -13,7 +13,20 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-export default function ExportButton() {
+interface ExportButtonProps {
+  /** id của phần tử DOM chứa nội dung cần xuất. Mặc định: "export-container" */
+  containerId?: string;
+  /** Tiền tố tên file khi tải xuống. Mặc định: "giapha-sodo" */
+  fileNamePrefix?: string;
+  /** Nhãn hiển thị trên nút khi không xuất (mặc định: "Xuất file") */
+  label?: string;
+}
+
+export default function ExportButton({
+  containerId = "export-container",
+  fileNamePrefix = "giapha-sodo",
+  label = "Xuất file",
+}: ExportButtonProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +51,7 @@ export default function ExportButton() {
       // Add a small delay to allow UI to update (close menu) before capturing
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const element = document.getElementById("export-container");
+      const element = document.getElementById(containerId);
       if (!element) throw new Error("Không tìm thấy vùng dữ liệu để xuất.");
 
       element.classList.add("exporting");
@@ -61,7 +74,7 @@ export default function ExportButton() {
         const url = await toPng(element, exportOptions);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `giapha-sodo-${new Date().toISOString().split("T")[0]}.png`;
+        a.download = `${fileNamePrefix}-${new Date().toISOString().split("T")[0]}.png`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -81,14 +94,14 @@ export default function ExportButton() {
           format: [width, height],
         });
         pdf.addImage(imgData, "JPEG", 0, 0, width, height);
-        pdf.save(`giapha-sodo-${new Date().toISOString().split("T")[0]}.pdf`);
+        pdf.save(`${fileNamePrefix}-${new Date().toISOString().split("T")[0]}.pdf`);
       }
     } catch (err) {
       console.error("Export error:", err);
       setError("Đã xảy ra lỗi khi xuất file. Vui lòng thử lại.");
       setTimeout(() => setError(null), 5000);
     } finally {
-      const element = document.getElementById("export-container");
+      const element = document.getElementById(containerId);
       if (element) {
         element.classList.remove("exporting");
       }
@@ -109,7 +122,7 @@ export default function ExportButton() {
           <Download className="size-4 shrink-0" />
         )}
         <span className="hidden sm:inline tracking-wide min-w-max">
-          {isExporting ? "Đang xuất..." : "Xuất file"}
+          {isExporting ? "Đang xuất..." : label}
         </span>
       </button>
 

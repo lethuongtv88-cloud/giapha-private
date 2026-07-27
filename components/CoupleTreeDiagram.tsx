@@ -13,6 +13,7 @@ import {
 import type { Person, Relationship } from "@/types";
 import { usePanZoom } from "@/hooks/usePanZoom";
 import { useMemberListView } from "@/context/MemberListContext";
+import ExportButton from "@/components/ExportButton";
 import {
   buildParentChildEdges,
   getDirectParents,
@@ -41,6 +42,7 @@ interface CoupleTreeDiagramProps {
   families?: FamilyRow[];
   familyParents?: FamilyParentRow[];
   familyChildren?: FamilyChildRow[];
+  canEdit?: boolean;
 }
 
 const AVATAR_SIZE = 56;
@@ -53,6 +55,7 @@ export default function CoupleTreeDiagram({
   families = [],
   familyParents = [],
   familyChildren = [],
+  canEdit,
 }: CoupleTreeDiagramProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
@@ -369,6 +372,13 @@ export default function CoupleTreeDiagram({
             >
               <Crosshair className="size-4" />
             </button>
+
+            {canEdit ? (
+              <ExportButton
+                fileNamePrefix={mode === "noi-ngoai" ? "giapha-noi-ngoai" : "giapha-sui-gia"}
+                label="Xuất sơ đồ"
+              />
+            ) : null}
           </div>
         </div>
 
@@ -387,7 +397,7 @@ export default function CoupleTreeDiagram({
               Không có dữ liệu để vẽ sơ đồ.
             </div>
           ) : (
-            <div className="inline-block p-8" style={{ transform: `scale(${scale})`, transformOrigin: "top left" }}>
+            <div className="inline-block p-8" id="export-container" style={{ transform: `scale(${scale})`, transformOrigin: "top left" }}>
               <svg
                 width={layout.width}
                 height={layout.height}

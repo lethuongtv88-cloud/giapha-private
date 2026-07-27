@@ -340,6 +340,7 @@ export default function MembersViews({
               families={families}
               familyParents={familyParents}
               familyChildren={familyChildren}
+              canEdit={canEdit}
             />
           )}
         </div>
