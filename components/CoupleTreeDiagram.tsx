@@ -64,7 +64,7 @@ export default function CoupleTreeDiagram({
   const [showAddressHint, setShowAddressHint] = useState(false);
   const [showBirthOrder, setShowBirthOrder] = useState(true);
   const [includeClan, setIncludeClan] = useState(false);
-  const [personBBranchFilter, setPersonBBranchFilter] = useState<"both" | "paternal" | "maternal">("both");
+  const [branchFilter, setBranchFilter] = useState<"paternal" | "maternal">("paternal");
   const [selectedSpouseId, setSelectedSpouseId] = useState<string | null>(null);
 
   const router = useRouter();
@@ -141,7 +141,7 @@ export default function CoupleTreeDiagram({
       addressingRootId: rootPersonId,
       highlightPersonId: mode === "noi-ngoai" ? rootPersonId : null,
       includeClan,
-      personBBranchFilter: mode === "sui-gia" ? personBBranchFilter : "both",
+      branchFilter: mode === "sui-gia" ? branchFilter : "both",
     });
   }, [
     personAId,
@@ -158,7 +158,7 @@ export default function CoupleTreeDiagram({
     rootPersonId,
     mode,
     includeClan,
-    personBBranchFilter,
+    branchFilter,
   ]);
 
   const {
@@ -309,21 +309,20 @@ export default function CoupleTreeDiagram({
 
                   {mode === "sui-gia" ? (
                     <div className="space-y-1.5 border-t border-stone-100 pt-3">
-                      <span className="text-xs font-semibold text-stone-700">Nhánh của vợ/chồng</span>
+                      <span className="text-xs font-semibold text-stone-700">Nhánh (áp dụng cho cả 2 bên)</span>
                       <div className="flex items-center overflow-hidden rounded-lg border border-stone-200">
                         {(
                           [
-                            { value: "both", label: "Cả 2" },
-                            { value: "paternal", label: "Chỉ nội" },
-                            { value: "maternal", label: "Chỉ ngoại" },
+                            { value: "paternal", label: "Nhánh nội" },
+                            { value: "maternal", label: "Nhánh ngoại" },
                           ] as const
                         ).map((option) => (
                           <button
                             key={option.value}
                             type="button"
-                            onClick={() => setPersonBBranchFilter(option.value)}
+                            onClick={() => setBranchFilter(option.value)}
                             className={`flex-1 px-2 py-1.5 text-xs font-semibold transition ${
-                              personBBranchFilter === option.value
+                              branchFilter === option.value
                                 ? "bg-amber-100 text-amber-900"
                                 : "bg-white text-stone-500 hover:bg-stone-50"
                             }`}

@@ -110,7 +110,7 @@ export interface BuildCoupleTreeInput {
   /** hiện thêm anh chị em ruột của cặp ở giữa (personA/personB), giống tuỳ chọn "Dòng họ" ở bảng so sánh */
   includeClan?: boolean;
   /** chỉ áp dụng cho personB (vợ/chồng) ở sơ đồ Sui gia: chỉ toả 1 trong 2 nhánh nội/ngoại của họ để bớt rộng */
-  personBBranchFilter?: "both" | "paternal" | "maternal";
+  branchFilter?: "both" | "paternal" | "maternal";
 }
 
 const NODE_WIDTH = VIET_NODE_WIDTH;
@@ -138,7 +138,7 @@ interface BuildContext {
   relationships: Relationship[];
   highlightPersonId: string | null;
   includeClan: boolean;
-  personBBranchFilter: "both" | "paternal" | "maternal";
+  branchFilter: "both" | "paternal" | "maternal";
   /** id những người là con nuôi (relationship_type = adopted_child), để vẽ nét đứt trên đường nối xuống họ */
   adoptedChildIds: Set<string>;
   /** mỗi người -> danh sách đơn vị hôn nhân (vợ/chồng + con chung + tình trạng), gộp từ family tables + fallback relationships cũ */
@@ -181,7 +181,7 @@ export function buildCoupleTreeDiagram(input: BuildCoupleTreeInput): CoupleTreeD
     relationships: input.relationships ?? [],
     highlightPersonId: input.highlightPersonId ?? null,
     includeClan: input.includeClan ?? false,
-    personBBranchFilter: input.personBBranchFilter ?? "both",
+    branchFilter: input.branchFilter ?? "both",
     adoptedChildIds: buildAdoptedChildIds(input),
     marriageUnitsByPerson: buildMarriageUnitsByPerson(input),
     kinshipEdges: buildKinshipRelationshipEdges(input),
@@ -228,15 +228,54 @@ export function buildCoupleTreeDiagram(input: BuildCoupleTreeInput): CoupleTreeD
   // 1b) Dòng họ: anh chị em ruột của personA/personB LUÔN hiện (không cần bật
   // "Dòng họ") — toả thêm ra bên trái/phải, cùng đời với cặp trung tâm. Bật
   // "Dòng họ" sẽ vẽ thêm vợ/chồng + con cháu của từng người trong số đó.
+  //
+  // QUAN TRỌNG: phải biết TRƯỚC bề rộng thật của cây con cháu (đời 1 trở
+  // xuống) thì mới đặt anh chị em ở đúng vị trí không chồng lên cây đó — vì
+  // cây con cháu có thể rất rộng nếu nhiều con/cháu. buildCoupleBlock thuần
+  // (không side-effect, có nhớ đệm) nên tính trước ở đây không tốn gì thêm.
   const memo = new Map<string, CoupleBlock>();
 
+  const coupleAnchorXForWidth =
+    personA && xA !== null && personB && xB !== null
+      ? (xA + NODE_WIDTH + xB) / 2
+      : personA && xA !== null
+        ? xA + NODE_WIDTH / 2
+        : personB && xB !== null
+          ? xB + NODE_WIDTH / 2
+          : 0;
+
+  const centerChildIds =
+    personA && personB
+      ? (getMarriageUnit(personA.id, personB.id, ctx)?.childIds ?? [])
+      : personA
+        ? (ctx.marriageUnitsByPerson.get(personA.id) ?? []).flatMap((u) => u.childIds)
+        : personB
+          ? (ctx.marriageUnitsByPerson.get(personB.id) ?? []).flatMap((u) => u.childIds)
+          : [];
+
+  const centerChildrenWidth = computeChildrenRowWidth(centerChildIds, 1, ctx, memo);
+  const centerLeftExtent = coupleAnchorXForWidth - centerChildrenWidth / 2;
+  const centerRightExtent = coupleAnchorXForWidth + centerChildrenWidth / 2;
+
+  let gen0LeftExtent = xA ?? 0;
+  let gen0RightExtent = xB !== null ? xB + NODE_WIDTH : 0;
+
   if (personA && xA !== null) {
-    placeSiblingCluster({ personId: personA.id, edgeX: xA, direction: "left", side: "personA", depth: 0, ctx, out, memo });
+    gen0LeftExtent = placeSiblingCluster({
+      personId: personA.id,
+      edgeX: Math.min(xA, centerLeftExtent),
+      direction: "left",
+      side: "personA",
+      depth: 0,
+      ctx,
+      out,
+      memo,
+    });
   }
   if (personB && xB !== null) {
-    placeSiblingCluster({
+    gen0RightExtent = placeSiblingCluster({
       personId: personB.id,
-      edgeX: xB + NODE_WIDTH,
+      edgeX: Math.max(xB + NODE_WIDTH, centerRightExtent),
       direction: "right",
       side: "personB",
       depth: 0,
@@ -253,9 +292,11 @@ export function buildCoupleTreeDiagram(input: BuildCoupleTreeInput): CoupleTreeD
     fanAncestorsOf({
       anchorId: personA.id,
       anchorTopX: xA + NODE_WIDTH / 2,
+      extraPush: Math.max(0, xA - gen0LeftExtent),
       side: "personA",
       slotHalfWidth: topSlotHalfWidth,
       direction: "left",
+      branchFilter: ctx.branchFilter,
       ctx,
       out,
       memo,
@@ -266,10 +307,11 @@ export function buildCoupleTreeDiagram(input: BuildCoupleTreeInput): CoupleTreeD
     fanAncestorsOf({
       anchorId: personB.id,
       anchorTopX: xB + NODE_WIDTH / 2,
+      extraPush: Math.max(0, gen0RightExtent - (xB + NODE_WIDTH)),
       side: "personB",
       slotHalfWidth: topSlotHalfWidth,
       direction: "right",
-      branchFilter: ctx.personBBranchFilter,
+      branchFilter: ctx.branchFilter,
       ctx,
       out,
       memo,
@@ -280,30 +322,20 @@ export function buildCoupleTreeDiagram(input: BuildCoupleTreeInput): CoupleTreeD
   // hoặc toàn bộ đơn vị hôn nhân của người còn lại (nếu chỉ có 1 người) — mỗi
   // đơn vị hôn nhân (mỗi cuộc hôn nhân) được vẽ thành 1 nhóm riêng, đúng kiểu
   // đa phu đa thê của Sơ đồ cây chính, thay vì gộp chung tất cả con lại.
-  const coupleAnchorX =
-    personA && xA !== null && personB && xB !== null
-      ? (xA + NODE_WIDTH + xB) / 2
-      : personA && xA !== null
-        ? xA + NODE_WIDTH / 2
-        : personB && xB !== null
-          ? xB + NODE_WIDTH / 2
-          : 0;
+  const coupleAnchorX = coupleAnchorXForWidth;
 
-  if (personA && personB) {
-    const unit = getMarriageUnit(personA.id, personB.id, ctx);
-    const childIds = unit?.childIds ?? [];
-
-    if (childIds.length === 0) {
-      out.warnings.push("Chưa tìm thấy con chung của 2 người trong dữ liệu.");
-    } else {
-      placeTopLevelChildrenRow({ childIds, depth: 1, parentAnchorX: coupleAnchorX, parentAnchorY: NODE_HEIGHT / 2, ctx, out, memo });
-    }
-  } else if (personA) {
-    const childIds = (ctx.marriageUnitsByPerson.get(personA.id) ?? []).flatMap((u) => u.childIds);
-    placeTopLevelChildrenRow({ childIds, depth: 1, parentAnchorX: coupleAnchorX, parentAnchorY: NODE_HEIGHT / 2, ctx, out, memo });
-  } else if (personB) {
-    const childIds = (ctx.marriageUnitsByPerson.get(personB.id) ?? []).flatMap((u) => u.childIds);
-    placeTopLevelChildrenRow({ childIds, depth: 1, parentAnchorX: coupleAnchorX, parentAnchorY: NODE_HEIGHT / 2, ctx, out, memo });
+  if (centerChildIds.length === 0 && personA && personB) {
+    out.warnings.push("Chưa tìm thấy con chung của 2 người trong dữ liệu.");
+  } else if (centerChildIds.length > 0) {
+    placeTopLevelChildrenRow({
+      childIds: centerChildIds,
+      depth: 1,
+      parentAnchorX: coupleAnchorX,
+      parentAnchorY: NODE_HEIGHT / 2,
+      ctx,
+      out,
+      memo,
+    });
   }
 
   return finalize(out, { x: coupleAnchorX, y: 0 }, personA, personB);
@@ -320,9 +352,12 @@ function fanAncestorsOf(args: {
   memo: Map<string, CoupleBlock>;
   /** chỉ toả 1 trong 2 nhánh (dùng cho vợ/chồng ở Sui gia khi muốn ẩn bớt 1 bên) */
   branchFilter?: "both" | "paternal" | "maternal";
+  /** đẩy cả quạt tổ tiên ra xa thêm — dùng khi đời 0 (anh chị em của anchor) đã lấn ra xa hơn vị trí gốc của anchor */
+  extraPush?: number;
 }) {
   const { anchorId, anchorTopX, side, slotHalfWidth, direction, ctx, out, memo } = args;
   const branchFilter = args.branchFilter ?? "both";
+  const extraPush = args.extraPush ?? 0;
   const { fatherId: rawFatherId, motherId: rawMotherId } = getDirectParents(
     anchorId,
     ctx.parentChildEdges,
@@ -330,15 +365,18 @@ function fanAncestorsOf(args: {
   );
   const fatherId = branchFilter === "maternal" ? null : rawFatherId;
   const motherId = branchFilter === "paternal" ? null : rawMotherId;
+  // anchorTopAnchor LUÔN là vị trí THẬT của anchor (để đường nối luôn khớp);
+  // chỉ vị trí XUẤT PHÁT của quạt (fanBaseX) mới bị đẩy ra xa thêm extraPush.
   const anchorTopAnchor = { x: anchorTopX, y: 0, personId: anchorId };
   const sign = direction === "left" ? -1 : 1;
+  const fanBaseX = anchorTopX + sign * extraPush;
 
   // Cha & mẹ của anchor mỗi người đều cần trọn vẹn slotHalfWidth cho riêng mình
   // (để đủ chỗ nhân đôi tới generationsUp đời), nên xếp CẠNH NHAU không chồng
   // lấn, cả 2 đều lệch hẳn về phía `direction` — vì phía bên kia (personB) cũng
   // đang toả ngược chiều từ 1 anchor khác, không thể đối xứng quanh anchor này.
-  const innerCenterX = anchorTopX + sign * slotHalfWidth;
-  const outerCenterX = anchorTopX + sign * 3 * slotHalfWidth;
+  const innerCenterX = fanBaseX + sign * slotHalfWidth;
+  const outerCenterX = fanBaseX + sign * 3 * slotHalfWidth;
 
   let fatherCenter: { x: number; y: number } | null = null;
   let motherCenter: { x: number; y: number } | null = null;
@@ -436,6 +474,7 @@ function placeAncestor(args: {
       ctx,
       out,
       memo,
+      capDescendantsAtSpouseOnly: true,
     });
   }
 
@@ -548,9 +587,7 @@ function buildCoupleBlock(
     return empty;
   }
 
-  const units = (ctx.marriageUnitsByPerson.get(personId) ?? []).filter(
-    (unit) => !unit.spouseId || !isHiddenSpouseId(unit.spouseId, ctx),
-  );
+  const units = ctx.marriageUnitsByPerson.get(personId) ?? [];
 
   if (units.length === 0) {
     const block: CoupleBlock = {
@@ -568,7 +605,10 @@ function buildCoupleBlock(
   // Bước 1: mỗi hôn nhân tự dựng hàng con của riêng nó (đệ quy) rồi tự tính
   // bề rộng + tâm sinh học của hàng con đó — CHƯA biết vị trí trong hàng các
   // hôn nhân, nên toạ độ vẫn ở khung cục bộ riêng của từng hôn nhân (gốc = 0).
+  // Con RUỘT vẫn hiện dù ẩn dâu/rể (chỉ ẩn ô vợ/chồng, không xoá cả hôn nhân).
   const rawGroups = units.map((unit) => {
+    const visibleSpouseId = unit.spouseId && !isHiddenSpouseId(unit.spouseId, ctx) ? unit.spouseId : null;
+
     const sortedChildren = canDescend
       ? sortVietnamesePeople(
           unit.childIds.map((id) => ctx.personsMap.get(id)).filter((p): p is Person => Boolean(p)),
@@ -589,11 +629,11 @@ function buildCoupleBlock(
     const biologicalCenter =
       childCenters.length > 0 ? (Math.min(...childCenters) + Math.max(...childCenters)) / 2 : null;
 
-    const spouseSlotWidth = unit.spouseId ? NODE_WIDTH + SPOUSE_GAP : 0;
+    const spouseSlotWidth = visibleSpouseId ? NODE_WIDTH + SPOUSE_GAP : 0;
     const groupWidth = Math.max(childrenWidth, spouseSlotWidth, NODE_WIDTH);
     const anchorOffset = biologicalCenter ?? groupWidth / 2;
 
-    return { unit, childSlots, groupWidth, anchorOffset };
+    return { unit, visibleSpouseId, childSlots, groupWidth, anchorOffset };
   });
 
   // Bước 2: xếp các hôn nhân cạnh nhau — đúng kiểu đa phu đa thê, mỗi hôn
@@ -610,12 +650,13 @@ function buildCoupleBlock(
 
   // Bước 3: suy vị trí vợ/chồng TỪ anchor của group (đã canh theo tâm sinh học
   // của con), rồi suy vị trí personId từ vị trí vợ/chồng đầu tiên — ĐÚNG THỨ TỰ
-  // NGƯỢC lại so với cách làm trước đây (không suy con từ cha mẹ).
-  const firstSpouseIndex = rawGroups.findIndex((g) => g.unit.spouseId);
+  // NGƯỢC lại so với cách làm trước đây (không suy con từ cha mẹ). Nếu vợ/chồng
+  // bị ẩn, personId được canh giữa thẳng theo anchor (= tâm con ruột) luôn.
+  const firstVisibleSpouseIndex = rawGroups.findIndex((g) => g.visibleSpouseId);
   let personX: number;
 
-  if (firstSpouseIndex >= 0) {
-    personX = groupAnchors[firstSpouseIndex] - SPOUSE_GAP / 2 - NODE_WIDTH;
+  if (firstVisibleSpouseIndex >= 0) {
+    personX = groupAnchors[firstVisibleSpouseIndex] - SPOUSE_GAP / 2 - NODE_WIDTH;
   } else if (groupAnchors.length > 0) {
     personX = (Math.min(...groupAnchors) + Math.max(...groupAnchors)) / 2 - NODE_WIDTH / 2;
   } else {
@@ -627,9 +668,9 @@ function buildCoupleBlock(
     const anchorX = groupAnchors[index];
     let spouseX: number | null = null;
 
-    if (g.unit.spouseId) {
+    if (g.visibleSpouseId) {
       spouseX = anchorX + SPOUSE_GAP / 2;
-      nodes.push({ personId: g.unit.spouseId, x: spouseX, role: "spouse" });
+      nodes.push({ personId: g.visibleSpouseId, x: spouseX, role: "spouse" });
     }
 
     return {
@@ -736,6 +777,25 @@ function emitCoupleBlock(
 }
 
 /** Đặt 1 hàng con ở cấp cao nhất (con chung của cặp trung tâm) — dùng CoupleBlock cho từng người rồi in ra cùng lúc. */
+/** Tính trước bề rộng thật của 1 hàng con (không vẽ gì) — dùng để biết trước cây con cháu rộng bao nhiêu trước khi đặt anh chị em/tổ tiên. */
+function computeChildrenRowWidth(
+  childIds: string[],
+  depth: number,
+  ctx: BuildContext,
+  memo: Map<string, CoupleBlock>,
+): number {
+  if (childIds.length === 0) return 0;
+  const children = sortVietnamesePeople(
+    childIds.map((id) => ctx.personsMap.get(id)).filter((p): p is Person => Boolean(p)),
+  );
+  if (children.length === 0) return 0;
+
+  const blocks = children.map((child) => buildCoupleBlock(child.id, depth, ctx, memo));
+  let cursor = 0;
+  for (const block of blocks) cursor += block.width + SIBLING_GAP;
+  return cursor - SIBLING_GAP;
+}
+
 function placeTopLevelChildrenRow(args: {
   childIds: string[];
   depth: number;
@@ -954,10 +1014,15 @@ function placeSiblingCluster(args: {
   ctx: BuildContext;
   out: MutableOutput;
   memo: Map<string, CoupleBlock>;
-}) {
-  const { personId, edgeX, direction, side, depth, ctx, out, memo } = args;
+  /** nếu true: con cháu của anh chị em này chỉ dừng ở vợ/chồng, không vẽ tiếp cháu — dùng cho đời ông bà vì con cháu của họ sẽ "rơi" xuống đúng hàng với đời cha mẹ/con cháu bên dưới, cần giới hạn để không chồng lấn */
+  capDescendantsAtSpouseOnly?: boolean;
+}): number {
+  const { personId, edgeX, direction, side, depth, ctx, out } = args;
   const siblings = getSiblingsOf(personId, ctx);
-  if (siblings.length === 0) return;
+  if (siblings.length === 0) return edgeX;
+
+  const buildCtx: BuildContext = args.capDescendantsAtSpouseOnly ? { ...ctx, generationsDown: depth } : ctx;
+  const buildMemo = args.capDescendantsAtSpouseOnly ? new Map<string, CoupleBlock>() : args.memo;
 
   const sign = direction === "left" ? -1 : 1;
   // Mở rộng ra ngoài theo đúng thứ tự sinh, người gần nhánh chính trước.
@@ -968,7 +1033,7 @@ function placeSiblingCluster(args: {
 
   for (const sibling of ordered) {
     if (ctx.includeClan) {
-      const block = buildCoupleBlock(sibling.id, depth, ctx, memo);
+      const block = buildCoupleBlock(sibling.id, depth, buildCtx, buildMemo);
       cursor += sign * SIBLING_GAP;
       const offsetX = direction === "left" ? cursor - block.width : cursor;
       emitCoupleBlock(block, offsetX, y, depth, ctx, out, side, "sibling");
@@ -980,6 +1045,8 @@ function placeSiblingCluster(args: {
       cursor += sign * NODE_WIDTH;
     }
   }
+
+  return cursor;
 }
 
 function toKinshipNode(person: Person): KinshipPersonNode {
