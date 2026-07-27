@@ -670,6 +670,18 @@ function findShortestPath(
   if (fromId === toId) return { id: fromId, steps: [], personIds: [fromId] };
 
   const graph = buildGraph(relationships);
+
+  // A direct edge between fromId and toId (spouse, or parent/child) is always
+  // the correct description of their relationship, regardless of whether some
+  // indirect path (e.g. fromId -> their common child -> toId) sums to a lower
+  // weight. Without this short-circuit, two spouses who share a child would be
+  // described via that child instead of as "spouse", since child/parent edges
+  // (weight 1 each) are cheaper than a single spouse edge (weight 4).
+  const directEdge = graph.get(fromId)?.find((edge) => edge.to === toId);
+  if (directEdge) {
+    return { id: toId, steps: [directEdge.step], personIds: [fromId, toId] };
+  }
+
   const queue: Array<PathNode & { score: number; spouseCount: number }> = [
     { id: fromId, steps: [], personIds: [fromId], score: 0, spouseCount: 0 },
   ];

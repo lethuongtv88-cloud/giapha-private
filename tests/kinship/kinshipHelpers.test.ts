@@ -331,4 +331,28 @@ describe("computeKinship", () => {
     expect(computeKinship(persons[3], persons[0], persons, relationships)?.aCallsB).toBe("anh cột chèo");
   });
 
+
+  it("resolves spouse term correctly even when the couple has a common child (regression)", () => {
+    // Truoc khi sua findShortestPath(), thuat toan chon duong vong
+    // "chong -> con chung -> vo" (tong trong so 2) thay vi canh spouse
+    // truc tiep (trong so 4), khien vo/chong co con chung bi nhan dien
+    // sai thanh "ho hang xa cung huyet thong". Day la truong hop pho
+    // bien nhat trong du lieu that (hau het vo chong deu co con chung).
+    const persons = [
+      person("husband", "Chong", { gender: "male" }),
+      person("wife", "Vo", { gender: "female" }),
+      person("commonChild", "Con chung", { gender: "male" }),
+    ];
+    const relationships = [
+      { person_a: "husband", person_b: "wife", type: "marriage" },
+      child("husband", "commonChild"),
+      child("wife", "commonChild"),
+    ];
+
+    const result = computeKinship(persons[0], persons[1], persons, relationships);
+
+    expect(result?.aCallsB).toBe("vợ");
+    expect(result?.bCallsA).toBe("chồng");
+  });
+
 });
