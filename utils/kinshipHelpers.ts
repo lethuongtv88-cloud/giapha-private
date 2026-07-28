@@ -631,7 +631,7 @@ function termFromPath(steps: Step[], people: KinshipPersonNode[]): string {
   if (collateral) return collateral;
 
   if (steps.filter((step) => step === "parent").length > 0 && steps.filter((step) => step === "child").length > 0) {
-    return "họ hàng xa cùng huyết thống";
+    return "họ hàng cùng nhánh";
   }
 
   return "chưa xác định";
