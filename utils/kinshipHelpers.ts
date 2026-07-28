@@ -21,7 +21,7 @@ export interface KinshipResult {
   pathLabels: string[];
 }
 
-type Step = "parent" | "child" | "spouse";
+export type Step = "parent" | "child" | "spouse";
 
 interface DirectedEdge {
   to: string;
@@ -739,7 +739,23 @@ function labelsForPath(path: PathNode, personsById: Map<string, KinshipPersonNod
     return stepLabel(step, from, to);
   });
 }
+export function getRelationshipPath(
+  personA: KinshipPersonNode,
+  personB: KinshipPersonNode,
+  persons: KinshipPersonNode[],
+  relationships: KinshipRelationshipEdge[],
+): { steps: Step[]; people: KinshipPersonNode[] } | null {
+  if (personA.id === personB.id) return null;
 
+  const personsById = new Map(persons.map((person) => [person.id, person]));
+  const path = findShortestPath(personA.id, personB.id, relationships);
+  if (!path) return null;
+
+  const people = path.personIds.map((id) => personsById.get(id)).filter(Boolean) as KinshipPersonNode[];
+  if (people.length !== path.personIds.length) return null;
+
+  return { steps: path.steps, people };
+}
 export function computeKinship(
   personA: KinshipPersonNode,
   personB: KinshipPersonNode,
