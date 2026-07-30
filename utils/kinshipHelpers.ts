@@ -1,3 +1,4 @@
+import { renderKinshipTermV2 } from "./kinship/ruleEngine";
 export interface KinshipPersonNode {
   id: string;
   full_name: string;
@@ -811,8 +812,8 @@ export function computeKinship(
 
   const peopleAB = pathAB.personIds.map((id) => personsById.get(id)).filter(Boolean) as KinshipPersonNode[];
   const peopleBA = pathBA.personIds.map((id) => personsById.get(id)).filter(Boolean) as KinshipPersonNode[];
-  const aCallsB = termFromPath(pathAB.steps, peopleAB);
-  const bCallsA = termFromPath(pathBA.steps, peopleBA);
+  const aCallsB = renderKinshipTermV2(personA, personB, persons, relationships) ?? termFromPath(pathAB.steps, peopleAB);
+  const bCallsA = renderKinshipTermV2(personB, personA, persons, relationships) ?? termFromPath(pathBA.steps, peopleBA);
 
   return {
     aCallsB,

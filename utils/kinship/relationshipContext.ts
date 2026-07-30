@@ -111,16 +111,20 @@ export function buildRelationshipContext(
   }
 
   const remaining = bloodSteps.slice(ascendSteps);
-  const descendSteps = remaining.length;
-  // Bất biến của cây gia phả (không có chu trình): sau khi hết chuỗi "parent"
-  // liên tiếp ở đầu, phần còn lại chỉ có thể toàn "child" (đi lên tổ tiên
-  // chung rồi đi xuống, không zig-zag). isPureLineage (mục 2, trực hệ) đúng
-  // khi KHÔNG có cả hai chiều lên và xuống cùng lúc.
-  const isPureLineage = ascendSteps === 0 || descendSteps === 0;
+  // QUAN TRỌNG: không được giả định "phần còn lại chỉ có thể toàn child".
+  // Điều đó chỉ đúng khi có tổ tiên chung THẬT SỰ ở phía trên. Trường hợp
+  // 2 người không kết hôn nhưng có con chung, đường ngắn nhất là "xuống
+  // con rồi lên lại" (bloodSteps = ["child", "parent"]) — ascendSteps=0
+  // nhưng phần còn lại KHÔNG phải toàn "child". Phải kiểm tra thật, không
+  // suy đoán, nếu không sẽ nhận nhầm thành "cháu nội/ngoại" thuần tuý.
+  const isValidUpThenDownShape = remaining.every((step) => step === "child");
+  const descendSteps = isValidUpThenDownShape ? remaining.length : 0;
+  const isPureLineage = isValidUpThenDownShape && (ascendSteps === 0 || descendSteps === 0);
 
-  const commonAncestor = bloodPeople[ascendSteps] ?? null;
-  const connector = descendSteps > 0 ? bloodPeople[ascendSteps + 1] ?? null : null;
-  const directAncestorAtConnectorLevel = ascendSteps > 0 ? bloodPeople[ascendSteps - 1] ?? null : null;
+  const commonAncestor = isValidUpThenDownShape ? bloodPeople[ascendSteps] ?? null : null;
+  const connector = isValidUpThenDownShape && descendSteps > 0 ? bloodPeople[ascendSteps + 1] ?? null : null;
+  const directAncestorAtConnectorLevel =
+    isValidUpThenDownShape && ascendSteps > 0 ? bloodPeople[ascendSteps - 1] ?? null : null;
 
   return {
     raw: { steps: path.steps, people: path.people },
