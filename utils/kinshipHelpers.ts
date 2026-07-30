@@ -1,3 +1,4 @@
+import { renderKinshipTermV2 } from "./kinship/ruleEngine";
 export interface KinshipPersonNode {
   id: string;
   full_name: string;
@@ -662,6 +663,35 @@ function buildGraph(relationships: KinshipRelationshipEdge[]): Map<string, Direc
   return graph;
 }
 
+// Rút gọn mẫu "con (A->B) rồi cha/mẹ (B->C)" thành "vợ/chồng (A->C)" khi A và
+// C có cạnh vợ/chồng trực tiếp trong graph. Đây là trường hợp thuật toán đi
+// vòng qua 1 con chung B để tới C thay vì đi thẳng qua cạnh vợ/chồng — hai
+// cách đều đúng data, nhưng cạnh vợ/chồng trực tiếp mới là mô tả đúng bản
+// chất quan hệ (A và C là vợ chồng), không phải "A là ông/bà nội, đi vòng
+// qua cháu". Không giới hạn ở đầu/cuối đường đi vì mẫu này có thể xuất hiện
+// ở giữa đường đi dài hơn (vd: "vợ của chú, chú lại có cháu chung với vợ").
+function collapseSharedChildBridge(path: PathNode, graph: Map<string, DirectedEdge[]>): PathNode {
+  const steps = [...path.steps];
+  const personIds = [...path.personIds];
+
+  let i = 0;
+  while (i < steps.length - 1) {
+    if (steps[i] === "child" && steps[i + 1] === "parent") {
+      const a = personIds[i];
+      const c = personIds[i + 2];
+      const hasDirectSpouseEdge = graph.get(a)?.some((edge) => edge.to === c && edge.step === "spouse");
+      if (hasDirectSpouseEdge) {
+        steps.splice(i, 2, "spouse");
+        personIds.splice(i + 1, 1);
+        continue; // Không tăng i — kiểm tra lại từ cùng vị trí phòng khi rút gọn liên tiếp
+      }
+    }
+    i++;
+  }
+
+  return { id: path.id, steps, personIds };
+}
+
 function findShortestPath(
   fromId: string,
   toId: string,
@@ -697,7 +727,10 @@ function findShortestPath(
     const current = queue.shift();
     if (!current) continue;
     if (current.id === toId) {
-      return { id: current.id, steps: current.steps, personIds: current.personIds };
+      return collapseSharedChildBridge(
+        { id: current.id, steps: current.steps, personIds: current.personIds },
+        graph,
+      );
     }
     if (current.steps.length >= 10) continue;
 
@@ -779,8 +812,8 @@ export function computeKinship(
 
   const peopleAB = pathAB.personIds.map((id) => personsById.get(id)).filter(Boolean) as KinshipPersonNode[];
   const peopleBA = pathBA.personIds.map((id) => personsById.get(id)).filter(Boolean) as KinshipPersonNode[];
-  const aCallsB = termFromPath(pathAB.steps, peopleAB);
-  const bCallsA = termFromPath(pathBA.steps, peopleBA);
+  const aCallsB = renderKinshipTermV2(personA, personB, persons, relationships) ?? termFromPath(pathAB.steps, peopleAB);
+  const bCallsA = renderKinshipTermV2(personB, personA, persons, relationships) ?? termFromPath(pathBA.steps, peopleBA);
 
   return {
     aCallsB,
