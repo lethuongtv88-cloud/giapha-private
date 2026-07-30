@@ -117,6 +117,7 @@ function renderDescend(ctx: RelationshipContext, target: KinshipPersonNode): str
  * target là tổ tiên; nếu root đi xuống, target là hậu duệ).
  */
 export function renderDirectLineageTerm(ctx: RelationshipContext, target: KinshipPersonNode): string | null {
+  if (ctx.leadingSpouse || ctx.trailingSpouse) return null; // Còn vợ/chồng dư, không phải trực hệ thuần
   if (!ctx.isPureLineage) return null;
   if (ctx.ascendSteps === 0 && ctx.descendSteps === 0) return null; // vợ/chồng thuần, không phải mục 2
 

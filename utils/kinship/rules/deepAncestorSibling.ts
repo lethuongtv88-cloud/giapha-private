@@ -22,8 +22,12 @@ function isBornBefore(
   a: { birth_order: number | null; birth_year: number | null },
   b: { birth_order: number | null; birth_year: number | null },
 ): boolean | null {
-  if (a.birth_order != null && b.birth_order != null) return a.birth_order < b.birth_order;
-  if (a.birth_year != null && b.birth_year != null) return a.birth_year < b.birth_year;
+  if (a.birth_order != null && b.birth_order != null && a.birth_order !== b.birth_order) {
+    return a.birth_order < b.birth_order;
+  }
+  if (a.birth_year != null && b.birth_year != null && a.birth_year !== b.birth_year) {
+    return a.birth_year < b.birth_year;
+  }
   return null;
 }
 
@@ -36,6 +40,7 @@ export function renderDeepAncestorSiblingTerm(
   ctx: RelationshipContext,
   target: KinshipPersonNode,
 ): string | null {
+  if (ctx.leadingSpouse || ctx.trailingSpouse) return null;
   if (ctx.ascendSteps !== 4 && ctx.ascendSteps !== 5) return null;
   if (ctx.descendSteps !== 1) return null; // D>=2 ngoài phạm vi (theo bản v3)
 
