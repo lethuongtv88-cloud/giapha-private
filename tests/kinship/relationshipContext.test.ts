@@ -112,6 +112,29 @@ describe("buildRelationshipContext", () => {
     expect(ctx?.directAncestorAtConnectorLevel?.full_name.trim()).toBe("Lý Thị Thanh");
   });
 
+  it("KHÔNG được hiểu nhầm 'con chung không kết hôn' (bloodSteps=[child,parent]) thành trực hệ xuống thuần tuý", () => {
+    // Phát hiện ở Commit 11: 2 người không kết hôn nhưng có con chung có
+    // đường ngắn nhất là "xuống con rồi lên lại" — KHÔNG phải "đi xuống 2
+    // đời" (cháu nội/ngoại). ascendSteps=0 KHÔNG đủ để kết luận phần còn
+    // lại toàn "child" — phải kiểm tra thật.
+    const persons2 = [
+      { id: "pa", full_name: "Cha", gender: "male" as const, birth_year: null, birth_order: null, generation: null, is_in_law: false },
+      { id: "pb", full_name: "Mẹ", gender: "female" as const, birth_year: null, birth_order: null, generation: null, is_in_law: false },
+      { id: "c", full_name: "Con", gender: "male" as const, birth_year: null, birth_order: null, generation: null, is_in_law: false },
+    ];
+    const relationships2: KinshipRelationshipEdge[] = [
+      { person_a: "pa", person_b: "c", type: "biological_child" },
+      { person_a: "pb", person_b: "c", type: "biological_child" },
+    ];
+
+    const ctx = buildRelationshipContext(persons2[0], persons2[1], persons2, relationships2);
+    expect(ctx).not.toBeNull();
+    expect(ctx!.bloodSteps).toEqual(["child", "parent"]);
+    expect(ctx!.isPureLineage).toBe(false);
+    expect(ctx!.descendSteps).toBe(0);
+    expect(ctx!.connector).toBeNull();
+  });
+
   it("anh chị em ruột (U=1, D=1, level=0) — so sánh trực tiếp với chính root", () => {
     const ctx = buildRelationshipContext(P("Lê Văn Lam"), P("Lê Văn Cam"), persons, relationships);
     expect(ctx?.level).toBe(0);
