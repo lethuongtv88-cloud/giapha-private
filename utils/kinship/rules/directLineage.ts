@@ -1,4 +1,4 @@
-import type { KinshipPersonNode } from "../kinshipHelpers";
+import type { KinshipPersonNode } from "../../kinshipHelpers";
 import type { RelationshipContext } from "./relationshipContext";
 
 /**
