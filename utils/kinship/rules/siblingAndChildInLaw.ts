@@ -31,13 +31,21 @@ function isBornBefore(
   a: { birth_order: number | null; birth_year: number | null },
   b: { birth_order: number | null; birth_year: number | null },
 ): boolean | null {
-  if (a.birth_order != null && b.birth_order != null) return a.birth_order < b.birth_order;
-  if (a.birth_year != null && b.birth_year != null) return a.birth_year < b.birth_year;
+  // birth_order chỉ dùng được khi 2 giá trị KHÁC nhau — trùng birth_order
+  // (lỗi nhập liệu, hoặc sinh đôi) phải rơi về birth_year, không được coi
+  // là "không so sánh được" mà bỏ qua birth_year luôn.
+  if (a.birth_order != null && b.birth_order != null && a.birth_order !== b.birth_order) {
+    return a.birth_order < b.birth_order;
+  }
+  if (a.birth_year != null && b.birth_year != null && a.birth_year !== b.birth_year) {
+    return a.birth_year < b.birth_year;
+  }
   return null;
 }
 
 /** Mục 3.5: anh/chị/em ruột. */
 export function renderSiblingTerm(ctx: RelationshipContext, target: KinshipPersonNode): string | null {
+  if (ctx.leadingSpouse || ctx.trailingSpouse) return null;
   if (ctx.ascendSteps !== 1 || ctx.descendSteps !== 1) return null;
 
   const root = ctx.directAncestorAtConnectorLevel; // bloodPeople[0], chính root
@@ -54,6 +62,7 @@ export function renderSiblingTerm(ctx: RelationshipContext, target: KinshipPerso
 
 /** Mục 3.6, dòng 1: con của anh/chị/em ruột. */
 export function renderNiblingTerm(ctx: RelationshipContext): string | null {
+  if (ctx.leadingSpouse || ctx.trailingSpouse) return null;
   if (ctx.ascendSteps !== 1 || ctx.descendSteps !== 2) return null;
   return "cháu";
 }
