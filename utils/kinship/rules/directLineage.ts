@@ -1,5 +1,5 @@
 import type { KinshipPersonNode } from "../../kinshipHelpers";
-import type { RelationshipContext } from "./relationshipContext";
+import type { RelationshipContext } from "../relationshipContext";
 
 /**
  * Rule set: TRỰC HỆ (mục 2, bản he-thong-danh-xung-final-v3.md).
