@@ -5,10 +5,9 @@ import type { RelationshipContext } from "../relationshipContext";
  * Rule set: BÀNG HỆ ĐỜI -2, 5 NHÁNH A-E (mục 3.2, bản he-thong-danh-xung-final-v3.md).
  *
  * Chỉ áp dụng đúng U=3 (root leo 3 đời lên tổ tiên chung — tức "Cố" — rồi
- * xuống 1 hoặc 2 đời). D=1 (tầng liền kề, chính "Ông bác/Ông chú/Bà cô/Ông
- * cậu/Bà dì") và D=2 (con của họ). D=3 ("Cháu đời 0" = Anh/Chế/Em họ) KHÔNG
- * xử lý ở đây — thuộc cùng nhóm khái niệm với mục 3.5 (đời 0), để dành 1
- * rule set riêng gộp chung.
+ * xuống 1, 2, hoặc 3 đời). D=1 (tầng liền kề, chính "Ông bác/Ông chú/Bà
+ * cô/Ông cậu/Bà dì"), D=2 (con của họ), D=3 ("Cháu đời 0" — anh/chế/em họ,
+ * cùng vai vế với root).
  *
  * QUY TẮC (đã xác nhận qua dữ liệu thật + trao đổi trực tiếp với người dùng,
  * không suy ra thuần tuý từ cách diễn đạt bảng — bảng viết mục C không có
@@ -23,11 +22,8 @@ import type { RelationshipContext } from "../relationshipContext";
  *     → như nhánh nhỏ — người dùng xác nhận trực tiếp, dù bảng viết mục C
  *     giống hệt mục B không phân biệt).
  *   - rootOwnSide = giới tính CHA/MẸ RUỘT của chính root trên đường đi này
- *     (ctx.bloodPeople[1]) — nam → nội, nữ → ngoại. Đã xác nhận: quyết định
- *     hệ vocab (Bác/Chú/Cô hay Cậu/Dì) cho D=2 dựa vào rootOwnSide, KHÔNG
- *     dựa vào reference hay connector — có thể khác hệ so với D=1 (ví dụ đi
- *     tới 1 "ông" bên ngoại (ông ngoại) qua mẹ, D=1 vẫn "Ông bác/Ông chú" vì
- *     reference là nam, nhưng D=2 lại dùng hệ Cậu/Dì vì rootOwnSide=ngoại).
+ *     (ctx.bloodPeople[1]) — nam → nội, nữ → ngoại. Quyết định hệ vocab
+ *     (Bác/Chú/Cô hay Cậu/Dì) cho D=2, KHÔNG dùng cho D=3 (xem bên dưới).
  *
  *   D=1 (tầng liền kề): hệ chọn theo reference.gender.
  *     reference nam ("ông"):
@@ -44,6 +40,13 @@ import type { RelationshipContext } from "../relationshipContext";
  *       !branchIsElder: target nam → "chú", target nữ → "cô"
  *     rootOwnSide ngoại (không phân biệt lớn/nhỏ ở tầng này):
  *       target nam → "cậu", target nữ → "dì"
+ *
+ *   D=3 (Cháu đời 0 — cùng vai vế root): CHỈ phụ thuộc branchIsElder, KHÔNG
+ *   còn phân biệt nội/ngoại nữa (bảng liệt kê "Anh/Chế họ" / "Em họ" giống
+ *   nhau ở mọi nhánh nội/ngoại, xem mục 4 quy tắc "cả nhánh dùng chung 1
+ *   cách xưng hô"):
+ *     branchIsElder: target nam → "anh họ", target nữ → "chế họ"
+ *     !branchIsElder: "em họ" (không phân biệt giới tính target)
  */
 
 function isBornBefore(
@@ -65,7 +68,7 @@ export function renderGreatUncleAuntBranchTerm(
 ): string | null {
   if (ctx.leadingSpouse || ctx.trailingSpouse) return null;
   if (ctx.ascendSteps !== 3) return null;
-  if (ctx.descendSteps !== 1 && ctx.descendSteps !== 2) return null;
+  if (ctx.descendSteps !== 1 && ctx.descendSteps !== 2 && ctx.descendSteps !== 3) return null;
 
   const reference = ctx.directAncestorAtConnectorLevel;
   const connector = ctx.connector;
@@ -90,6 +93,16 @@ export function renderGreatUncleAuntBranchTerm(
       return null;
     }
     return null;
+  }
+
+  if (ctx.descendSteps === 3) {
+    if (branchIsElder === true) {
+      if (target.gender === "male") return "anh họ";
+      if (target.gender === "female") return "chế họ";
+      return null;
+    }
+    if (branchIsElder === false) return "em họ";
+    return null; // Thiếu dữ liệu để phân biệt nhánh lớn/nhỏ
   }
 
   // descendSteps === 2
