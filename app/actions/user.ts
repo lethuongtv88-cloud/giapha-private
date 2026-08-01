@@ -524,3 +524,27 @@ export async function toggleUserStatus(userId: string, newStatus: boolean) {
   revalidatePath("/dashboard/users");
   return { success: true };
 }
+
+export async function toggleUserCanExport(userId: string, newValue: boolean) {
+  const supabase = await getSupabase();
+  const { error } = await supabase.rpc("set_user_can_export", {
+    target_user_id: userId,
+    new_value: newValue,
+  });
+
+  if (error) {
+    console.error("Failed to change user export permission:", error);
+    return { error: error.message };
+  }
+
+  await recordAuditLog({
+    action: "user.can_export_changed",
+    entityType: "user",
+    entityId: userId,
+    severity: "warning",
+    metadata: { newValue },
+  });
+
+  revalidatePath("/dashboard/users");
+  return { success: true };
+}
