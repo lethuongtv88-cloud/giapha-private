@@ -1,6 +1,14 @@
 import { getTodayLunar } from "@/utils/dateHelpers";
 import { computeEvents } from "@/utils/eventHelpers";
 import { computeDeathAnniversaryEvents } from "@/utils/events/deathAnniversaryOccurrence";
+import { computeKinship, type KinshipPersonNode } from "@/utils/kinshipHelpers";
+import { buildKinshipRelationshipEdges } from "@/utils/tree/lineageComparison";
+import type { Relationship } from "@/types";
+import type {
+  FamilyChildRow,
+  FamilyParentRow,
+  FamilyRow,
+} from "@/services/statistics/globalStats.service";
 import { getIsAdmin, getProfile, getSupabase } from "@/utils/supabase/queries";
 import {
   buildVisiblePersonSetForProfile,
@@ -29,14 +37,14 @@ const eventTypeConfig = {
   birthday: {
     icon: Cake,
     label: "Sinh nhật",
-    color: "text-amber-600",
-    bg: "bg-amber-50",
+    color: "text-blue-600",
+    bg: "bg-blue-50",
   },
   death_anniversary: {
     icon: Flower2,
     label: "Ngày giỗ",
-    color: "text-purple-600",
-    bg: "bg-purple-50",
+    color: "text-rose-600",
+    bg: "bg-rose-50",
   },
   custom_event: {
     icon: Star,
@@ -49,6 +57,7 @@ const eventTypeConfig = {
 type DashboardEventPerson = {
   id: string;
   full_name: string;
+  gender?: string | null;
   birth_year: number | null;
   birth_month: number | null;
   birth_day: number | null;
@@ -59,6 +68,9 @@ type DashboardEventPerson = {
   death_lunar_month: number | null;
   death_lunar_day: number | null;
   is_deceased: boolean;
+  is_in_law?: boolean | null;
+  birth_order?: number | null;
+  generation?: number | null;
 };
 
 type DashboardCustomEvent = {
@@ -137,7 +149,7 @@ export default async function DashboardLaunchpad() {
     supabase
       .from("persons_active")
       .select(
-        "id, full_name, birth_year, birth_month, birth_day, death_year, death_month, death_day, death_lunar_year, death_lunar_month, death_lunar_day, is_deceased",
+        "id, full_name, gender, birth_year, birth_month, birth_day, death_year, death_month, death_day, death_lunar_year, death_lunar_month, death_lunar_day, is_deceased, is_in_law, birth_order, generation",
       ),
     supabase
       .from("custom_events")
@@ -217,6 +229,59 @@ export default async function DashboardLaunchpad() {
   const upcomingEvents = allEvents.filter(
     (e) => e.daysUntil >= 0 && e.daysUntil <= 30,
   );
+
+  const addressHints = (() => {
+    const viewerPersonId = permission.viewerPersonId;
+    if (!viewerPersonId) return null;
+    const viewerPerson = allPersons.find((p) => p.id === viewerPersonId);
+    if (!viewerPerson) return null;
+
+    const neededIds = new Set<string>();
+    for (const evt of upcomingEvents.slice(0, 4)) {
+      if (evt.personId) neededIds.add(evt.personId);
+    }
+    if (neededIds.size === 0) return null;
+
+    const toKinshipNode = (p: DashboardEventPerson): KinshipPersonNode => ({
+      id: p.id,
+      full_name: p.full_name ?? "",
+      gender: p.gender === "female" || p.gender === "male" ? p.gender : "other",
+      birth_year: p.birth_year ?? null,
+      birth_order: p.birth_order ?? null,
+      generation: p.generation ?? null,
+      is_in_law: p.is_in_law ?? false,
+    });
+
+    const personsById = new Map(allPersons.map((p) => [p.id, p]));
+    const kinshipPersons = allPersons.map(toKinshipNode);
+    const kinshipEdges = buildKinshipRelationshipEdges({
+      relationships: allRelationships as unknown as Relationship[],
+      families: allFamilies as unknown as FamilyRow[],
+      familyParents: allFamilyParents as unknown as FamilyParentRow[],
+      familyChildren: allFamilyChildren as unknown as FamilyChildRow[],
+    });
+
+    const map = new Map<string, string>();
+    for (const id of neededIds) {
+      if (id === viewerPersonId) {
+        map.set(id, "Tôi");
+        continue;
+      }
+      const person = personsById.get(id);
+      if (!person) continue;
+      const result = computeKinship(
+        toKinshipNode(viewerPerson),
+        toKinshipNode(person),
+        kinshipPersons,
+        kinshipEdges,
+      );
+      const term = result?.aCallsB?.trim();
+      if (term && term !== "chưa xác định" && term !== "họ hàng cùng nhánh") {
+        map.set(id, term.charAt(0).toUpperCase() + term.slice(1));
+      }
+    }
+    return map;
+  })();
 
   const lunar = getTodayLunar();
 
@@ -414,7 +479,19 @@ export default async function DashboardLaunchpad() {
                             <span className="text-sm font-semibold text-stone-700 truncate">
                               {evt.personName}
                             </span>
-                            <span className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                            {evt.personId && addressHints?.get(evt.personId) && (
+                              <span className="shrink-0 rounded-md border border-emerald-200/60 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                                {addressHints.get(evt.personId)}
+                              </span>
+                            )}
+                            <span
+                              className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${evt.type === "birthday"
+                                ? "border-blue-200 bg-blue-50 text-blue-700"
+                                : evt.type === "death_anniversary"
+                                  ? "border-rose-200 bg-rose-50 text-rose-700"
+                                  : "border-amber-200 bg-amber-50 text-amber-700"
+                                }`}
+                            >
                               {cfg.label}
                             </span>
                           </div>
