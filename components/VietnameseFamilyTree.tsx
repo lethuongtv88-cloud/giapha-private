@@ -962,6 +962,30 @@ function collectNodePositions(
   return out;
 }
 
+/**
+ * Thu thập id của những người đang thực sự hiển thị trên cây (không tính
+ * nhánh bị collapse). Dùng để giới hạn phạm vi tính danh xưng (addressHints)
+ * thay vì tính cho toàn bộ personsMap. Mirror đúng traversal của
+ * collectTreeDiagnostics.visit() ở trên.
+ */
+function collectVisiblePersonIds(
+  block: TreeBlock,
+  out: Set<string> = new Set(),
+): Set<string> {
+  for (const node of block.nodes) {
+    out.add(node.person.id);
+  }
+
+  for (const group of block.groups) {
+    if (!group.expanded) continue;
+    for (const slot of group.visibleChildren) {
+      collectVisiblePersonIds(slot.block, out);
+    }
+  }
+
+  return out;
+}
+
 function TreeMinimap({
   containerRef,
   nodePositions,
