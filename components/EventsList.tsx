@@ -12,6 +12,8 @@ import type {
   FamilyParentRow,
   FamilyRow,
 } from "@/services/statistics/globalStats.service";
+import { computeKinship, type KinshipPersonNode } from "@/utils/kinshipHelpers";
+import { buildKinshipRelationshipEdges } from "@/utils/tree/lineageComparison";
 import { getVietnamToday, getZodiacSign } from "@/utils/dateHelpers";
 import { buildEventMessage } from "@/utils/events/eventMessages";
 import {
@@ -543,6 +545,7 @@ function EventCard({
   onDeleteEventModel,
   deletingEventId,
   canDelete,
+  addressHint = null,
 }: {
   event: ExtendedFamilyEvent;
   index: number;
@@ -550,6 +553,7 @@ function EventCard({
   onDeleteEventModel: (e: ExtendedFamilyEvent) => void;
   deletingEventId: string | null;
   canDelete: boolean;
+  addressHint?: string | null;
 }) {
   const isBirthday = event.type === "birthday";
   const isCustom = event.type === "custom_event";
@@ -694,6 +698,11 @@ function EventCard({
                 {getZodiacSign(event.originDay, event.originMonth)}
               </span>
             )}
+          {addressHint && (
+            <span className="shrink-0 text-[10px] font-sans font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 rounded-md px-1.5 py-0.5 whitespace-nowrap shadow-xs tracking-wider">
+              {addressHint}
+            </span>
+          )}
           {(isMarriage || isMemorial || isBirthday || isCustom) && (
             <span className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
               {eventMessage.label}
@@ -1338,6 +1347,78 @@ export default function EventsList({
     );
   }, [persons, customEvents, eventModelEvents, personEvents, placesById]);
 
+  const addressHints = useMemo(() => {
+    if (!viewerPersonId || !relationships || !families || !familyParents || !familyChildren) {
+      return null;
+    }
+    const viewerPerson = persons.find((p) => p.id === viewerPersonId);
+    if (!viewerPerson) return null;
+
+    // Chỉ cần tính danh xưng cho người thực sự xuất hiện trong danh sách sự
+    // kiện đang render (tập này vốn đã nhỏ, không cần tính cho toàn bộ persons).
+    const neededIds = new Set<string>();
+    for (const event of allEvents) {
+      if (event.personId) neededIds.add(event.personId);
+    }
+    if (neededIds.size === 0) return null;
+
+    const toKinshipNode = (p: {
+      id: string;
+      full_name?: string;
+      gender?: string | null;
+      birth_year?: number | null;
+      birth_order?: number | null;
+      generation?: number | null;
+      is_in_law?: boolean | null;
+    }): KinshipPersonNode => ({
+      id: p.id,
+      full_name: p.full_name ?? "",
+      gender: p.gender === "female" || p.gender === "male" ? p.gender : "other",
+      birth_year: p.birth_year ?? null,
+      birth_order: p.birth_order ?? null,
+      generation: p.generation ?? null,
+      is_in_law: p.is_in_law ?? false,
+    });
+
+    const personsById = new Map(persons.map((p) => [p.id, p]));
+    const kinshipPersons = persons.map(toKinshipNode);
+    const kinshipEdges = buildKinshipRelationshipEdges({
+      relationships,
+      families,
+      familyParents,
+      familyChildren,
+    });
+
+    const map = new Map<string, string>();
+    for (const id of neededIds) {
+      if (id === viewerPersonId) {
+        map.set(id, "Tôi");
+        continue;
+      }
+      const person = personsById.get(id);
+      if (!person) continue;
+      const result = computeKinship(
+        toKinshipNode(viewerPerson),
+        toKinshipNode(person),
+        kinshipPersons,
+        kinshipEdges,
+      );
+      const term = result?.aCallsB?.trim();
+      if (term && term !== "chưa xác định" && term !== "họ hàng cùng nhánh") {
+        map.set(id, term.charAt(0).toUpperCase() + term.slice(1));
+      }
+    }
+    return map;
+  }, [
+    viewerPersonId,
+    persons,
+    relationships,
+    families,
+    familyParents,
+    familyChildren,
+    allEvents,
+  ]);
+
   const filtered = useMemo(() => {
     let result = allEvents;
     if (filter === "past") {
@@ -1511,6 +1592,9 @@ export default function EventsList({
               onDeleteEventModel={handleDeleteEventModel}
               deletingEventId={deletingEventId}
               canDelete={canCreateEvent}
+              addressHint={
+                event.personId ? addressHints?.get(event.personId) ?? null : null
+              }
             />
           ))}
         </div>
