@@ -212,7 +212,7 @@ export default function VietnameseFamilyTree({
   const [hideExpandButtons, setHideExpandButtons] = useState(false);
   const [compactTree, setCompactTree] = useState(true);
   const [showBirthOrder, setShowBirthOrder] = useState(true);
-  const [showAddressHint, setShowAddressHint] = useState(false);
+  const [showAddressHint, setShowAddressHint] = useState(true);
   const [autoCollapseLevel, setAutoCollapseLevel] = useState(
     DEFAULT_AUTO_COLLAPSE_LEVEL,
   );
