@@ -13,6 +13,8 @@ export interface Profile {
   /** "Gốc chỉnh sửa" (rootedit) do admin gán riêng cho tài khoản này. */
   edit_root_person_id?: string | null;
   username?: string | null;
+  /** Được phép thấy nút Xuất file ở các sơ đồ hay không (admin luôn được, không phụ thuộc cờ này). */
+  can_export: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -30,6 +32,8 @@ export interface AdminUserData {
   /** "Gốc chỉnh sửa" (rootedit) do admin gán riêng cho tài khoản này. */
   edit_root_person_id?: string | null;
   username?: string | null;
+  /** Được phép thấy nút Xuất file ở các sơ đồ hay không (admin luôn được, không phụ thuộc cờ này). */
+  can_export: boolean;
 }
 
 export interface Person {
