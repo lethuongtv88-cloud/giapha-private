@@ -34,6 +34,8 @@ export interface AdminUserData {
   username?: string | null;
   /** Được phép thấy nút Xuất file ở các sơ đồ hay không (admin luôn được, không phụ thuộc cờ này). */
   can_export: boolean;
+  /** Lần đăng nhập gần nhất (auth.users.last_sign_in_at). null nếu chưa từng đăng nhập. */
+  last_sign_in_at: string | null;
 }
 
 export interface Person {

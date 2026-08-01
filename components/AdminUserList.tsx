@@ -520,6 +520,9 @@ export default function AdminUserList({
                 <th className="px-6 py-4 text-stone-500 font-semibold text-xs">
                   Ngày tạo
                 </th>
+                <th className="px-6 py-4 text-stone-500 font-semibold text-xs">
+                  Lần truy cập gần đây
+                </th>
                 <th className="px-6 py-4 text-stone-500 font-semibold text-xs text-right">
                   Thao tác
                 </th>
@@ -650,6 +653,18 @@ export default function AdminUserList({
                     </td>
                     <td className="px-6 py-4 text-stone-500">
                       {new Date(user.created_at).toLocaleDateString("vi-VN")}
+                    </td>
+                    <td className="px-6 py-4 text-stone-500">
+                      {user.last_sign_in_at ? (
+                        new Date(user.last_sign_in_at).toLocaleString("vi-VN", {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })
+                      ) : (
+                        <span className="text-stone-400 italic">
+                          Chưa từng đăng nhập
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end items-center gap-2">
