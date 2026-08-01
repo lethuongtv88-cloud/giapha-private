@@ -32,10 +32,10 @@ export interface BaseToolbarProps {
   setShowAddressHint?: (val: boolean) => void;
   canEdit?: boolean;
   /**
-   * Giới hạn hiển thị nút Xuất file theo quyền admin thay vì canEdit.
-   * Không truyền (undefined) -> giữ hành vi cũ, dùng canEdit như trước.
+   * Quyền xuất file (profiles.can_export, admin luôn true). Không truyền
+   * (undefined) -> giữ hành vi cũ, dùng canEdit như trước.
    */
-  isAdmin?: boolean;
+  canExport?: boolean;
   children?: React.ReactNode;
 }
 
@@ -63,7 +63,7 @@ export default function BaseToolbar({
   showAddressHint,
   setShowAddressHint,
   canEdit,
-  isAdmin,
+  canExport,
   children,
 }: BaseToolbarProps) {
   const { showAvatar, setShowAvatar } = useMemberListView();
@@ -289,7 +289,7 @@ export default function BaseToolbar({
       </div>
 
       {/* Export Button */}
-      {(isAdmin ?? canEdit) && <ExportButton />}
+      {(canExport ?? canEdit) && <ExportButton />}
     </div>,
     portalNode,
   );
