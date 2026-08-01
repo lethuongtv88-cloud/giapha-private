@@ -179,7 +179,7 @@ export default function AdminUserList({
     }
   };
 
-
+  const handleStatusChange = async (userId: string, newStatus: boolean) => {
     if (isDemo) {
       showNotification(
         "Đây là tài khoản demo cho mọi người sử dụng, vui lòng không thay đổi thông tin này.",
