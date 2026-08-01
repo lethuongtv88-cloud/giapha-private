@@ -62,6 +62,7 @@ type VietnameseFamilyTreeProps = {
   familyChildren?: FamilyChildRow[];
   roots: Person[];
   canEdit?: boolean;
+  canExport?: boolean;
 };
 
 type LayoutNode = {
@@ -177,6 +178,7 @@ export default function VietnameseFamilyTree({
   familyChildren = [],
   roots,
   canEdit,
+  canExport,
 }: VietnameseFamilyTreeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
@@ -521,6 +523,7 @@ export default function VietnameseFamilyTree({
         showAddressHint={showAddressHint}
         setShowAddressHint={setShowAddressHint}
         canEdit={canEdit}
+        canExport={canExport}
       />
 
       <TreeDiagnosticsPanel
