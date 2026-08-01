@@ -6,7 +6,12 @@ import PersonSelector from "@/components/PersonSelector";
 import PlaceSelector from "@/components/places/PlaceSelector";
 import PlaceMapLinks, { type PlaceForMapLinks } from "@/components/places/PlaceMapLinks";
 import { useMemberListView } from "@/context/MemberListContext";
-import type { Person } from "@/types";
+import type { Person, Relationship } from "@/types";
+import type {
+  FamilyChildRow,
+  FamilyParentRow,
+  FamilyRow,
+} from "@/services/statistics/globalStats.service";
 import { getVietnamToday, getZodiacSign } from "@/utils/dateHelpers";
 import { buildEventMessage } from "@/utils/events/eventMessages";
 import {
@@ -47,12 +52,26 @@ interface EventsListProps {
     death_lunar_month: number | null;
     death_lunar_day: number | null;
     is_deceased: boolean;
+    gender?: string | null;
+    is_in_law?: boolean | null;
+    birth_order?: number | null;
+    generation?: number | null;
   }[];
   customEvents?: CustomEventRecord[];
   eventModelEvents?: EventModelRecord[];
   personEvents?: PersonEventLink[];
   selectorPersons?: Person[];
   canCreateEvent?: boolean;
+  /**
+   * Người đang đăng nhập (profiles.person_id) — dùng để tính danh xưng
+   * (addressHints) hiển thị trước nhãn Sinh nhật/Ngày giỗ trong mỗi sự kiện.
+   * Không truyền -> không hiển thị danh xưng (giống hành vi hiện tại).
+   */
+  viewerPersonId?: string | null;
+  relationships?: Relationship[];
+  families?: FamilyRow[];
+  familyParents?: FamilyParentRow[];
+  familyChildren?: FamilyChildRow[];
 }
 
 type EventModelRecord = {
@@ -1118,6 +1137,11 @@ export default function EventsList({
   personEvents = [],
   selectorPersons = [],
   canCreateEvent = false,
+  viewerPersonId = null,
+  relationships,
+  families,
+  familyParents,
+  familyChildren,
 }: EventsListProps) {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterKey>("all");
