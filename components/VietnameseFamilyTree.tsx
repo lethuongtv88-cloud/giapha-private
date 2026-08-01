@@ -181,6 +181,14 @@ export default function VietnameseFamilyTree({
   canExport,
 }: VietnameseFamilyTreeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  // Cache danh xưng (addressHints) giữa các lần re-render: chỉ tính lại
+  // computeKinship khi dữ liệu gốc (personsMap/relationships/families/...)
+  // thực sự đổi; khi chỉ đóng/mở nhánh (rootBlock đổi) thì tái dùng kết quả
+  // đã tính cho những người đã từng hiển thị.
+  const addressHintCacheRef = useRef<{
+    deps: unknown[];
+    cache: Map<string, string>;
+  } | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [layoutPerformance, setLayoutPerformance] = useState({
@@ -278,50 +286,9 @@ export default function VietnameseFamilyTree({
   }, [familyChildren, _relationships]);
 
   // Danh xưng: người tài khoản đang đăng nhập gọi từng người trong sơ đồ là gì,
-  // dựa trên person_id đã liên kết với tài khoản (profiles.person_id). Chỉ tính
-  // khi bật tuỳ chọn để tránh tốn kém với cây lớn.
-  const addressHints = useMemo(() => {
-    if (!showAddressHint || !accountPersonId) return null;
-    const accountPerson = personsMap.get(accountPersonId);
-    if (!accountPerson) return null;
-
-    const allPersons = Array.from(personsMap.values());
-    const toKinshipNode = (p: Person): KinshipPersonNode => ({
-      id: p.id,
-      full_name: p.full_name,
-      gender: p.gender,
-      birth_year: p.birth_year,
-      birth_order: p.birth_order,
-      generation: p.generation,
-      is_in_law: p.is_in_law,
-    });
-    const kinshipPersons = allPersons.map(toKinshipNode);
-    const kinshipEdges = buildKinshipRelationshipEdges({
-      relationships: _relationships,
-      families,
-      familyParents,
-      familyChildren,
-    });
-
-    const map = new Map<string, string>();
-    for (const person of allPersons) {
-      if (person.id === accountPersonId) {
-        map.set(person.id, "Tôi");
-        continue;
-      }
-      const result = computeKinship(
-        toKinshipNode(accountPerson),
-        toKinshipNode(person),
-        kinshipPersons,
-        kinshipEdges,
-      );
-      const term = result?.aCallsB?.trim();
-      if (term && term !== "chưa xác định" && term !== "họ hàng cùng nhánh") {
-        map.set(person.id, term.charAt(0).toUpperCase() + term.slice(1));
-      }
-    }
-    return map;
-  }, [showAddressHint, accountPersonId, personsMap, _relationships, families, familyParents, familyChildren]);
+  // dựa trên person_id đã liên kết với tài khoản (profiles.person_id).
+  // (Tính toán thực tế đặt sau rootBlock — xem bên dưới — vì cần rootBlock để
+  // biết những người đang thực sự hiển thị.)
 
   const {
     scale,
@@ -407,6 +374,96 @@ export default function VietnameseFamilyTree({
     hideFemales,
     compactTree,
     renderDepthLimit,
+  ]);
+
+  const addressHints = useMemo(() => {
+    if (!showAddressHint || !accountPersonId || !rootBlock) return null;
+    const accountPerson = personsMap.get(accountPersonId);
+    if (!accountPerson) return null;
+
+    // Nếu dữ liệu gốc đổi (sửa thông tin người, thêm/xoá quan hệ...) thì xoá
+    // cache; nếu chỉ đóng/mở nhánh (rootBlock đổi) thì giữ nguyên cache.
+    const dataDeps: unknown[] = [
+      personsMap,
+      _relationships,
+      families,
+      familyParents,
+      familyChildren,
+    ];
+    const prev = addressHintCacheRef.current;
+    const dataChanged =
+      !prev || dataDeps.some((dep, i) => dep !== prev.deps[i]);
+    if (dataChanged) {
+      addressHintCacheRef.current = { deps: dataDeps, cache: new Map() };
+    }
+    const cache = addressHintCacheRef.current!.cache;
+
+    const visibleIds = collectVisiblePersonIds(rootBlock);
+    const uncachedIds: string[] = [];
+    for (const id of visibleIds) {
+      const key = `${accountPersonId}:${id}`;
+      if (!cache.has(key)) uncachedIds.push(id);
+    }
+
+    if (uncachedIds.length > 0) {
+      const toKinshipNode = (p: Person): KinshipPersonNode => ({
+        id: p.id,
+        full_name: p.full_name,
+        gender: p.gender,
+        birth_year: p.birth_year,
+        birth_order: p.birth_order,
+        generation: p.generation,
+        is_in_law: p.is_in_law,
+      });
+      // computeKinship cần toàn bộ đồ thị (kinshipPersons/kinshipEdges) để dò
+      // đường quan hệ, kể cả khi người trung gian không hiển thị trên cây —
+      // chỉ phạm vi TÍNH KẾT QUẢ CHO AI (uncachedIds) mới bị giới hạn theo
+      // người đang hiển thị.
+      const allPersons = Array.from(personsMap.values());
+      const kinshipPersons = allPersons.map(toKinshipNode);
+      const kinshipEdges = buildKinshipRelationshipEdges({
+        relationships: _relationships,
+        families,
+        familyParents,
+        familyChildren,
+      });
+
+      for (const id of uncachedIds) {
+        const key = `${accountPersonId}:${id}`;
+        if (id === accountPersonId) {
+          cache.set(key, "Tôi");
+          continue;
+        }
+        const person = personsMap.get(id);
+        if (!person) continue;
+        const result = computeKinship(
+          toKinshipNode(accountPerson),
+          toKinshipNode(person),
+          kinshipPersons,
+          kinshipEdges,
+        );
+        const term = result?.aCallsB?.trim();
+        if (term && term !== "chưa xác định" && term !== "họ hàng cùng nhánh") {
+          cache.set(key, term.charAt(0).toUpperCase() + term.slice(1));
+        }
+      }
+    }
+
+    const map = new Map<string, string>();
+    for (const id of visibleIds) {
+      const term = cache.get(`${accountPersonId}:${id}`);
+      if (term) map.set(id, term);
+    }
+    return map;
+  }, [
+    showAddressHint,
+    accountPersonId,
+    rootBlock,
+    personsMap,
+    _relationships,
+    families,
+    familyParents,
+    familyChildren,
   ]);
 
   const minimapNodePositions = useMemo(() => {
