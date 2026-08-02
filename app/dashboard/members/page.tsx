@@ -38,6 +38,8 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
 
   const profile = await getProfile();
   const canEdit = profile?.role === "admin" || profile?.role === "editor";
+  const canExport =
+    profile?.role === "admin" || profile?.can_export === true;
 
   const supabase = await getSupabase();
 
@@ -169,6 +171,7 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
         familyParents={familyParents}
         familyChildren={familyChildren}
         canEdit={canEdit}
+        canExport={canExport}
         allowedPersonIds={
           permissionFiltered.isRestricted
             ? Array.from(permissionFiltered.visiblePersonIds)

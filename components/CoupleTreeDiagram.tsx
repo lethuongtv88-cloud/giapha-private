@@ -43,6 +43,7 @@ interface CoupleTreeDiagramProps {
   familyParents?: FamilyParentRow[];
   familyChildren?: FamilyChildRow[];
   canEdit?: boolean;
+  canExport?: boolean;
 }
 
 const AVATAR_SIZE = 56;
@@ -56,6 +57,7 @@ export default function CoupleTreeDiagram({
   familyParents = [],
   familyChildren = [],
   canEdit,
+  canExport,
 }: CoupleTreeDiagramProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
@@ -373,7 +375,7 @@ export default function CoupleTreeDiagram({
               <Crosshair className="size-4" />
             </button>
 
-            {canEdit ? (
+            {(canExport ?? canEdit) ? (
               <ExportButton
                 fileNamePrefix={mode === "noi-ngoai" ? "giapha-noi-ngoai" : "giapha-sui-gia"}
                 label="Xuất sơ đồ"

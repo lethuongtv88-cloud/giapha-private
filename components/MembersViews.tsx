@@ -82,6 +82,7 @@ type MembersViewsProps = {
   familyParents?: FamilyParentRow[];
   familyChildren?: FamilyChildRow[];
   canEdit?: boolean;
+  canExport?: boolean;
   allowedPersonIds?: string[] | null;
 };
 
@@ -92,6 +93,7 @@ export default function MembersViews({
   familyParents = [],
   familyChildren = [],
   canEdit,
+  canExport,
   allowedPersonIds = null,
 }: MembersViewsProps) {
   const { view: currentView, rootId, setView, setRootId } = useMemberListView();
@@ -306,6 +308,7 @@ export default function MembersViews({
                familyChildren={familyChildren}
                roots={roots}
                canEdit={canEdit}
+               canExport={canExport}
              />
           ) : (
              <FamilyTree
@@ -313,6 +316,7 @@ export default function MembersViews({
               relationships={relationships}
               roots={roots}
               canEdit={canEdit}
+              canExport={canExport}
              />
         ))}
           {currentView === "mindmap" && (
@@ -321,6 +325,7 @@ export default function MembersViews({
               relationships={relationships}
               roots={roots}
               canEdit={canEdit}
+              canExport={canExport}
             />
           )}
           {currentView === "bubble" && (
@@ -341,6 +346,7 @@ export default function MembersViews({
               familyParents={familyParents}
               familyChildren={familyChildren}
               canEdit={canEdit}
+              canExport={canExport}
             />
           )}
         </div>

@@ -6,6 +6,7 @@ import {
   adminUpdateUser,
   changeUserRole,
   deleteUser,
+  toggleUserCanExport,
   toggleUserStatus,
 } from "@/app/actions/user";
 import config from "@/app/config";
@@ -135,6 +136,43 @@ export default function AdminUserList({
         error instanceof Error
           ? error.message
           : "Lỗi không xác định khi đổi quyền";
+      showNotification(msg, "error");
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
+  const handleCanExportChange = async (userId: string, newValue: boolean) => {
+    if (isDemo) {
+      showNotification(
+        "Đây là tài khoản demo cho mọi người sử dụng, vui lòng không thay đổi thông tin này.",
+        "info",
+      );
+      return;
+    }
+    try {
+      setLoadingId(userId);
+      const result = await toggleUserCanExport(userId, newValue);
+
+      if (result?.error) {
+        showNotification(result.error, "error");
+        return;
+      }
+
+      setUsers((current) =>
+        current.map((u) =>
+          u.id === userId ? { ...u, can_export: newValue } : u,
+        ),
+      );
+      showNotification(
+        `Đã ${newValue ? "cho phép" : "thu hồi quyền"} xuất file thành công.`,
+        "success",
+      );
+    } catch (error: unknown) {
+      const msg =
+        error instanceof Error
+          ? error.message
+          : "Lỗi không xác định khi đổi quyền xuất file";
       showNotification(msg, "error");
     } finally {
       setLoadingId(null);
@@ -477,7 +515,13 @@ export default function AdminUserList({
                   Trạng thái
                 </th>
                 <th className="px-6 py-4 text-stone-500 font-semibold text-xs">
+                  Xuất file
+                </th>
+                <th className="px-6 py-4 text-stone-500 font-semibold text-xs">
                   Ngày tạo
+                </th>
+                <th className="px-6 py-4 text-stone-500 font-semibold text-xs">
+                  Lần truy cập gần đây
                 </th>
                 <th className="px-6 py-4 text-stone-500 font-semibold text-xs text-right">
                   Thao tác
@@ -578,8 +622,49 @@ export default function AdminUserList({
                         {user.is_active ? "Đã duyệt" : "Chờ duyệt"}
                       </button>
                     </td>
+                    <td className="px-6 py-4">
+                      {user.role === "admin" ? (
+                        <span
+                          className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200"
+                          title="Admin luôn được phép xuất file"
+                        >
+                          Luôn được phép
+                        </span>
+                      ) : (
+                        <button
+                          disabled={loadingId === user.id}
+                          onClick={() =>
+                            handleCanExportChange(user.id, !user.can_export)
+                          }
+                          className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium transition-colors hover:opacity-80 cursor-pointer ${
+                            user.can_export
+                              ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                              : "bg-stone-100 text-stone-800 border border-stone-200"
+                          } disabled:opacity-50`}
+                          title={
+                            user.can_export
+                              ? "Nhấn để thu hồi quyền xuất file"
+                              : "Nhấn để cho phép xuất file"
+                          }
+                        >
+                          {user.can_export ? "Được phép" : "Không được phép"}
+                        </button>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-stone-500">
                       {new Date(user.created_at).toLocaleDateString("vi-VN")}
+                    </td>
+                    <td className="px-6 py-4 text-stone-500">
+                      {user.last_sign_in_at ? (
+                        new Date(user.last_sign_in_at).toLocaleString("vi-VN", {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })
+                      ) : (
+                        <span className="text-stone-400 italic">
+                          Chưa từng đăng nhập
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end items-center gap-2">

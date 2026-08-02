@@ -16,6 +16,7 @@ interface MindmapTreeProps {
   relationships: Relationship[];
   roots: Person[];
   canEdit?: boolean;
+  canExport?: boolean;
 }
 
 export default function MindmapTree({
@@ -23,6 +24,7 @@ export default function MindmapTree({
   relationships,
   roots,
   canEdit,
+  canExport,
 }: MindmapTreeProps) {
   const { showAvatar, setMemberModalId } = useMemberListView();
   const [hideDaughtersInLaw, setHideDaughtersInLaw] = useState(false);
@@ -109,6 +111,7 @@ export default function MindmapTree({
         setAutoCollapseLevel={setAutoCollapseLevel}
         setExpandSignal={setExpandSignal}
         canEdit={canEdit}
+        canExport={canExport}
       />
 
       {/* Root Container */}

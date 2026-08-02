@@ -24,11 +24,13 @@ export default function FamilyTree({
   relationships,
   roots,
   canEdit,
+  canExport,
 }: {
   personsMap: Map<string, Person>;
   relationships: Relationship[];
   roots: Person[];
   canEdit?: boolean;
+  canExport?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hideDaughtersInLaw, setHideDaughtersInLaw] = useState(false);
@@ -323,6 +325,7 @@ export default function FamilyTree({
         hideFemales={hideFemales}
         setHideFemales={setHideFemales}
         canEdit={canEdit}
+        canExport={canExport}
       />
 
       <div

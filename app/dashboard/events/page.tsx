@@ -1,5 +1,10 @@
 import EventsList from "@/components/EventsList";
-import type { Person } from "@/types";
+import type { Person, Relationship } from "@/types";
+import type {
+  FamilyChildRow,
+  FamilyParentRow,
+  FamilyRow,
+} from "@/services/statistics/globalStats.service";
 import MemberDetailModal from "@/components/modal/MemberDetailModal";
 import { MemberListProvider } from "@/context/MemberListContext";
 import {
@@ -348,6 +353,11 @@ export default async function EventsPage() {
               personEvents={eventFilter.personEvents}
               selectorPersons={selectorPersons}
               canCreateEvent={canCreateEvent}
+              viewerPersonId={permission.viewerPersonId}
+              relationships={allRelationships as unknown as Relationship[]}
+              families={allFamilies as unknown as FamilyRow[]}
+              familyParents={allFamilyParents as unknown as FamilyParentRow[]}
+              familyChildren={allFamilyChildren as unknown as FamilyChildRow[]}
             />
           </section>
         </main>

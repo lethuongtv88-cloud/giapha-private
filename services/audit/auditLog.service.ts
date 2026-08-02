@@ -7,6 +7,7 @@ export type AuditAction =
   | "user.deleted"
   | "user.role_changed"
   | "user.status_changed"
+  | "user.can_export_changed"
   | "user.password_reset"
   | "member.deleted"
   | "person.avatar.updated"
